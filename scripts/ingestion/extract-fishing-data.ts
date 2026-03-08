@@ -23,7 +23,9 @@ Return a JSON array of technique objects. Each object should have these fields (
       "color": string | null,         // e.g. "June Bug", "Chartreuse Shad"
       "weight_oz": number | null,
       "line_type": string | null,     // fluorocarbon/braid/monofilament
-      "line_lb_test": number | null
+      "line_lb_test": number | null,
+      "product_url": string | null,   // direct product link if found in source text
+      "retailer": string | null       // e.g. "Bass Pro Shops", "TackleDirect", "Amazon"
     }
   ],
   "water_temp_f": number | null,

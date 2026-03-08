@@ -107,6 +107,8 @@ export async function insertTechniqueReport(params: {
           weight_oz: bait.weight_oz,
           line_type: bait.line_type,
           line_lb_test: bait.line_lb_test,
+          product_url: bait.product_url || null,
+          retailer: bait.retailer || null,
         })
       }
     }
