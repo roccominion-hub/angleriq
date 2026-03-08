@@ -46,7 +46,7 @@ export async function extractFishingData(
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: SYSTEM_PROMPT,
       messages: [
         {
