@@ -12,17 +12,20 @@ import { Slider } from '@/components/ui/slider'
 import { Logo } from '@/components/Logo'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
-  Sun, SunMedium, Moon, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp
+  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp,
+  Wind, Cloud, Droplets
 } from 'lucide-react'
 
-interface Lake { id: string; name: string; state: string; type: string; species: string[] }
+interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
+interface Weather { tempF: number; feelsLikeF: number; cloudCoverPct: number; windMph: number; precipitation: number; skyCondition: string; timeOfDay: string; season: string; weatherDesc: string }
 interface SearchResult {
   water: Lake
   sampleSize: number
   topBaits: { name: string; count: number }[]
   topPatterns: { pattern: string; count: number }[]
   reports: any[]
+  coords?: { lat: number; lng: number }
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -51,22 +54,40 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder 
   )
 }
 
+function WeatherBar({ weather }: { weather: Weather }) {
+  return (
+    <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+      <span className="flex items-center gap-1"><Thermometer size={13} className="text-orange-400" />{weather.tempF}°F</span>
+      <span className="flex items-center gap-1"><Cloud size={13} className="text-slate-400" />{weather.skyCondition}</span>
+      <span className="flex items-center gap-1"><Wind size={13} className="text-blue-400" />{weather.windMph} mph</span>
+      {weather.precipitation > 0 && <span className="flex items-center gap-1"><Droplets size={13} className="text-blue-500" />{weather.precipitation}mm</span>}
+      <span className="flex items-center gap-1 capitalize"><Clock size={13} className="text-slate-400" />{weather.timeOfDay}</span>
+    </div>
+  )
+}
+
+// Parse AI summary into two sections
+function parseSummary(text: string): { intel: string; today: string } {
+  const todayMatch = text.match(/\*\*TODAY'S RECOMMENDATION\*\*([\s\S]*?)$/i)
+  const intelMatch = text.match(/\*\*TOURNAMENT INTEL\*\*([\s\S]*?)(?=\*\*TODAY|$)/i)
+  return {
+    intel: intelMatch?.[1]?.trim() || text,
+    today: todayMatch?.[1]?.trim() || '',
+  }
+}
+
 export default function SearchPage() {
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
   const [filters, setFilters] = useState({
-    season: 'all',
-    timeOfDay: 'all',
-    baitType: 'all',
-    fishDepth: 'all',
-    locationType: 'all',
-    structure: 'all',
-    waterClarity: 'all',
+    season: 'all', timeOfDay: 'all', baitType: 'all',
+    fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all',
   })
   const [yearRange, setYearRange] = useState([2019, CURRENT_YEAR])
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [result, setResult] = useState<SearchResult | null>(null)
-  const [summary, setSummary] = useState('')
+  const [weather, setWeather] = useState<Weather | null>(null)
+  const [summaryParts, setSummaryParts] = useState<{ intel: string; today: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [error, setError] = useState('')
@@ -85,7 +106,8 @@ export default function SearchPage() {
     setSummaryLoading(true)
     setError('')
     setResult(null)
-    setSummary('')
+    setWeather(null)
+    setSummaryParts(null)
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -98,6 +120,17 @@ export default function SearchPage() {
       if (data.error) { setError(data.error); return }
       setResult(data)
 
+      // Fetch weather if we have coords
+      let weatherData: Weather | null = null
+      if (data.coords?.lat && data.coords?.lng) {
+        try {
+          const wRes = await fetch(`/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`)
+          weatherData = await wRes.json()
+          setWeather(weatherData)
+        } catch {}
+      }
+
+      // Fetch AI summary with weather context
       fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,14 +142,20 @@ export default function SearchPage() {
           topBaits: data.topBaits,
           topPatterns: data.topPatterns,
           reports: data.reports,
+          weather: weatherData,
         })
-      }).then(r => r.json()).then(d => setSummary(d.summary)).finally(() => setSummaryLoading(false))
+      }).then(r => r.json()).then(d => setSummaryParts(parseSummary(d.summary))).finally(() => setSummaryLoading(false))
+
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
+
+  const mapUrl = result?.coords?.lat && result?.coords?.lng
+    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${result.coords.lat},${result.coords.lng}&zoom=10&size=600x160&maptype=osm&markers=${result.coords.lat},${result.coords.lng},red`
+    : null
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -136,7 +175,6 @@ export default function SearchPage() {
 
         {/* Search + Filters */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
-          {/* Primary search row */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
             <div className="flex flex-col gap-1.5 flex-1">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -154,99 +192,43 @@ export default function SearchPage() {
               </Select>
             </div>
             <div className="flex items-end gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setFiltersOpen(o => !o)}
-                className="text-slate-500 hover:text-slate-700 text-xs h-9 gap-1"
-              >
+              <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
+                className="text-slate-500 hover:text-slate-700 text-xs h-9 gap-1">
                 Filters {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </Button>
-              <Button
-                onClick={handleSearch}
-                disabled={!selectedLake || loading}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-6 rounded-lg text-sm"
-              >
+              <Button onClick={handleSearch} disabled={!selectedLake || loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-6 rounded-lg text-sm">
                 {loading ? 'Searching...' : 'Search'}
               </Button>
             </div>
           </div>
 
-          {/* Expanded filters */}
           {filtersOpen && (
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <FilterSelect label="Season" icon={<Sun size={12} />} value={filters.season} onValueChange={v => setFilter('season', v)}
-                  placeholder="All seasons" options={[
-                    { value: 'spring', label: 'Spring' },
-                    { value: 'summer', label: 'Summer' },
-                    { value: 'fall', label: 'Fall' },
-                    { value: 'winter', label: 'Winter' },
-                  ]} />
-                <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={filters.timeOfDay} onValueChange={v => setFilter('timeOfDay', v)}
-                  placeholder="Any time" options={[
-                    { value: 'morning', label: 'Morning' },
-                    { value: 'midday', label: 'Midday' },
-                    { value: 'evening', label: 'Evening' },
-                    { value: 'night', label: 'Night' },
-                  ]} />
-                <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={filters.baitType} onValueChange={v => setFilter('baitType', v)}
-                  placeholder="All baits" options={[
-                    { value: 'soft plastic', label: 'Soft Plastic' },
-                    { value: 'jig', label: 'Jig' },
-                    { value: 'crankbait', label: 'Crankbait' },
-                    { value: 'jerkbait', label: 'Jerkbait' },
-                    { value: 'topwater', label: 'Topwater' },
-                    { value: 'swimbait', label: 'Swimbait' },
-                    { value: 'bladed jig', label: 'Bladed Jig' },
-                    { value: 'spinnerbait', label: 'Spinnerbait' },
-                    { value: 'spoon', label: 'Spoon' },
-                  ]} />
-                <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={filters.fishDepth} onValueChange={v => setFilter('fishDepth', v)}
-                  placeholder="Any depth" options={[
-                    { value: 'surface', label: 'Surface' },
-                    { value: 'suspended', label: 'Suspended' },
-                    { value: 'bottom', label: 'Bottom' },
-                  ]} />
-                <FilterSelect label="Location" icon={<Anchor size={12} />} value={filters.locationType} onValueChange={v => setFilter('locationType', v)}
-                  placeholder="Any location" options={[
-                    { value: 'shoreline', label: 'Shoreline' },
-                    { value: 'nearshore', label: 'Near Shore' },
-                    { value: 'offshore', label: 'Offshore' },
-                  ]} />
-                <FilterSelect label="Structure" icon={<Layers size={12} />} value={filters.structure} onValueChange={v => setFilter('structure', v)}
-                  placeholder="Any structure" options={[
-                    { value: 'grass', label: 'Grass' },
-                    { value: 'dock', label: 'Docks' },
-                    { value: 'laydown', label: 'Laydowns' },
-                    { value: 'point', label: 'Points' },
-                    { value: 'hump', label: 'Humps' },
-                    { value: 'channel', label: 'Channel' },
-                    { value: 'timber', label: 'Standing Timber' },
-                    { value: 'rock', label: 'Rock' },
-                  ]} />
-                <FilterSelect label="Water Clarity" icon={<Thermometer size={12} />} value={filters.waterClarity} onValueChange={v => setFilter('waterClarity', v)}
-                  placeholder="Any clarity" options={[
-                    { value: 'clear', label: 'Clear' },
-                    { value: 'stained', label: 'Stained' },
-                    { value: 'muddy', label: 'Muddy' },
-                  ]} />
+                <FilterSelect label="Season" icon={<Sun size={12} />} value={filters.season} onValueChange={v => setFilter('season', v)} placeholder="All seasons"
+                  options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
+                <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={filters.timeOfDay} onValueChange={v => setFilter('timeOfDay', v)} placeholder="Any time"
+                  options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
+                <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={filters.baitType} onValueChange={v => setFilter('baitType', v)} placeholder="All baits"
+                  options={[{ value: 'soft plastic', label: 'Soft Plastic' }, { value: 'jig', label: 'Jig' }, { value: 'crankbait', label: 'Crankbait' }, { value: 'jerkbait', label: 'Jerkbait' }, { value: 'topwater', label: 'Topwater' }, { value: 'swimbait', label: 'Swimbait' }, { value: 'bladed jig', label: 'Bladed Jig' }, { value: 'spinnerbait', label: 'Spinnerbait' }]} />
+                <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={filters.fishDepth} onValueChange={v => setFilter('fishDepth', v)} placeholder="Any depth"
+                  options={[{ value: 'surface', label: 'Surface' }, { value: 'suspended', label: 'Suspended' }, { value: 'bottom', label: 'Bottom' }]} />
+                <FilterSelect label="Location" icon={<Anchor size={12} />} value={filters.locationType} onValueChange={v => setFilter('locationType', v)} placeholder="Any location"
+                  options={[{ value: 'shoreline', label: 'Shoreline' }, { value: 'nearshore', label: 'Near Shore' }, { value: 'offshore', label: 'Offshore' }]} />
+                <FilterSelect label="Structure" icon={<Layers size={12} />} value={filters.structure} onValueChange={v => setFilter('structure', v)} placeholder="Any structure"
+                  options={[{ value: 'grass', label: 'Grass' }, { value: 'dock', label: 'Docks' }, { value: 'laydown', label: 'Laydowns' }, { value: 'point', label: 'Points' }, { value: 'hump', label: 'Humps' }, { value: 'channel', label: 'Channel' }, { value: 'timber', label: 'Standing Timber' }, { value: 'rock', label: 'Rock' }]} />
+                <FilterSelect label="Water Clarity" icon={<Thermometer size={12} />} value={filters.waterClarity} onValueChange={v => setFilter('waterClarity', v)} placeholder="Any clarity"
+                  options={[{ value: 'clear', label: 'Clear' }, { value: 'stained', label: 'Stained' }, { value: 'muddy', label: 'Muddy' }]} />
               </div>
-
-              {/* Year range slider */}
               <div className="flex flex-col gap-2 pt-1">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Year Range: {yearRange[0]} – {yearRange[1]}
                 </label>
                 <div className="px-1">
-                  <Slider
-                    min={2015}
-                    max={CURRENT_YEAR}
-                    step={1}
-                    value={yearRange}
+                  <Slider min={2015} max={CURRENT_YEAR} step={1} value={yearRange}
                     onValueChange={(v: number | readonly number[]) => setYearRange(Array.isArray(v) ? [...v] : [v as number, v as number])}
-                    className="w-full"
-                  />
+                    className="w-full" />
                 </div>
                 <div className="flex justify-between text-xs text-slate-400">
                   <span>2015</span><span>{CURRENT_YEAR}</span>
@@ -258,40 +240,82 @@ export default function SearchPage() {
 
         {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
 
-        {/* Results */}
         {result && (
           <div className="space-y-4">
             {/* Header */}
             <div className="flex items-start justify-between flex-wrap gap-2">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{result.water.name}</h2>
-                <p className="text-slate-400 text-sm mt-0.5">
-                  {result.water.state} · {result.water.type} · {result.water.species?.join(', ')}
-                </p>
+                <p className="text-slate-400 text-sm mt-0.5">{result.water.state} · {result.water.type} · {result.water.species?.join(', ')}</p>
               </div>
               <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">
                 {result.sampleSize} tournament reports
               </Badge>
             </div>
 
-            {/* AI Summary */}
-            <Card className="border-blue-100 bg-blue-50 shadow-none">
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-blue-800 text-sm font-bold flex items-center gap-2">
-                  <Sparkles size={15} /> AnglerIQ Report
+            {/* Summary Card with map */}
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+              {/* Map header */}
+              {mapUrl && (
+                <div className="relative w-full h-36 bg-slate-100 overflow-hidden border-b border-slate-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={mapUrl}
+                    alt={`Map of ${result.water.name}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/60 to-transparent" />
+                  <div className="absolute bottom-2 left-4 text-xs font-semibold text-slate-600 flex items-center gap-1">
+                    <MapPin size={11} />{result.water.name}, {result.water.state}
+                  </div>
+                </div>
+              )}
+
+              {/* Weather bar */}
+              {weather && (
+                <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100">
+                  <WeatherBar weather={weather} />
+                </div>
+              )}
+
+              {/* Tournament Intel section */}
+              <CardHeader className="pb-1 pt-4 px-5">
+                <CardTitle className="text-slate-800 text-sm font-bold flex items-center gap-2">
+                  <Trophy size={14} className="text-blue-600" /> Tournament Intel
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-5 pb-4">
+              <CardContent className="px-5 pb-3">
                 {summaryLoading ? (
                   <div className="space-y-2">
-                    <Skeleton className="h-4 w-full bg-blue-100" />
-                    <Skeleton className="h-4 w-5/6 bg-blue-100" />
-                    <Skeleton className="h-4 w-4/6 bg-blue-100" />
+                    <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-4/6" />
                   </div>
                 ) : (
-                  <p className="text-slate-700 text-sm leading-relaxed">{summary}</p>
+                  <p className="text-slate-700 text-sm leading-relaxed">{summaryParts?.intel}</p>
                 )}
               </CardContent>
+
+              {/* Today's Recommendation section */}
+              {(summaryLoading || summaryParts?.today) && (
+                <>
+                  <Separator className="bg-slate-100" />
+                  <CardHeader className="pb-1 pt-3 px-5">
+                    <CardTitle className="text-blue-700 text-sm font-bold flex items-center gap-2">
+                      <Sparkles size={14} /> Today&apos;s Recommendation
+                      {weather && <span className="font-normal text-slate-400 text-xs ml-1">based on current conditions</span>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-5">
+                    {summaryLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-3/6" />
+                      </div>
+                    ) : (
+                      <p className="text-slate-700 text-sm leading-relaxed">{summaryParts?.today}</p>
+                    )}
+                  </CardContent>
+                </>
+              )}
             </Card>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -317,7 +341,7 @@ export default function SearchPage() {
                 </Card>
               )}
 
-              {/* Top Baits summary */}
+              {/* Top Baits */}
               {result.topBaits.length > 0 && (
                 <Card className="border-slate-200 shadow-none bg-white">
                   <CardHeader className="pb-2 pt-4 px-5">
@@ -327,8 +351,7 @@ export default function SearchPage() {
                   </CardHeader>
                   <CardContent className="px-5 pb-4 space-y-2">
                     {result.topBaits.slice(0, 6).map(b => {
-                      const baitData = result.reports
-                        .flatMap((r: any) => r.bait_used || [])
+                      const baitData = result.reports.flatMap((r: any) => r.bait_used || [])
                         .find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
                       return (
                         <div key={b.name} className="flex items-center justify-between gap-2">
@@ -336,8 +359,7 @@ export default function SearchPage() {
                           <div className="flex items-center gap-2 shrink-0">
                             <Badge className="bg-slate-100 text-slate-600 border-0 text-xs font-semibold">{b.count}x</Badge>
                             {baitData?.product_url && (
-                              <a href={baitData.product_url} target="_blank" rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800">
+                              <a href={baitData.product_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
                                 <ExternalLink size={13} />
                               </a>
                             )}
@@ -352,13 +374,12 @@ export default function SearchPage() {
 
             <Separator className="bg-slate-200" />
 
-            {/* Technique / Bait Cards */}
+            {/* Technique Cards */}
             <div>
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Technique Reports</h3>
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Technique Reports</h3>
               <div className="grid sm:grid-cols-2 gap-3">
                 {result.reports.slice(0, 20).map((r: any) => (
                   <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
-                    {/* Card header */}
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         {r.tournament_result?.angler_name && (
@@ -370,61 +391,32 @@ export default function SearchPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         {r.tournament_result?.place && (
-                          <Badge className="bg-amber-50 text-amber-700 border-amber-100 text-xs font-bold">
-                            #{r.tournament_result.place}
-                          </Badge>
+                          <Badge className="bg-amber-50 text-amber-700 border-amber-100 text-xs font-bold">#{r.tournament_result.place}</Badge>
                         )}
                         {r.season && (
-                          <Badge variant="outline" className="border-slate-200 text-slate-400 text-xs capitalize">
-                            {r.season}
-                          </Badge>
+                          <Badge variant="outline" className="border-slate-200 text-slate-400 text-xs capitalize">{r.season}</Badge>
                         )}
                       </div>
                     </div>
 
                     <Separator className="bg-slate-100" />
 
-                    {/* Technique details */}
-                    <div className="space-y-1.5 text-sm">
-                      {r.pattern && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Pattern</span>
-                          <span className="text-slate-700 leading-tight">{r.pattern}</span>
+                    <div className="space-y-1.5">
+                      {[
+                        { label: 'Pattern', value: r.pattern },
+                        { label: 'Technique', value: r.presentation },
+                        { label: 'Structure', value: r.structure },
+                        { label: 'Depth', value: r.depth_range_ft ? `${r.depth_range_ft} ft` : null },
+                        { label: 'Water Temp', value: r.conditions?.[0]?.water_temp_f ? `${r.conditions[0].water_temp_f}°F` : null },
+                        { label: 'Clarity', value: r.conditions?.[0]?.water_clarity },
+                      ].filter(row => row.value).map(row => (
+                        <div key={row.label} className="flex gap-2 text-sm">
+                          <span className="text-slate-400 font-semibold text-xs uppercase tracking-wide w-20 shrink-0 pt-0.5">{row.label}</span>
+                          <span className="text-slate-700 leading-tight capitalize">{row.value}</span>
                         </div>
-                      )}
-                      {r.presentation && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Technique</span>
-                          <span className="text-slate-700 leading-tight">{r.presentation}</span>
-                        </div>
-                      )}
-                      {r.structure && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Structure</span>
-                          <span className="text-slate-700 leading-tight">{r.structure}</span>
-                        </div>
-                      )}
-                      {r.depth_range_ft && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Depth</span>
-                          <span className="text-slate-700">{r.depth_range_ft} ft</span>
-                        </div>
-                      )}
-                      {r.conditions?.[0]?.water_temp_f && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Water Temp</span>
-                          <span className="text-slate-700">{r.conditions[0].water_temp_f}°F</span>
-                        </div>
-                      )}
-                      {r.conditions?.[0]?.water_clarity && (
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Clarity</span>
-                          <span className="text-slate-700 capitalize">{r.conditions[0].water_clarity}</span>
-                        </div>
-                      )}
+                      ))}
                     </div>
 
-                    {/* Bait chips */}
                     {r.bait_used?.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {r.bait_used.map((b: BaitRecord, j: number) => (
@@ -432,13 +424,13 @@ export default function SearchPage() {
                             <a key={j} href={b.product_url} target="_blank" rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-2.5 py-1 text-xs font-semibold hover:bg-blue-100 transition-colors">
                               {b.bait_name || b.bait_type}
-                              {b.color ? <span className="text-blue-400">· {b.color}</span> : null}
+                              {b.color && <span className="text-blue-400">· {b.color}</span>}
                               <ExternalLink size={10} className="opacity-60" />
                             </a>
                           ) : (
                             <span key={j} className="inline-flex items-center bg-slate-100 text-slate-600 rounded-lg px-2.5 py-1 text-xs font-semibold">
                               {b.bait_name || b.bait_type}
-                              {b.color ? <span className="text-slate-400 ml-1">· {b.color}</span> : null}
+                              {b.color && <span className="text-slate-400 ml-1">· {b.color}</span>}
                             </span>
                           )
                         ))}
