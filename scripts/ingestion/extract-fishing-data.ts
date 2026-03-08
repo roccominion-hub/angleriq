@@ -45,7 +45,7 @@ export async function extractFishingData(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [
@@ -62,7 +62,9 @@ export async function extractFishingData(
   }
 
   const data = await response.json() as any
-  const content = data.content[0].text.trim()
+  const raw = data.content[0].text.trim()
+  // Strip markdown code fences if present
+  const content = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   try {
     return JSON.parse(content)
