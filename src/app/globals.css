@@ -1,4 +1,12 @@
 @import "tailwindcss";
+
+:root {
+  --font-montserrat: 'Montserrat', sans-serif;
+}
+
+body {
+  font-family: var(--font-montserrat), sans-serif;
+}
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 

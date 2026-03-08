@@ -10,7 +10,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lake = searchParams.get('lake')
   const season = searchParams.get('season')
-  const baitType = searchParams.get('bait_type')
+  const timeOfDay = searchParams.get('timeOfDay')
+  const baitType = searchParams.get('baitType')
+  const fishDepth = searchParams.get('fishDepth')
+  const locationType = searchParams.get('locationType')
+  const structure = searchParams.get('structure')
+  const waterClarity = searchParams.get('waterClarity')
+  const yearFrom = searchParams.get('yearFrom') ? parseInt(searchParams.get('yearFrom')!) : 2015
+  const yearTo = searchParams.get('yearTo') ? parseInt(searchParams.get('yearTo')!) : new Date().getFullYear()
 
   if (!lake) return NextResponse.json({ error: 'lake is required' }, { status: 400 })
 
@@ -36,6 +43,13 @@ export async function GET(req: NextRequest) {
     .order('reported_date', { ascending: false })
 
   if (season) query = query.eq('season', season)
+  if (timeOfDay) query = query.eq('time_of_day', timeOfDay)
+  if (fishDepth) query = query.eq('fish_depth', fishDepth)
+  if (locationType) query = query.eq('location_type', locationType)
+  if (structure) query = query.ilike('structure', `%${structure}%`)
+  if (waterClarity) query = query.eq('conditions.water_clarity', waterClarity)
+  if (yearFrom) query = query.gte('reported_date', `${yearFrom}-01-01`)
+  if (yearTo) query = query.lte('reported_date', `${yearTo}-12-31`)
 
   const { data: reports, error } = await query
 
