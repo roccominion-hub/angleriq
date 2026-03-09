@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!lat || !lng) return NextResponse.json({ error: 'lat/lng required' }, { status: 400 })
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,weather_code,relative_humidity_2m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,weather_code,relative_humidity_2m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&timeformat=unixtime`
     const res = await fetch(url)
     const data = await res.json() as any
     const c = data.current
@@ -20,13 +20,15 @@ export async function GET(req: NextRequest) {
     const cloudPct = c.cloud_cover
     const skyCondition = cloudPct < 25 ? 'sunny' : cloudPct < 60 ? 'partly cloudy' : 'overcast'
     
-    // Derive time of day from local time
-    const localTime = new Date(data.current_weather_time || Date.now())
-    const hour = localTime.getHours()
+    // Derive time of day using UTC offset from Open-Meteo (correct local time)
+    const utcOffsetSeconds = data.utc_offset_seconds ?? 0
+    const nowUtcMs = Date.now()
+    const localMs = nowUtcMs + utcOffsetSeconds * 1000
+    const hour = new Date(localMs).getUTCHours()
     const timeOfDay = hour < 10 ? 'morning' : hour < 14 ? 'midday' : hour < 18 ? 'afternoon' : 'evening'
 
-    // Derive season from month
-    const month = localTime.getMonth() + 1
+    // Derive season from month (using local time)
+    const month = new Date(localMs).getUTCMonth() + 1
     const season = month >= 3 && month <= 5 ? 'spring'
       : month >= 6 && month <= 8 ? 'summer'
       : month >= 9 && month <= 11 ? 'fall'

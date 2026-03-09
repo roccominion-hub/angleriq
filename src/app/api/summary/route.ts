@@ -45,8 +45,10 @@ Write the report in TWO clearly labeled sections:
 **TODAY'S RECOMMENDATION**
 2-3 sentences giving a specific recommendation for RIGHT NOW based on the current conditions (time of day, temperature, sky conditions, season). Include:
 - The best technique and presentation for these conditions
-- Top 3 specific bait color recommendations — use tournament data colors if available, otherwise recommend colors based on water clarity, sky/light conditions, water temp, and season. Explain briefly why each color works in these conditions.
-- Any condition-specific adjustments (e.g. slow down in cold fronts, go topwater in low light, etc.)
+- The best technique and presentation for these conditions
+- Top 3 specific bait color recommendations — use tournament data colors if available, otherwise recommend colors based on water clarity, sky/light conditions, water temp, and season. Format as a short bulleted list (use - prefix). Explain briefly why each color works.
+- Any condition-specific adjustments (e.g. slow down in cold fronts, go topwater in low light, etc.) — use a new line for each adjustment.
+Use natural line breaks between ideas.
 
 Be direct, confident, and specific. Write like a knowledgeable local guide, not a generic fishing article.`
 

@@ -30,6 +30,29 @@ interface SearchResult {
 
 const CURRENT_YEAR = new Date().getFullYear()
 
+function getTackleSetup(baitType: string, _weightOz: number) {
+  const bt = baitType.toLowerCase()
+  if (bt.includes('jig') || bt.includes('texas') || bt.includes('soft plastic')) {
+    return { reel: 'Baitcaster', rod: `7'3" Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '15-17 lb' }
+  }
+  if (bt.includes('crankbait') || bt.includes('jerkbait')) {
+    return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Moderate Action`, lineType: 'Fluorocarbon', lineLb: '10-14 lb' }
+  }
+  if (bt.includes('topwater') || bt.includes('popper') || bt.includes('frog')) {
+    return { reel: 'Baitcaster', rod: `7'3" Heavy Fast Action`, lineType: 'Braided', lineLb: '50-65 lb' }
+  }
+  if (bt.includes('swimbait')) {
+    return { reel: 'Baitcaster', rod: `7'6" Heavy Moderate Action`, lineType: 'Fluorocarbon', lineLb: '15-20 lb' }
+  }
+  if (bt.includes('spinnerbait') || bt.includes('bladed')) {
+    return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Moderate Fast Action`, lineType: 'Fluorocarbon', lineLb: '14-17 lb' }
+  }
+  if (bt.includes('drop shot') || bt.includes('finesse') || bt.includes('ned')) {
+    return { reel: 'Spinning', rod: `6'10" Medium Light Fast Action`, lineType: 'Braid to Fluoro leader', lineLb: '10 lb braid / 6-8 lb fluoro' }
+  }
+  return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '12-17 lb' }
+}
+
 function FilterSelect({ label, icon, value, onValueChange, options, placeholder }: {
   label: string; icon: React.ReactNode; value: string
   onValueChange: (v: string) => void
@@ -78,6 +101,7 @@ export default function SearchPage() {
   })
   const [yearRange, setYearRange] = useState([2019, CURRENT_YEAR])
   const [filtersOpen, setFiltersOpen] = useState(true)
+  const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
   const [summary, setSummary] = useState('')
@@ -145,6 +169,27 @@ export default function SearchPage() {
       setLoading(false)
       setSummaryLoading(false)
     }
+  }
+
+  function RenderRecommendation({ text }: { text: string }) {
+    const lines = text.split('\n')
+    return (
+      <div className="text-slate-700 text-sm leading-relaxed">
+        {lines.map((line, i) => {
+          const trimmed = line.trim()
+          if (!trimmed) return null
+          if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
+            return (
+              <div key={i} className="flex gap-2 mb-1">
+                <span className="text-green-600 font-bold shrink-0">·</span>
+                <span>{trimmed.replace(/^[-•]\s*/, '')}</span>
+              </div>
+            )
+          }
+          return <p key={i} className="mb-2">{trimmed}</p>
+        })}
+      </div>
+    )
   }
 
   // Parse summary into two sections
@@ -287,7 +332,7 @@ export default function SearchPage() {
                       {today && (
                         <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
                           <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1.5">Today&apos;s Recommendation</p>
-                          <p className="text-slate-700 text-sm leading-relaxed">{today}</p>
+                          <RenderRecommendation text={today} />
                         </div>
                       )}
                     </div>
@@ -319,7 +364,7 @@ export default function SearchPage() {
                 </Card>
               )}
 
-              {/* Top Baits */}
+              {/* Top Baits Summary */}
               {result.topBaits.length > 0 && (
                 <Card className="border-slate-200 shadow-none bg-white">
                   <CardHeader className="pb-2 pt-4 px-5">
@@ -349,12 +394,117 @@ export default function SearchPage() {
               )}
             </div>
 
+            {/* Top Bait Breakdown */}
+            {result.topBaits.length > 0 && (
+              <div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Top Bait Breakdown</h3>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {result.topBaits.slice(0, 5).map(b => {
+                    // Collect all bait records for this bait
+                    const baitRecords: BaitRecord[] = result.reports.flatMap((r: any) => (r.bait_used || []).filter((bu: BaitRecord) => bu.bait_name === b.name))
+                    const colors = [...new Set(baitRecords.map((br: BaitRecord) => br.color).filter(Boolean))]
+                    // Most common presentation
+                    const presentationCounts: Record<string, number> = {}
+                    result.reports.forEach((r: any) => {
+                      if ((r.bait_used || []).some((bu: BaitRecord) => bu.bait_name === b.name) && r.presentation) {
+                        presentationCounts[r.presentation] = (presentationCounts[r.presentation] || 0) + 1
+                      }
+                    })
+                    const technique = Object.entries(presentationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+                    // Most common structure
+                    const structureCounts: Record<string, number> = {}
+                    result.reports.forEach((r: any) => {
+                      if ((r.bait_used || []).some((bu: BaitRecord) => bu.bait_name === b.name) && r.structure) {
+                        structureCounts[r.structure] = (structureCounts[r.structure] || 0) + 1
+                      }
+                    })
+                    const structure = Object.entries(structureCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+                    // Line from data or infer
+                    const lineRecord = baitRecords.find(br => br.line_type)
+                    const baitType = baitRecords[0]?.bait_type || b.name
+                    const weightOz = baitRecords[0]?.weight_oz || 0
+                    const tackle = getTackleSetup(baitType, weightOz)
+                    const lineDisplay = lineRecord
+                      ? `${lineRecord.line_type}${lineRecord.line_lb_test ? ` · ${lineRecord.line_lb_test} lb` : ''}`
+                      : `${tackle.lineType} · ${tackle.lineLb}`
+                    const productUrl = baitRecords.find(br => br.product_url)?.product_url
+
+                    return (
+                      <Card key={b.name} className="border-slate-200 shadow-none bg-white">
+                        <CardHeader className="pb-2 pt-4 px-4">
+                          <CardTitle className="text-slate-900 text-sm font-bold flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 truncate">🎣 {b.name}</span>
+                            <Badge className="bg-blue-50 text-blue-700 border-blue-100 text-xs font-semibold shrink-0">{b.count}x</Badge>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                          <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center text-slate-300 text-xs text-center mb-3 border border-slate-200 leading-tight">
+                            Photo<br />Coming<br />Soon
+                          </div>
+                          {colors.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Top Colors</p>
+                              <div className="flex flex-wrap gap-1">
+                                {colors.slice(0, 5).map(c => (
+                                  <Badge key={c} variant="outline" className="border-slate-200 text-slate-600 text-xs capitalize">{c}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div className="space-y-1 text-xs mb-3">
+                            <div className="flex gap-2">
+                              <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Technique</span>
+                              <span className="text-slate-700 capitalize">{technique}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Best For</span>
+                              <span className="text-slate-700 capitalize">{structure}</span>
+                            </div>
+                          </div>
+                          <Separator className="bg-slate-100 mb-3" />
+                          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Tackle Setup</p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex gap-2">
+                              <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Reel</span>
+                              <span className="text-slate-700">{tackle.reel}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Rod</span>
+                              <span className="text-slate-700">{tackle.rod}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Line</span>
+                              <span className="text-slate-700">{lineDisplay}</span>
+                            </div>
+                          </div>
+                          {productUrl && (
+                            <a href={productUrl} target="_blank" rel="noopener noreferrer"
+                              className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                              <ExternalLink size={11} /> Shop this bait
+                            </a>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <Separator className="bg-slate-200" />
 
             {/* Technique Cards */}
             <div>
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Technique Reports</h3>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Technique Reports</h3>
+                <button
+                  onClick={() => setReportsOpen(o => !o)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
+                >
+                  {reportsOpen ? <><ChevronUp size={14} /> Collapse</> : <><ChevronDown size={14} /> Show {result.reports.length} Reports</>}
+                </button>
+              </div>
+              {reportsOpen && <div className="grid sm:grid-cols-2 gap-3">
                 {result.reports.slice(0, 20).map((r: any) => (
                   <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between gap-2">
@@ -396,7 +546,7 @@ export default function SearchPage() {
                     {r.notes && <p className="text-slate-400 text-xs leading-relaxed border-t border-slate-100 pt-2">{r.notes}</p>}
                   </div>
                 ))}
-              </div>
+              </div>}
             </div>
           </div>
         )}
