@@ -104,7 +104,7 @@ export default function SearchPage() {
   const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
-  const [summary, setSummary] = useState('')
+  const [summary, setSummary] = useState<{ intel: string; today: string }>({ intel: '', today: '' })
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [error, setError] = useState('')
@@ -123,7 +123,7 @@ export default function SearchPage() {
     setSummaryLoading(true)
     setError('')
     setResult(null)
-    setSummary('')
+    setSummary({ intel: '', today: '' })
     setWeather(null)
 
     try {
@@ -163,7 +163,7 @@ export default function SearchPage() {
           weather: currentWeather,
           filters,
         })
-      }).then(r => r.json()).then(d => setSummary(d.summary)).finally(() => setSummaryLoading(false))
+      }).then(r => r.json()).then(d => setSummary({ intel: d.intel || '', today: d.today || '' })).finally(() => setSummaryLoading(false))
 
     } catch {
       setError('Something went wrong. Please try again.')
@@ -322,23 +322,20 @@ export default function SearchPage() {
                       <Skeleton className="h-4 w-3/4 bg-blue-50 mt-2" />
                     </div>
                   </div>
-                ) : (() => {
-                  const { intel, today } = parseSummary(summary)
-                  return (
+                ) : (
                     <div className="space-y-4">
                       <div>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
-                        <p className="text-slate-700 text-sm leading-relaxed">{intel}</p>
+                        <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
                       </div>
-                      {today && (
+                      {summary.today && (
                         <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
                           <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1.5">Today&apos;s Recommendation</p>
-                          <RenderRecommendation text={today} />
+                          <RenderRecommendation text={summary.today} />
                         </div>
                       )}
                     </div>
-                  )
-                })()}
+                )}
               </CardContent>
             </Card>
 

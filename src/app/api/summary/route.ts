@@ -50,10 +50,7 @@ export async function POST(req: NextRequest) {
 
   // If both cached, return immediately
   if (cachedIntel && cachedToday) {
-    return NextResponse.json({
-      summary: `**TOURNAMENT INTEL**\n${cachedIntel}\n\n**TODAY'S RECOMMENDATION**\n${cachedToday}`,
-      cached: true
-    })
+    return NextResponse.json({ intel: cachedIntel, today: cachedToday, cached: true })
   }
 
   // Extract all colors from real data
@@ -120,7 +117,8 @@ Be direct and confident. Write like a knowledgeable local guide giving advice to
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
-      max_tokens: 1200,
+      max_tokens: 1500,
+      system: 'You are an expert bass fishing guide. Always respond with exactly two sections labeled **TOURNAMENT INTEL** and **TODAY\'S RECOMMENDATION**. Never omit either section. Use newlines to separate ideas within each section.',
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -156,5 +154,5 @@ Be direct and confident. Write like a knowledgeable local guide giving advice to
     })
   }
 
-  return NextResponse.json({ summary })
+  return NextResponse.json({ intel: intelText, today: todayText, cached: false })
 }
