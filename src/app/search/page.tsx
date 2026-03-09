@@ -161,6 +161,7 @@ export default function SearchPage() {
           topPatterns: data.topPatterns,
           reports: data.reports,
           weather: currentWeather,
+          filters,
         })
       }).then(r => r.json()).then(d => setSummary(d.summary)).finally(() => setSummaryLoading(false))
 
@@ -462,7 +463,7 @@ export default function SearchPage() {
                             </div>
                           </div>
                           <Separator className="bg-slate-100 mb-3" />
-                          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Tackle Setup</p>
+                          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Suggested Setup</p>
                           <div className="space-y-1 text-xs">
                             <div className="flex gap-2">
                               <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Reel</span>
