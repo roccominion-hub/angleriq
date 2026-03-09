@@ -10,17 +10,17 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { Logo } from '@/components/Logo'
+import { LakeMap } from '@/components/LakeMap'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
-  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp,
-  Wind, Cloud, Droplets
+  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets
 } from 'lucide-react'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
 interface Weather { tempF: number; feelsLikeF: number; cloudCoverPct: number; windMph: number; precipitation: number; skyCondition: string; timeOfDay: string; season: string; weatherDesc: string }
 interface SearchResult {
-  water: Lake
+  water: Lake & { lat: number; lng: number }
   sampleSize: number
   topBaits: { name: string; count: number }[]
   topPatterns: { pattern: string; count: number }[]
@@ -56,24 +56,17 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder 
 
 function WeatherBar({ weather }: { weather: Weather }) {
   return (
-    <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-      <span className="flex items-center gap-1"><Thermometer size={13} className="text-orange-400" />{weather.tempF}°F</span>
-      <span className="flex items-center gap-1"><Cloud size={13} className="text-slate-400" />{weather.skyCondition}</span>
-      <span className="flex items-center gap-1"><Wind size={13} className="text-blue-400" />{weather.windMph} mph</span>
-      {weather.precipitation > 0 && <span className="flex items-center gap-1"><Droplets size={13} className="text-blue-500" />{weather.precipitation}mm</span>}
-      <span className="flex items-center gap-1 capitalize"><Clock size={13} className="text-slate-400" />{weather.timeOfDay}</span>
+    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5">
+      <span className="font-bold text-slate-800">{weather.tempF}°F</span>
+      <span className="text-slate-400">·</span>
+      <span className="capitalize">{weather.skyCondition}</span>
+      <span className="text-slate-400">·</span>
+      <span className="flex items-center gap-1"><Wind size={13} />{weather.windMph} mph</span>
+      {weather.precipitation > 0 && <><span className="text-slate-400">·</span><span className="flex items-center gap-1"><Droplets size={13} />{weather.precipitation}mm</span></>}
+      <span className="text-slate-400">·</span>
+      <span className="capitalize text-blue-600 font-semibold">{weather.timeOfDay}</span>
     </div>
   )
-}
-
-// Parse AI summary into two sections
-function parseSummary(text: string): { intel: string; today: string } {
-  const todayMatch = text.match(/\*\*TODAY'S RECOMMENDATION\*\*([\s\S]*?)$/i)
-  const intelMatch = text.match(/\*\*TOURNAMENT INTEL\*\*([\s\S]*?)(?=\*\*TODAY|$)/i)
-  return {
-    intel: intelMatch?.[1]?.trim() || text,
-    today: todayMatch?.[1]?.trim() || '',
-  }
 }
 
 export default function SearchPage() {
@@ -87,7 +80,7 @@ export default function SearchPage() {
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
-  const [summaryParts, setSummaryParts] = useState<{ intel: string; today: string } | null>(null)
+  const [summary, setSummary] = useState('')
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [error, setError] = useState('')
@@ -106,8 +99,8 @@ export default function SearchPage() {
     setSummaryLoading(true)
     setError('')
     setResult(null)
+    setSummary('')
     setWeather(null)
-    setSummaryParts(null)
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -117,17 +110,18 @@ export default function SearchPage() {
 
       const res = await fetch(`/api/search?${params}`)
       const data = await res.json()
-      if (data.error) { setError(data.error); return }
+      if (data.error) { setError(data.error); setLoading(false); setSummaryLoading(false); return }
       setResult(data)
+      setLoading(false)
 
-      // Fetch weather if we have coords
-      let weatherData: Weather | null = null
+      // Fetch weather using lake coordinates
+      let currentWeather: Weather | null = null
       if (data.coords?.lat && data.coords?.lng) {
         try {
           const wRes = await fetch(`/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`)
-          weatherData = await wRes.json()
-          setWeather(weatherData)
-        } catch {}
+          currentWeather = await wRes.json()
+          setWeather(currentWeather)
+        } catch { /* weather is optional */ }
       }
 
       // Fetch AI summary with weather context
@@ -142,24 +136,29 @@ export default function SearchPage() {
           topBaits: data.topBaits,
           topPatterns: data.topPatterns,
           reports: data.reports,
-          weather: weatherData,
+          weather: currentWeather,
         })
-      }).then(r => r.json()).then(d => setSummaryParts(parseSummary(d.summary))).finally(() => setSummaryLoading(false))
+      }).then(r => r.json()).then(d => setSummary(d.summary)).finally(() => setSummaryLoading(false))
 
     } catch {
       setError('Something went wrong. Please try again.')
-    } finally {
       setLoading(false)
+      setSummaryLoading(false)
     }
   }
 
-  const mapUrl = result?.coords?.lat && result?.coords?.lng
-    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${result.coords.lat},${result.coords.lng}&zoom=10&size=600x160&maptype=osm&markers=${result.coords.lat},${result.coords.lng},red`
-    : null
+  // Parse summary into two sections
+  function parseSummary(text: string): { intel: string; today: string } {
+    const todayMatch = text.match(/\*{0,2}TODAY['']S RECOMMENDATION\*{0,2}[:\s]*([\s\S]*?)$/im)
+    const intelMatch = text.match(/\*{0,2}TOURNAMENT INTEL\*{0,2}[:\s]*([\s\S]*?)(?=\*{0,2}TODAY|$)/im)
+    return {
+      intel: intelMatch ? intelMatch[1].trim() : text,
+      today: todayMatch ? todayMatch[1].trim() : '',
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-      {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
         <Button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">
@@ -211,7 +210,7 @@ export default function SearchPage() {
                 <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={filters.timeOfDay} onValueChange={v => setFilter('timeOfDay', v)} placeholder="Any time"
                   options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
                 <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={filters.baitType} onValueChange={v => setFilter('baitType', v)} placeholder="All baits"
-                  options={[{ value: 'soft plastic', label: 'Soft Plastic' }, { value: 'jig', label: 'Jig' }, { value: 'crankbait', label: 'Crankbait' }, { value: 'jerkbait', label: 'Jerkbait' }, { value: 'topwater', label: 'Topwater' }, { value: 'swimbait', label: 'Swimbait' }, { value: 'bladed jig', label: 'Bladed Jig' }, { value: 'spinnerbait', label: 'Spinnerbait' }]} />
+                  options={[{ value: 'soft plastic', label: 'Soft Plastic' }, { value: 'jig', label: 'Jig' }, { value: 'crankbait', label: 'Crankbait' }, { value: 'jerkbait', label: 'Jerkbait' }, { value: 'topwater', label: 'Topwater' }, { value: 'swimbait', label: 'Swimbait' }, { value: 'bladed jig', label: 'Bladed Jig' }, { value: 'spinnerbait', label: 'Spinnerbait' }, { value: 'spoon', label: 'Spoon' }]} />
                 <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={filters.fishDepth} onValueChange={v => setFilter('fishDepth', v)} placeholder="Any depth"
                   options={[{ value: 'surface', label: 'Surface' }, { value: 'suspended', label: 'Suspended' }, { value: 'bottom', label: 'Bottom' }]} />
                 <FilterSelect label="Location" icon={<Anchor size={12} />} value={filters.locationType} onValueChange={v => setFilter('locationType', v)} placeholder="Any location"
@@ -240,6 +239,7 @@ export default function SearchPage() {
 
         {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
 
+        {/* Results */}
         {result && (
           <div className="space-y-4">
             {/* Header */}
@@ -248,74 +248,52 @@ export default function SearchPage() {
                 <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{result.water.name}</h2>
                 <p className="text-slate-400 text-sm mt-0.5">{result.water.state} · {result.water.type} · {result.water.species?.join(', ')}</p>
               </div>
-              <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">
-                {result.sampleSize} tournament reports
-              </Badge>
+              <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">{result.sampleSize} tournament reports</Badge>
             </div>
 
-            {/* Summary Card with map */}
-            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
-              {/* Map header */}
-              {mapUrl && (
-                <div className="relative w-full h-36 bg-slate-100 overflow-hidden border-b border-slate-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={mapUrl}
-                    alt={`Map of ${result.water.name}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/60 to-transparent" />
-                  <div className="absolute bottom-2 left-4 text-xs font-semibold text-slate-600 flex items-center gap-1">
-                    <MapPin size={11} />{result.water.name}, {result.water.state}
-                  </div>
-                </div>
-              )}
+            {/* Weather bar */}
+            {weather && <WeatherBar weather={weather} />}
 
-              {/* Weather bar */}
-              {weather && (
-                <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100">
-                  <WeatherBar weather={weather} />
-                </div>
+            {/* AI Summary card with map */}
+            <Card className="border-blue-100 shadow-none overflow-hidden">
+              {/* Lake map */}
+              {result.coords?.lat && result.coords?.lng && (
+                <LakeMap lat={result.coords.lat} lng={result.coords.lng} name={result.water.name} />
               )}
-
-              {/* Tournament Intel section */}
-              <CardHeader className="pb-1 pt-4 px-5">
-                <CardTitle className="text-slate-800 text-sm font-bold flex items-center gap-2">
-                  <Trophy size={14} className="text-blue-600" /> Tournament Intel
+              <CardHeader className="pb-2 pt-4 px-5">
+                <CardTitle className="text-blue-800 text-sm font-bold flex items-center gap-2">
+                  <Sparkles size={15} /> AnglerIQ Intelligence Report
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-5 pb-3">
+              <CardContent className="px-5 pb-4">
                 {summaryLoading ? (
                   <div className="space-y-2">
-                    <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-4/6" />
+                    <Skeleton className="h-4 w-full bg-blue-50" />
+                    <Skeleton className="h-4 w-5/6 bg-blue-50" />
+                    <Skeleton className="h-4 w-4/6 bg-blue-50" />
+                    <div className="pt-3">
+                      <Skeleton className="h-4 w-full bg-blue-50" />
+                      <Skeleton className="h-4 w-3/4 bg-blue-50 mt-2" />
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-slate-700 text-sm leading-relaxed">{summaryParts?.intel}</p>
-                )}
-              </CardContent>
-
-              {/* Today's Recommendation section */}
-              {(summaryLoading || summaryParts?.today) && (
-                <>
-                  <Separator className="bg-slate-100" />
-                  <CardHeader className="pb-1 pt-3 px-5">
-                    <CardTitle className="text-blue-700 text-sm font-bold flex items-center gap-2">
-                      <Sparkles size={14} /> Today&apos;s Recommendation
-                      {weather && <span className="font-normal text-slate-400 text-xs ml-1">based on current conditions</span>}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5 pb-5">
-                    {summaryLoading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-3/6" />
+                ) : (() => {
+                  const { intel, today } = parseSummary(summary)
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
+                        <p className="text-slate-700 text-sm leading-relaxed">{intel}</p>
                       </div>
-                    ) : (
-                      <p className="text-slate-700 text-sm leading-relaxed">{summaryParts?.today}</p>
-                    )}
-                  </CardContent>
-                </>
-              )}
+                      {today && (
+                        <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
+                          <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1.5">Today&apos;s Recommendation</p>
+                          <p className="text-slate-700 text-sm leading-relaxed">{today}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </CardContent>
             </Card>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -351,8 +329,7 @@ export default function SearchPage() {
                   </CardHeader>
                   <CardContent className="px-5 pb-4 space-y-2">
                     {result.topBaits.slice(0, 6).map(b => {
-                      const baitData = result.reports.flatMap((r: any) => r.bait_used || [])
-                        .find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
+                      const baitData = result.reports.flatMap((r: any) => r.bait_used || []).find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
                       return (
                         <div key={b.name} className="flex items-center justify-between gap-2">
                           <span className="text-slate-700 text-sm flex-1 leading-tight truncate">{b.name}</span>
@@ -376,70 +353,47 @@ export default function SearchPage() {
 
             {/* Technique Cards */}
             <div>
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Technique Reports</h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Technique Reports</h3>
               <div className="grid sm:grid-cols-2 gap-3">
                 {result.reports.slice(0, 20).map((r: any) => (
                   <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        {r.tournament_result?.angler_name && (
-                          <p className="font-bold text-slate-900 text-sm">{r.tournament_result.angler_name}</p>
-                        )}
-                        {r.tournament_result?.tournament?.name && (
-                          <p className="text-slate-400 text-xs mt-0.5 leading-tight">{r.tournament_result.tournament.name}</p>
-                        )}
+                        {r.tournament_result?.angler_name && <p className="font-bold text-slate-900 text-sm">{r.tournament_result.angler_name}</p>}
+                        {r.tournament_result?.tournament?.name && <p className="text-slate-400 text-xs mt-0.5 leading-tight">{r.tournament_result.tournament.name}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        {r.tournament_result?.place && (
-                          <Badge className="bg-amber-50 text-amber-700 border-amber-100 text-xs font-bold">#{r.tournament_result.place}</Badge>
-                        )}
-                        {r.season && (
-                          <Badge variant="outline" className="border-slate-200 text-slate-400 text-xs capitalize">{r.season}</Badge>
-                        )}
+                        {r.tournament_result?.place && <Badge className="bg-amber-50 text-amber-700 border-amber-100 text-xs font-bold">#{r.tournament_result.place}</Badge>}
+                        {r.season && <Badge variant="outline" className="border-slate-200 text-slate-400 text-xs capitalize">{r.season}</Badge>}
                       </div>
                     </div>
-
                     <Separator className="bg-slate-100" />
-
-                    <div className="space-y-1.5">
-                      {[
-                        { label: 'Pattern', value: r.pattern },
-                        { label: 'Technique', value: r.presentation },
-                        { label: 'Structure', value: r.structure },
-                        { label: 'Depth', value: r.depth_range_ft ? `${r.depth_range_ft} ft` : null },
-                        { label: 'Water Temp', value: r.conditions?.[0]?.water_temp_f ? `${r.conditions[0].water_temp_f}°F` : null },
-                        { label: 'Clarity', value: r.conditions?.[0]?.water_clarity },
-                      ].filter(row => row.value).map(row => (
-                        <div key={row.label} className="flex gap-2 text-sm">
-                          <span className="text-slate-400 font-semibold text-xs uppercase tracking-wide w-20 shrink-0 pt-0.5">{row.label}</span>
-                          <span className="text-slate-700 leading-tight capitalize">{row.value}</span>
-                        </div>
-                      ))}
+                    <div className="space-y-1.5 text-sm">
+                      {r.pattern && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Pattern</span><span className="text-slate-700 leading-tight">{r.pattern}</span></div>}
+                      {r.presentation && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Technique</span><span className="text-slate-700 leading-tight">{r.presentation}</span></div>}
+                      {r.structure && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Structure</span><span className="text-slate-700 leading-tight">{r.structure}</span></div>}
+                      {r.depth_range_ft && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Depth</span><span className="text-slate-700">{r.depth_range_ft} ft</span></div>}
+                      {r.conditions?.[0]?.water_temp_f && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Water Temp</span><span className="text-slate-700">{r.conditions[0].water_temp_f}°F</span></div>}
+                      {r.conditions?.[0]?.water_clarity && <div className="flex gap-2"><span className="text-slate-400 font-semibold w-20 shrink-0 text-xs uppercase tracking-wide pt-0.5">Clarity</span><span className="text-slate-700 capitalize">{r.conditions[0].water_clarity}</span></div>}
                     </div>
-
                     {r.bait_used?.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {r.bait_used.map((b: BaitRecord, j: number) => (
                           b.product_url ? (
                             <a key={j} href={b.product_url} target="_blank" rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-2.5 py-1 text-xs font-semibold hover:bg-blue-100 transition-colors">
-                              {b.bait_name || b.bait_type}
-                              {b.color && <span className="text-blue-400">· {b.color}</span>}
+                              {b.bait_name || b.bait_type}{b.color ? <span className="text-blue-400">· {b.color}</span> : null}
                               <ExternalLink size={10} className="opacity-60" />
                             </a>
                           ) : (
                             <span key={j} className="inline-flex items-center bg-slate-100 text-slate-600 rounded-lg px-2.5 py-1 text-xs font-semibold">
-                              {b.bait_name || b.bait_type}
-                              {b.color && <span className="text-slate-400 ml-1">· {b.color}</span>}
+                              {b.bait_name || b.bait_type}{b.color ? <span className="text-slate-400 ml-1">· {b.color}</span> : null}
                             </span>
                           )
                         ))}
                       </div>
                     )}
-
-                    {r.notes && (
-                      <p className="text-slate-400 text-xs leading-relaxed border-t border-slate-100 pt-2">{r.notes}</p>
-                    )}
+                    {r.notes && <p className="text-slate-400 text-xs leading-relaxed border-t border-slate-100 pt-2">{r.notes}</p>}
                   </div>
                 ))}
               </div>
