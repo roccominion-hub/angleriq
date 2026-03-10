@@ -24,7 +24,7 @@ create table if not exists lake_content_chunks (
   body_of_water_id uuid references body_of_water(id) on delete cascade,
   chunk_index integer not null,
   chunk_text text not null,
-  embedding vector(1536), -- OpenAI text-embedding-3-small dimensions
+  embedding vector(512), -- Voyage AI voyage-3-lite dimensions
   token_count integer,
   created_at timestamptz default now()
 );
@@ -52,7 +52,7 @@ create table if not exists lake_similarity (
 
 -- RPC function for vector similarity search
 create or replace function match_lake_chunks(
-  query_embedding vector(1536),
+  query_embedding vector(512),
   target_lake_id uuid,
   match_count int default 8,
   match_threshold float default 0.5
