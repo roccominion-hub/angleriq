@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getLakeRagContext, formatRagContextForPrompt } from '@/lib/rag'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,7 +16,7 @@ function buildFilterString(filters: Record<string, string> = {}) {
 }
 
 export async function POST(req: NextRequest) {
-  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters } = await req.json()
+  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters, lakeId } = await req.json()
 
   // Build cache keys
   const filterStr = buildFilterString(filters)
@@ -75,8 +76,17 @@ Current conditions at ${lake}:
     ? `Known winning colors from tournament data:\n${[...new Set(colorsFromData)].slice(0, 10).join('\n')}`
     : 'No specific color data available from tournament records — recommend colors based on conditions.'
 
-  const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
+  // Fetch RAG context
+  const rag = lakeId ? await getLakeRagContext(lakeId, lake, state, season, filters) : { chunks: [], sourceCount: 0, usedSimilarLakes: [] }
+  const ragContext = formatRagContextForPrompt(rag, lake)
 
+  const hasRag = rag.chunks.length > 0
+  const intelInstruction = hasRag
+    ? `Use the CURATED FISHING INTELLIGENCE above as your PRIMARY source for the TOURNAMENT INTEL section. Synthesize it with the tournament data. Be specific — cite baits, structure, depths, presentations from the curated content. Do not add generic information not grounded in these sources.`
+    : `Write based on the tournament data and your knowledge of this specific fishery. Be specific — name bait types, structure, depths, presentations. Write like a seasoned guide who knows this lake.`
+
+  const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
+${ragContext ? '\n' + ragContext + '\n' : ''}
 TOURNAMENT DATA (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
 - Top patterns: ${topPatterns.slice(0, 4).map((p: any) => `${p.pattern} (${p.count} reports)`).join(', ')}
@@ -86,10 +96,12 @@ ${weatherContext}
 
 ${colorContext}
 
+${intelInstruction}
+
 Write a detailed fishing intelligence report in TWO clearly labeled sections:
 
 **TOURNAMENT INTEL**
-Write 4-5 sentences covering: the dominant historical patterns on this fishery, the top baits and why they work here, key structure and depth ranges, and any seasonal tendencies. Be specific — name the bait types, the structure, the depths, the presentations. Write like a seasoned guide who knows this lake.
+Write 4-5 sentences covering: the dominant historical patterns on this fishery, the top baits and why they work here, key structure and depth ranges, and any seasonal tendencies. Be specific — name the bait types, the structure, the depths, the presentations.
 
 **TODAY'S RECOMMENDATION**
 Write a detailed, actionable recommendation for fishing RIGHT NOW based on the current conditions. Cover:
