@@ -1,11 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getLakeRagContext, formatRagContextForPrompt } from '@/lib/rag'
+import { generateEmbedding } from '@/lib/embeddings'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}): Promise<string[]> {
+  const seasonStr = weather?.season || season || ''
+  const timeOfDay = weather?.timeOfDay || ''
+  const conditions = weather ? `${weather.tempF}°F, ${weather.skyCondition}` : ''
+  const queryParts = [`Bass fishing techniques for ${lake}, ${state}`]
+  if (seasonStr) queryParts.push(`in ${seasonStr}`)
+  if (timeOfDay) queryParts.push(timeOfDay)
+  if (conditions) queryParts.push(conditions)
+  if (filters.pattern && filters.pattern !== 'all') queryParts.push(filters.pattern)
+  if (filters.bait_type && filters.bait_type !== 'all') queryParts.push(filters.bait_type)
+  const queryText = queryParts.join(', ')
+
+  const embedding = await generateEmbedding(queryText)
+  if (!embedding) return []
+
+  const { data: chunks, error } = await supabase.rpc('match_technique_embeddings', {
+    query_embedding: embedding,
+    match_count: 8,
+  })
+
+  if (error || !chunks) return []
+  return (chunks as any[]).map((c: any) => c.content)
+}
 
 function buildFilterString(filters: Record<string, string> = {}) {
   return Object.entries(filters)
@@ -76,18 +101,27 @@ Current conditions at ${lake}:
     ? `Known winning colors from tournament data:\n${[...new Set(colorsFromData)].slice(0, 10).join('\n')}`
     : 'No specific color data available from tournament records — recommend colors based on conditions.'
 
-  // Fetch RAG context
+  // Fetch curated RAG context (fishing articles/guides)
   const rag = lakeId ? await getLakeRagContext(lakeId, lake, state, season, filters) : { chunks: [], sourceCount: 0, usedSimilarLakes: [] }
   const ragContext = formatRagContextForPrompt(rag, lake)
 
-  const hasRag = rag.chunks.length > 0
-  const intelInstruction = hasRag
+  // Fetch tournament technique embeddings (RAG from actual tournament data)
+  const techniqueChunks = await getTechniqueRagChunks(lake, state, season, weather, filters)
+  const hasTechniqueRag = techniqueChunks.length > 0
+  const techniqueRagContext = hasTechniqueRag
+    ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports):\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
+    : ''
+
+  const hasRag = rag.chunks.length > 0 || hasTechniqueRag
+  const intelInstruction = hasTechniqueRag
+    ? `Use the VERIFIED TOURNAMENT REPORTS above as your PRIMARY source for the TOURNAMENT INTEL section. These are real tournament results from this fishery. Be specific — cite actual baits, techniques, structure, and depths from the reports. Do not add generic information not grounded in these sources.`
+    : hasRag
     ? `Use the CURATED FISHING INTELLIGENCE above as your PRIMARY source for the TOURNAMENT INTEL section. Synthesize it with the tournament data. Be specific — cite baits, structure, depths, presentations from the curated content. Do not add generic information not grounded in these sources.`
     : `Write based on the tournament data and your knowledge of this specific fishery. Be specific — name bait types, structure, depths, presentations. Write like a seasoned guide who knows this lake.`
 
   const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
-${ragContext ? '\n' + ragContext + '\n' : ''}
-TOURNAMENT DATA (${sampleSize} reports):
+${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}
+TOURNAMENT DATA SUMMARY (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
 - Top patterns: ${topPatterns.slice(0, 4).map((p: any) => `${p.pattern} (${p.count} reports)`).join(', ')}
 - Techniques in use: ${reports.slice(0, 5).map((r: any) => `${r.pattern || 'various'} / ${r.presentation || 'various'}`).join('; ')}
