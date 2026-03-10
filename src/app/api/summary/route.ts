@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}): Promise<string[]> {
+async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<string[]> {
   const seasonStr = weather?.season || season || ''
   const timeOfDay = weather?.timeOfDay || ''
   const conditions = weather ? `${weather.tempF}°F, ${weather.skyCondition}` : ''
@@ -26,6 +26,7 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   const { data: chunks, error } = await supabase.rpc('match_technique_embeddings', {
     query_embedding: embedding,
     match_count: 8,
+    ...(lakeId ? { filter_lake_id: lakeId } : {}),
   })
 
   if (error || !chunks) return []
@@ -106,7 +107,7 @@ Current conditions at ${lake}:
   const ragContext = formatRagContextForPrompt(rag, lake)
 
   // Fetch tournament technique embeddings (RAG from actual tournament data)
-  const techniqueChunks = await getTechniqueRagChunks(lake, state, season, weather, filters)
+  const techniqueChunks = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
   const hasTechniqueRag = techniqueChunks.length > 0
   const techniqueRagContext = hasTechniqueRag
     ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports):\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
