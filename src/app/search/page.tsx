@@ -730,9 +730,9 @@ export default function SearchPage() {
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold text-slate-900 text-sm leading-snug mb-1">{p.name}</p>
                                 <div className="space-y-0.5 text-xs text-slate-600">
-                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">Why</span><span>{p.why}</span></div>
-                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">How</span><span>{p.how}</span></div>
-                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">Where</span><span>{p.where}</span></div>
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Why</span><span>{p.why}</span></div>
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">How</span><span>{p.how}</span></div>
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Where</span><span>{p.where}</span></div>
                                 </div>
                               </div>
                             </div>
