@@ -10,6 +10,7 @@ export interface RagContext {
   chunks: string[]
   sourceCount: number
   usedSimilarLakes: string[]
+  youtubeSources?: { videoId: string; title: string; channel: string }[]
 }
 
 export async function getLakeRagContext(
@@ -19,7 +20,7 @@ export async function getLakeRagContext(
   season: string,
   filters: Record<string, string> = {}
 ): Promise<RagContext> {
-  const empty: RagContext = { chunks: [], sourceCount: 0, usedSimilarLakes: [] }
+  const empty: RagContext = { chunks: [], sourceCount: 0, usedSimilarLakes: [], youtubeSources: [] }
 
   // Generate query embedding
   const queryText = buildRagQueryText(lake, state, season, filters)
@@ -39,12 +40,35 @@ export async function getLakeRagContext(
     return empty
   }
 
+  // Pull YouTube chunks for this lake (technique_embeddings with source_type='youtube')
+  const { data: ytChunks } = await supabase
+    .from('technique_embeddings')
+    .select('content, youtube_source_id, youtube_sources:youtube_source_id(video_id, title, channel_title)')
+    .eq('body_of_water_id', lakeId)
+    .eq('source_type', 'youtube')
+    .limit(5)
+
+  const youtubeSources: { videoId: string; title: string; channel: string }[] = []
+  const youtubeChunks: string[] = []
+  if (ytChunks?.length) {
+    const seenSources = new Set<string>()
+    for (const ytc of ytChunks) {
+      youtubeChunks.push(ytc.content)
+      const src = ytc.youtube_sources as any
+      if (src?.video_id && !seenSources.has(src.video_id)) {
+        seenSources.add(src.video_id)
+        youtubeSources.push({ videoId: src.video_id, title: src.title, channel: src.channel_title })
+      }
+    }
+  }
+
   // If we have enough content for this lake, return it
   if (chunks && chunks.length >= 3) {
     return {
-      chunks: chunks.map((c: any) => c.chunk_text),
-      sourceCount: chunks.length,
+      chunks: [...chunks.map((c: any) => c.chunk_text), ...youtubeChunks],
+      sourceCount: chunks.length + youtubeChunks.length,
       usedSimilarLakes: [],
+      youtubeSources,
     }
   }
 
@@ -90,21 +114,27 @@ export async function getLakeRagContext(
   ]
 
   return {
-    chunks: allChunks,
-    sourceCount: allChunks.length,
+    chunks: [...allChunks, ...youtubeChunks],
+    sourceCount: allChunks.length + youtubeChunks.length,
     usedSimilarLakes,
+    youtubeSources,
   }
 }
 
 export function formatRagContextForPrompt(rag: RagContext, lake: string): string {
   if (rag.chunks.length === 0) return ''
 
+  const hasYoutube = (rag.youtubeSources?.length || 0) > 0
   const header = rag.usedSimilarLakes.length > 0
     ? `CURATED FISHING INTELLIGENCE (from ${lake} and similar fisheries: ${rag.usedSimilarLakes.join(', ')}):`
     : `CURATED FISHING INTELLIGENCE FOR ${lake.toUpperCase()}:`
 
-  return `${header}
+  const youtubeNote = hasYoutube
+    ? `\n[Includes evidence from ${rag.youtubeSources!.length} YouTube source(s): ${rag.youtubeSources!.map(s => `"${s.title}" — ${s.channel}`).join('; ')}]`
+    : ''
+
+  return `${header}${youtubeNote}
 ${rag.chunks.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}
 
-Use the above curated content as your PRIMARY source for the Intel section. Only include information that is supported by or consistent with this content. Do not add generic fishing advice not grounded in these sources.`
+Use the above curated content as your PRIMARY source for the Intel section. YouTube video transcripts are from real anglers describing actual fishing experiences — treat them as first-hand reports. Only include information grounded in these sources.`
 }
