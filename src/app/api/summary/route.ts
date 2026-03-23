@@ -134,6 +134,36 @@ Be direct, specific, and confident. No filler.`
     })
   })
 
+  // Build rich historical conditions context from actual tournament data
+  const historicalConditions: string[] = []
+  reports?.forEach((r: any) => {
+    const conds = r.conditions || []
+    conds.forEach((c: any) => {
+      const parts: string[] = []
+      if (c.date) parts.push(c.date)
+      if (c.air_temp_f) parts.push(`${c.air_temp_f}°F air`)
+      if (c.water_temp_f) parts.push(`${c.water_temp_f}°F water`)
+      if (c.sky_cover) parts.push(c.sky_cover)
+      if (c.wind_mph) parts.push(`${c.wind_mph}mph wind`)
+      if (c.barometric_pressure) parts.push(`${c.barometric_pressure}mb ${c.pressure_trend || ''}`.trim())
+      if (c.water_clarity) parts.push(`${c.water_clarity} water`)
+      if (parts.length > 1 && r.pattern) {
+        historicalConditions.push(`${r.pattern} caught in: ${parts.join(', ')}`)
+      }
+    })
+  })
+
+  const historicalConditionsContext = historicalConditions.length > 0
+    ? `\nHISTORICAL FISHING CONDITIONS (actual weather when these fish were caught):\n${historicalConditions.slice(0, 10).join('\n')}\n`
+    : ''
+
+  const moonContext = weather?.moon ? `
+Moon: ${weather.moon.emoji} ${weather.moon.phase} (${weather.moon.illumination}% illuminated)
+Solunar activity: ${weather.moon.solunarLabel}
+Major bite windows today: ${weather.moon.majorPeriods.join(', ')}
+Minor bite windows: ${weather.moon.minorPeriods.join(', ')}
+` : ''
+
   const weatherContext = weather ? `
 Current conditions at ${lake}:
 - Temperature: ${weather.tempF}°F (feels like ${weather.feelsLikeF}°F)
@@ -142,7 +172,7 @@ Current conditions at ${lake}:
 - Precipitation: ${weather.precipitation > 0 ? weather.precipitation + 'mm' : 'none'}
 - Time of day: ${weather.timeOfDay}
 - Season: ${weather.season}
-` : `Current season: ${season || 'unknown'}`
+${moonContext}` : `Current season: ${season || 'unknown'}`
 
   const colorContext = colorsFromData.length > 0
     ? `Known winning colors from tournament data:\n${[...new Set(colorsFromData)].slice(0, 10).join('\n')}`
@@ -172,7 +202,7 @@ TOURNAMENT DATA SUMMARY (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
 - Top patterns: ${topPatterns.slice(0, 4).map((p: any) => `${p.pattern} (${p.count} reports)`).join(', ')}
 - Techniques in use: ${reports.slice(0, 5).map((r: any) => `${r.pattern || 'various'} / ${r.presentation || 'various'}`).join('; ')}
-
+${historicalConditionsContext}
 ${weatherContext}
 
 ${colorContext}
@@ -197,6 +227,7 @@ Write a detailed, actionable recommendation for fishing RIGHT NOW based on the c
 3. Key adjustments for current conditions (one per line):
 - [Adjustment based on temperature/season]
 - [Adjustment based on time of day/light]
+- [Solunar/moon phase note if relevant — mention major bite windows if solunar activity is good]
 - [Any other relevant condition note]
 
 Be direct and confident. Write like a knowledgeable local guide giving advice to a serious angler, not a generic fishing article. Avoid filler phrases.`

@@ -16,10 +16,11 @@ import {
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
+import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
-interface Weather { tempF: number; feelsLikeF: number; cloudCoverPct: number; windMph: number; precipitation: number; skyCondition: string; timeOfDay: string; season: string; weatherDesc: string }
+interface Weather { tempF: number; feelsLikeF: number; cloudCoverPct: number; windMph: number; precipitation: number; skyCondition: string; timeOfDay: string; season: string; weatherDesc: string; moon?: MoonData }
 interface SearchResult {
   water: Lake & { lat: number; lng: number }
   sampleSize: number
@@ -79,16 +80,67 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder 
 }
 
 function WeatherBar({ weather }: { weather: Weather }) {
+  const moon = weather.moon
+  const solunarColors = moon ? solunarRatingColor(moon.solunarRating) : ''
+  const [showSolunar, setShowSolunar] = useState(false)
+
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5">
-      <span className="font-bold text-slate-800">{weather.tempF}°F</span>
-      <span className="text-slate-400">·</span>
-      <span className="capitalize">{weather.skyCondition}</span>
-      <span className="text-slate-400">·</span>
-      <span className="flex items-center gap-1"><Wind size={13} />{weather.windMph} mph</span>
-      {weather.precipitation > 0 && <><span className="text-slate-400">·</span><span className="flex items-center gap-1"><Droplets size={13} />{weather.precipitation}mm</span></>}
-      <span className="text-slate-400">·</span>
-      <span className="capitalize text-blue-600 font-semibold">{weather.timeOfDay}</span>
+    <div className="space-y-2">
+      {/* Current conditions row */}
+      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5">
+        <span className="font-bold text-slate-800">{weather.tempF}°F</span>
+        <span className="text-slate-400">·</span>
+        <span className="capitalize">{weather.skyCondition}</span>
+        <span className="text-slate-400">·</span>
+        <span className="flex items-center gap-1"><Wind size={13} />{weather.windMph} mph</span>
+        {weather.precipitation > 0 && (
+          <><span className="text-slate-400">·</span>
+          <span className="flex items-center gap-1"><Droplets size={13} />{weather.precipitation}mm</span></>
+        )}
+        <span className="text-slate-400">·</span>
+        <span className="capitalize text-blue-600 font-semibold">{weather.timeOfDay}</span>
+
+        {/* Moon + solunar inline */}
+        {moon && (
+          <>
+            <span className="text-slate-400">·</span>
+            <button
+              onClick={() => setShowSolunar(o => !o)}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded border transition-colors ${solunarColors}`}
+            >
+              <span>{moon.emoji}</span>
+              <span>{moon.phase}</span>
+              <span className="opacity-60">· {moon.illumination}%</span>
+              <ChevronDown size={11} className={`transition-transform ${showSolunar ? 'rotate-180' : ''}`} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Solunar detail panel */}
+      {moon && showSolunar && (
+        <div className="bg-slate-900 text-white rounded-lg px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Moon Phase</p>
+            <p className="font-bold">{moon.emoji} {moon.phase}</p>
+            <p className="text-slate-300">{moon.illumination}% illuminated</p>
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Solunar Activity</p>
+            <p className={`font-bold capitalize ${moon.solunarRating === 'excellent' ? 'text-green-400' : moon.solunarRating === 'good' ? 'text-blue-400' : moon.solunarRating === 'fair' ? 'text-amber-400' : 'text-slate-400'}`}>
+              {moon.solunarLabel}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Major Periods</p>
+            {moon.majorPeriods.map((p, i) => <p key={i} className="text-green-300 font-semibold">{p}</p>)}
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Minor Periods</p>
+            {moon.minorPeriods.map((p, i) => <p key={i} className="text-blue-300">{p}</p>)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

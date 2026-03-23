@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getMoonData } from '@/lib/moonphase'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -34,6 +35,9 @@ export async function GET(req: NextRequest) {
       : month >= 9 && month <= 11 ? 'fall'
       : 'winter'
 
+    const tzOffsetHours = utcOffsetSeconds / 3600
+    const moon = getMoonData(new Date(), parseFloat(lat), parseFloat(lng), tzOffsetHours)
+
     return NextResponse.json({
       tempF: Math.round(c.temperature_2m),
       feelsLikeF: Math.round(c.apparent_temperature),
@@ -47,6 +51,7 @@ export async function GET(req: NextRequest) {
       skyCondition,
       timeOfDay,
       season,
+      moon,
     })
   } catch (e) {
     return NextResponse.json({ error: 'Weather fetch failed' }, { status: 500 })
