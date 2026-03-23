@@ -322,7 +322,8 @@ export default function SearchPage() {
           topPatterns: result.topPatterns,
           reports: result.reports,
           weather,
-          filters: { ...buildApiFilters(), style: nowFilters.style, _secondary: String(Date.now()) },
+          filters: { ...buildApiFilters(), style: nowFilters.style },
+          _secondary: true,
         })
       })
       const d = await res.json()
@@ -567,7 +568,10 @@ export default function SearchPage() {
                         <RenderRecommendation text={summary.today} />
                         {secondaryRec && (
                           <div className="mt-3 pt-3 border-t border-green-200">
-                            <p className="text-xs font-bold text-green-600 uppercase tracking-wider mb-1.5">Alternative Approach</p>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Try Something Different</p>
+                            </div>
                             <RenderRecommendation text={secondaryRec} />
                           </div>
                         )}

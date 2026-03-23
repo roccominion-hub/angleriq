@@ -42,7 +42,53 @@ function buildFilterString(filters: Record<string, string> = {}) {
 }
 
 export async function POST(req: NextRequest) {
-  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters, lakeId } = await req.json()
+  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters, lakeId, _secondary } = await req.json()
+
+  // Secondary / alternative recommendation — separate prompt, no cache
+  if (_secondary) {
+    const conditionSummary = weather
+      ? `${weather.tempF}°F, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}`
+      : season || 'current conditions'
+    const altPrompt = `You are an expert bass fishing guide for ${lake}, ${state}.
+
+Current conditions: ${conditionSummary}
+Top baits from tournament data: ${topBaits?.slice(0, 6).map((b: any) => `${b.name} (${b.count}x)`).join(', ')}
+Top patterns: ${topPatterns?.slice(0, 4).map((p: any) => p.pattern).join(', ')}
+
+The angler already has a primary recommendation. Suggest a COMPLETELY DIFFERENT alternative approach — different bait category, different technique style, different part of the water column or structure. Do NOT repeat or restate the primary recommendation.
+
+Format your response as:
+
+**Alternative Technique:** [technique name — must differ from a jig/Texas rig/power approach if that was primary]
+
+[One sentence on why this alternative suits the current conditions.]
+
+**Key Adjustments:**
+- [Specific adjustment 1]
+- [Specific adjustment 2]
+- [Specific adjustment 3]
+
+**Color Call:** [One specific color recommendation and why for these conditions]
+
+Be direct, specific, and confident. No filler.`
+
+    const altRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 600,
+        system: 'You are an expert bass fishing guide. Always suggest a technique that is clearly different from a standard power fishing jig/Texas rig approach. Be specific and confident.',
+        messages: [{ role: 'user', content: altPrompt }]
+      })
+    })
+    const altData = await altRes.json() as any
+    return NextResponse.json({ today: altData.content?.[0]?.text?.trim() || '', intel: '' })
+  }
 
   // Build cache keys
   const filterStr = buildFilterString(filters)
