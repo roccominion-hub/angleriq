@@ -852,10 +852,7 @@ export default function SearchPage() {
                       <Card key={b.name} className="border-slate-200 shadow-none bg-white flex flex-col">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-slate-900 text-sm font-bold flex items-start justify-between gap-2">
-                            <span className="flex items-start gap-1.5 min-w-0">
-                              <span className="shrink-0 mt-0.5">🎣</span>
-                              <span className="break-words leading-snug">{b.name}</span>
-                            </span>
+                            <span className="break-words leading-snug min-w-0 capitalize">{b.name}</span>
                             <Badge className="bg-blue-50 text-blue-700 border-blue-100 text-xs font-semibold shrink-0 mt-0.5">{b.count}x</Badge>
                           </CardTitle>
                         </CardHeader>
