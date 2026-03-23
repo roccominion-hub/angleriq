@@ -28,7 +28,14 @@ const BAIT_MAP: { file: string; matches: string[] }[] = [
   { file: 'ned-rig',            matches: ['ned', 'ned rig', 'mushroom head', 'finesse trd', 'trd', 'ned worm', 'zman ned', 'elaztech'] },
   { file: 'drop-shot',          matches: ['drop shot', 'dropshot', 'drop-shot', 'ds rig', 'drop shot rig'] },
   { file: 'spoon',              matches: ['spoon', 'flutter spoon', 'jigging spoon', 'casting spoon', 'drone spoon', 'cc spoon'] },
-  { file: 'dice',               matches: ['dice', 'dice bait'] },
+  { file: 'dice',               matches: [
+    'dice', 'fuzzy dice', 'dice bait',
+    'tumbleweed', 'strike king tumbleweed',
+    'fuzzy nuki', 'yamamoto fuzzy', 'nuki',
+    'cue bomb', 'geecrack cue',
+    'pompom', 'pom pom', 'squarepom',
+    'cube bait', 'fuzzy bait',
+  ] },
   { file: 'default',            matches: [] },
 ]
 

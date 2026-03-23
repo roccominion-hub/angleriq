@@ -197,6 +197,8 @@ ${moonContext}` : `Current season: ${season || 'unknown'}`
     : `Write based on the tournament data and your knowledge of this specific fishery. Be specific — name bait types, structure, depths, presentations. Write like a seasoned guide who knows this lake.`
 
   const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
+NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
+
 ${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}
 TOURNAMENT DATA SUMMARY (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
