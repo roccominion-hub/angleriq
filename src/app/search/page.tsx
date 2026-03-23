@@ -15,6 +15,7 @@ import {
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X
 } from 'lucide-react'
+import { BaitIcon } from '@/components/BaitIcon'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
@@ -204,6 +205,7 @@ export default function SearchPage() {
   })
 
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filterTab, setFilterTab] = useState<'now' | 'scenario'>('now')
   const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
@@ -433,69 +435,75 @@ export default function SearchPage() {
           </div>
 
           {filtersOpen && (
-            <div className="p-4 space-y-5">
-
-              {/* ── Section 1: Right Now ── */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 bg-green-50 border border-green-100 rounded-lg px-3 py-1.5">
-                    <Zap size={13} className="text-green-600" />
-                    <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Right Now</span>
-                  </div>
-                  <span className="text-xs text-slate-400">Refine intel for current conditions</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={nowFilters.baitType} onValueChange={v => setNowFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
-                  <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={nowFilters.fishDepth} onValueChange={v => setNowFilter('fishDepth', v)} placeholder="Any depth" options={DEPTH_OPTIONS} />
-                  <FilterSelect label="Location" icon={<Anchor size={12} />} value={nowFilters.locationType} onValueChange={v => setNowFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
-                  <FilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onValueChange={v => setNowFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
-                  <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={nowFilters.waterClarity} onValueChange={v => setNowFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
-                  <FilterSelect label="Style" icon={<Feather size={12} />} value={nowFilters.style} onValueChange={v => setNowFilter('style', v)} placeholder="Any style"
-                    options={[{ value: 'power', label: '💪 Power Fishing' }, { value: 'finesse', label: '🪶 Finesse Fishing' }]} />
-                </div>
-                <div className="mt-3 flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Clock size={12} /> Year Range: {yearRange[0]} – {yearRange[1]}
-                    <span className="ml-1 normal-case font-normal text-slate-400">— adjusts which historical reports are used</span>
-                  </label>
-                  <div className="px-1">
-                    <Slider min={2015} max={CURRENT_YEAR} step={1} value={yearRange}
-                      onValueChange={(v: number | readonly number[]) => setYearRange(Array.isArray(v) ? [...v] : [v as number, v as number])}
-                      className="w-full" />
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-400">
-                    <span>2015</span><span>{CURRENT_YEAR}</span>
-                  </div>
-                </div>
+            <div>
+              {/* Tab bar */}
+              <div className="flex border-b border-slate-100">
+                <button
+                  onClick={() => setFilterTab('now')}
+                  className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${filterTab === 'now' ? 'border-green-500 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                  <Zap size={14} className={filterTab === 'now' ? 'text-green-600' : 'text-slate-400'} />
+                  Right Now
+                </button>
+                <button
+                  onClick={() => setFilterTab('scenario')}
+                  className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${filterTab === 'scenario' ? 'border-purple-500 text-purple-700 bg-purple-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                  <Clock size={14} className={filterTab === 'scenario' ? 'text-purple-600' : 'text-slate-400'} />
+                  Different Time or Conditions
+                </button>
               </div>
 
-              <Separator className="bg-slate-100" />
-
-              {/* ── Section 2: Different Time / Conditions ── */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-lg px-3 py-1.5">
-                    <Clock size={13} className="text-purple-600" />
-                    <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">Different Time or Conditions</span>
+              {/* Right Now tab */}
+              {filterTab === 'now' && (
+                <div className="p-4 space-y-4">
+                  <p className="text-xs text-slate-400">Refine the intel and recommendation for your current conditions.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={nowFilters.baitType} onValueChange={v => setNowFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
+                    <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={nowFilters.fishDepth} onValueChange={v => setNowFilter('fishDepth', v)} placeholder="Any depth" options={DEPTH_OPTIONS} />
+                    <FilterSelect label="Location" icon={<Anchor size={12} />} value={nowFilters.locationType} onValueChange={v => setNowFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
+                    <FilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onValueChange={v => setNowFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                    <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={nowFilters.waterClarity} onValueChange={v => setNowFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
+                    <FilterSelect label="Style" icon={<Feather size={12} />} value={nowFilters.style} onValueChange={v => setNowFilter('style', v)} placeholder="Any style"
+                      options={[{ value: 'power', label: '💪 Power Fishing' }, { value: 'finesse', label: '🪶 Finesse Fishing' }]} />
                   </div>
-                  <span className="text-xs text-slate-400">Generate a scenario report for another time or situation</span>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock size={12} /> Year Range: {yearRange[0]} – {yearRange[1]}
+                      <span className="ml-1 normal-case font-normal text-slate-400">— adjusts which historical reports are used</span>
+                    </label>
+                    <div className="px-1">
+                      <Slider min={2015} max={CURRENT_YEAR} step={1} value={yearRange}
+                        onValueChange={(v: number | readonly number[]) => setYearRange(Array.isArray(v) ? [...v] : [v as number, v as number])}
+                        className="w-full" />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-400">
+                      <span>2015</span><span>{CURRENT_YEAR}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  <FilterSelect label="Season" icon={<Sun size={12} />} value={scenarioFilters.season} onValueChange={v => setScenarioFilter('season', v)} placeholder="All seasons"
-                    options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
-                  <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={scenarioFilters.timeOfDay} onValueChange={v => setScenarioFilter('timeOfDay', v)} placeholder="Any time"
-                    options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
-                  <FilterSelect label="Weather" icon={<Cloud size={12} />} value={scenarioFilters.weatherConditions} onValueChange={v => setScenarioFilter('weatherConditions', v)} placeholder="Any weather"
-                    options={[{ value: 'sunny', label: 'Sunny / Clear' }, { value: 'overcast', label: 'Overcast / Cloudy' }, { value: 'rainy', label: 'Rainy / Post-Rain' }, { value: 'windy', label: 'Windy' }, { value: 'cold-front', label: 'Cold Front' }]} />
-                  <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} value={scenarioFilters.waterTemp} onValueChange={v => setScenarioFilter('waterTemp', v)} placeholder="Any temp"
-                    options={[{ value: 'cold', label: 'Cold (< 50°F)' }, { value: 'cool', label: 'Cool (50–60°F)' }, { value: 'warm', label: 'Warm (60–70°F)' }, { value: 'hot', label: 'Hot (70°F+)' }]} />
-                  <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={scenarioFilters.waterClarity} onValueChange={v => setScenarioFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
-                  <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={scenarioFilters.baitType} onValueChange={v => setScenarioFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
-                  <FilterSelect label="Location" icon={<Anchor size={12} />} value={scenarioFilters.locationType} onValueChange={v => setScenarioFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
-                  <FilterSelect label="Structure" icon={<Layers size={12} />} value={scenarioFilters.structure} onValueChange={v => setScenarioFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
-                </div>
-              </div>
+              )}
 
+              {/* Scenario tab */}
+              {filterTab === 'scenario' && (
+                <div className="p-4 space-y-4">
+                  <p className="text-xs text-slate-400">Generate a report for a different time, season, or set of conditions — useful for planning a future trip.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    <FilterSelect label="Season" icon={<Sun size={12} />} value={scenarioFilters.season} onValueChange={v => setScenarioFilter('season', v)} placeholder="All seasons"
+                      options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
+                    <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={scenarioFilters.timeOfDay} onValueChange={v => setScenarioFilter('timeOfDay', v)} placeholder="Any time"
+                      options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
+                    <FilterSelect label="Weather" icon={<Cloud size={12} />} value={scenarioFilters.weatherConditions} onValueChange={v => setScenarioFilter('weatherConditions', v)} placeholder="Any weather"
+                      options={[{ value: 'sunny', label: 'Sunny / Clear' }, { value: 'overcast', label: 'Overcast / Cloudy' }, { value: 'rainy', label: 'Rainy / Post-Rain' }, { value: 'windy', label: 'Windy' }, { value: 'cold-front', label: 'Cold Front' }]} />
+                    <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} value={scenarioFilters.waterTemp} onValueChange={v => setScenarioFilter('waterTemp', v)} placeholder="Any temp"
+                      options={[{ value: 'cold', label: 'Cold (< 50°F)' }, { value: 'cool', label: 'Cool (50–60°F)' }, { value: 'warm', label: 'Warm (60–70°F)' }, { value: 'hot', label: 'Hot (70°F+)' }]} />
+                    <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={scenarioFilters.waterClarity} onValueChange={v => setScenarioFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
+                    <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={scenarioFilters.baitType} onValueChange={v => setScenarioFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
+                    <FilterSelect label="Location" icon={<Anchor size={12} />} value={scenarioFilters.locationType} onValueChange={v => setScenarioFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
+                    <FilterSelect label="Structure" icon={<Layers size={12} />} value={scenarioFilters.structure} onValueChange={v => setScenarioFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -547,15 +555,14 @@ export default function SearchPage() {
                       <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
                         <div className="flex items-center justify-between mb-1.5 gap-2">
                           <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Today&apos;s Recommendation</p>
-                          <Button
-                            variant="ghost" size="sm"
+                          <button
                             onClick={handleSecondaryRec}
                             disabled={secondaryLoading}
-                            className="text-green-700 hover:text-green-900 hover:bg-green-100 text-xs h-7 gap-1 px-2"
+                            className="flex items-center gap-1.5 bg-white border border-green-300 text-green-800 hover:bg-green-100 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
                           >
                             <RefreshCw size={11} className={secondaryLoading ? 'animate-spin' : ''} />
-                            {secondaryLoading ? 'Generating...' : 'New Angle'}
-                          </Button>
+                            {secondaryLoading ? 'Generating...' : 'Another Approach'}
+                          </button>
                         </div>
                         <RenderRecommendation text={summary.today} />
                         {secondaryRec && (
@@ -731,8 +738,8 @@ export default function SearchPage() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-4 flex flex-col flex-1">
-                          <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center text-slate-300 text-xs text-center mb-3 border border-slate-200 leading-tight">
-                            Photo<br />Coming<br />Soon
+                          <div className="w-full h-20 bg-slate-50 rounded-lg flex items-center justify-center mb-3 border border-slate-100 p-2">
+                            <BaitIcon baitName={b.name} baitType={baitRecords[0]?.bait_type} />
                           </div>
                           {colors.length > 0 && (
                             <div className="mb-2">

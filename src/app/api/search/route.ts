@@ -74,7 +74,13 @@ export async function GET(req: NextRequest) {
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }))
 
+  // Filter out non-technique entries (objectives, categories, etc.)
+  const PATTERN_BLOCKLIST = [
+    'trophy bass fishing', 'bass fishing', 'trophy bass', 'bass tournament',
+    'tournament fishing', 'recreational fishing', 'fishing',
+  ]
   const topPatterns = Object.entries(patternFrequency)
+    .filter(([pattern]) => !PATTERN_BLOCKLIST.includes(pattern.toLowerCase().trim()))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([pattern, count]) => ({ pattern, count }))
