@@ -359,7 +359,7 @@ export async function ingestYouTubeForLake(opts: YouTubeSearchOptions & {
     const result = await ingestVideo(videoId, v.snippet, details[videoId], opts.lakeId, lake.name)
     results.push(result)
     console.log(`[yt-ingest] ${result.status} — ${result.title?.slice(0, 60)} (${result.chunksCreated || 0} chunks)`)
-    await new Promise(r => setTimeout(r, 500))
+    await new Promise(r => setTimeout(r, 8000)) // 8s between videos — stays well under YouTube's rate limit
   }
 
   return results

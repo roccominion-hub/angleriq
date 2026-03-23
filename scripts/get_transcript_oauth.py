@@ -23,7 +23,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CLIENT_FILE = os.path.join(SCRIPT_DIR, 'google_oauth_client.json')
 TOKEN_FILE  = os.path.join(SCRIPT_DIR, 'google_token.json')
 
-SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
+SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
 
 def get_credentials():
     from google.oauth2.credentials import Credentials
@@ -39,13 +39,14 @@ def get_credentials():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0, open_browser=False,
+                success_message='Auth complete — you can close this tab.')
         with open(TOKEN_FILE, 'w') as f:
             f.write(creds.to_json())
 
     return creds
 
-def get_caption_track_url(video_id: str, access_token: str) -> str | None:
+def get_caption_track_url(video_id: str, access_token: str) -> object:
     """Get the URL for the English caption track via YouTube Data API."""
     url = f'https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId={video_id}'
     r = requests.get(url, headers={'Authorization': f'Bearer {access_token}'})
@@ -83,7 +84,7 @@ def parse_srt(srt: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def fallback_cookie_transcript(video_id: str) -> str | None:
+def fallback_cookie_transcript(video_id: str) -> object:
     """Fall back to cookie-based method if OAuth captions aren't available."""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
