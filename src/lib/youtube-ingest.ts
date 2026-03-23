@@ -13,15 +13,21 @@
  */
 
 import { execSync } from 'child_process'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { generateEmbedding } from './embeddings'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabase
+}
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY!
+function getYouTubeKey() { return process.env.YOUTUBE_API_KEY! }
 
 // Channels known for high-quality tournament fishing breakdowns
 const HIGH_SIGNAL_CHANNELS = [
@@ -31,6 +37,15 @@ const HIGH_SIGNAL_CHANNELS = [
   'BassResource',
   '1Rod1ReelFishing',
   'Bass Fishing Productions',
+  'Lake Fork Guide',
+  'Simplistic Fishing',
+  'Omnia Fishing',
+  'Bass Fishing Headquarters',
+  'TacticalBassin',
+  'Bass University',
+  'Mike Iaconelli Fishing',
+  'Kevin VanDam',
+  'Wired2Fish',
 ]
 
 // Keywords that indicate technique-rich content
@@ -62,9 +77,9 @@ export async function searchYouTubeForLake(opts: YouTubeSearchOptions): Promise<
   const { lakeName, state, maxResults = 20, publishedAfter } = opts
 
   const queries = [
-    `"${lakeName}" bass fishing tournament breakdown`,
-    `"${lakeName}" bass fishing report ${state}`,
-    `"${lakeName}" bass tournament weigh-in`,
+    `"${lakeName}" bass fishing tournament breakdown technique`,
+    `"${lakeName}" bass fishing report what they caught`,
+    `"${lakeName}" bass fishing guide tips pattern`,
   ]
 
   const allVideos: any[] = []
@@ -78,7 +93,7 @@ export async function searchYouTubeForLake(opts: YouTubeSearchOptions): Promise<
       maxResults: String(Math.ceil(maxResults / queries.length)),
       videoDuration: 'medium', // 4-20 min — avoids shorts and multi-hour streams
       relevanceLanguage: 'en',
-      key: YOUTUBE_API_KEY,
+      key: getYouTubeKey(),
     })
     if (publishedAfter) params.set('publishedAfter', publishedAfter)
 
@@ -105,7 +120,7 @@ export async function getVideoDetails(videoIds: string[]): Promise<Record<string
   const params = new URLSearchParams({
     part: 'statistics,contentDetails,snippet',
     id: videoIds.join(','),
-    key: YOUTUBE_API_KEY,
+    key: getYouTubeKey(),
   })
 
   const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`)
@@ -165,43 +180,21 @@ function scoreVideo(snippet: any, details: any): number {
   return Math.min(score, 100)
 }
 
-// Extract transcript using yt-dlp
+// Use OAuth script if available, fall back to cookie-only script
+const OAUTH_SCRIPT  = `${__dirname}/../../scripts/get_transcript_oauth.py`
+const COOKIE_SCRIPT = `${__dirname}/../../scripts/get_transcript.py`
+
+// Extract transcript — tries OAuth first (production), falls back to cookie method
 export function extractTranscript(videoId: string): string | null {
-  const url = `https://www.youtube.com/watch?v=${videoId}`
+  const fs = require('fs')
+  const script = fs.existsSync(OAUTH_SCRIPT) ? OAUTH_SCRIPT : COOKIE_SCRIPT
   try {
-    // Try to get auto-generated English subtitles
-    const output = execSync(
-      `python3 -m yt_dlp --skip-download --write-auto-sub --sub-lang en --sub-format srv3/vtt/best --convert-subs srt -o /tmp/yt_${videoId} "${url}" 2>&1`,
-      { timeout: 60000, encoding: 'utf8' }
-    )
-
-    // Read the SRT file
-    const fs = require('fs')
-    const srtPath = `/tmp/yt_${videoId}.en.srt`
-    const vttPath = `/tmp/yt_${videoId}.en.vtt`
-
-    let raw = ''
-    if (fs.existsSync(srtPath)) raw = fs.readFileSync(srtPath, 'utf8')
-    else if (fs.existsSync(vttPath)) raw = fs.readFileSync(vttPath, 'utf8')
-    else return null
-
-    // Clean SRT: remove timestamps, numbers, formatting
-    const text = raw
-      .replace(/\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n/g, ' ')
-      .replace(/WEBVTT\n.*/g, '')
-      .replace(/<[^>]+>/g, '')
-      .replace(/\[.*?\]/g, '')
-      .replace(/\n+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-
-    // Cleanup temp files
-    try { fs.unlinkSync(srtPath) } catch {}
-    try { fs.unlinkSync(vttPath) } catch {}
-
-    return text.length > 100 ? text : null
+    const raw = execSync(`python3 "${script}" "${videoId}"`, {
+      timeout: 45000,
+      encoding: 'utf8',
+    })
+    return raw.trim().length > 100 ? raw.trim() : null
   } catch (e: any) {
-    console.error(`Transcript extraction failed for ${videoId}:`, e.message?.slice(0, 100))
     return null
   }
 }
@@ -249,7 +242,7 @@ export async function ingestVideo(
   lakeName: string
 ): Promise<IngestResult> {
   // Check if already ingested
-  const { data: existing } = await supabase
+  const { data: existing } = await getSupabase()
     .from('youtube_sources')
     .select('id, transcript_status')
     .eq('video_id', videoId)
@@ -260,7 +253,7 @@ export async function ingestVideo(
   }
 
   // Upsert source record as "processing"
-  const { data: source, error: sourceError } = await supabase
+  const { data: source, error: sourceError } = await getSupabase()
     .from('youtube_sources')
     .upsert({
       video_id: videoId,
@@ -284,7 +277,7 @@ export async function ingestVideo(
   // Extract transcript
   const transcript = extractTranscript(videoId)
   if (!transcript) {
-    await supabase.from('youtube_sources').update({ transcript_status: 'no_transcript' }).eq('id', source.id)
+    await getSupabase().from('youtube_sources').update({ transcript_status: 'no_transcript' }).eq('id', source.id)
     return { videoId, title: snippet.title, status: 'skipped', reason: 'No transcript available' }
   }
 
@@ -298,7 +291,7 @@ export async function ingestVideo(
     const embedding = await generateEmbedding(chunk)
     if (!embedding) continue
 
-    const { error } = await supabase.from('technique_embeddings').insert({
+    const { error } = await getSupabase().from('technique_embeddings').insert({
       body_of_water_id: lakeId,
       technique_report_id: null,
       youtube_source_id: source.id,
@@ -312,7 +305,7 @@ export async function ingestVideo(
   }
 
   // Update source record
-  await supabase.from('youtube_sources').update({
+  await getSupabase().from('youtube_sources').update({
     transcript_status: chunksCreated > 0 ? 'complete' : 'embed_failed',
     chunk_count: chunksCreated,
   }).eq('id', source.id)
@@ -328,7 +321,7 @@ export async function ingestYouTubeForLake(opts: YouTubeSearchOptions & {
   const { minScore = 40, dryRun = false } = opts
 
   // Get lake info
-  const { data: lake } = await supabase
+  const { data: lake } = await getSupabase()
     .from('body_of_water')
     .select('id, name, state')
     .eq('id', opts.lakeId)
