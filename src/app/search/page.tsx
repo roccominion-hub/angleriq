@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -13,7 +12,8 @@ import { Logo } from '@/components/Logo'
 import { LakeMap } from '@/components/LakeMap'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
-  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets
+  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
+  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X
 } from 'lucide-react'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
@@ -27,6 +27,7 @@ interface SearchResult {
   reports: any[]
   coords?: { lat: number; lng: number }
 }
+interface MilkRunPattern { number: number; name: string; why: string; how: string; where: string }
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -64,15 +65,14 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder 
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
         {icon}{label}
       </label>
-      <Select onValueChange={(v: string | null) => onValueChange(v || 'all')} value={value}>
-        <SelectTrigger className="bg-white border-slate-200 text-slate-800 h-9 text-sm">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All</SelectItem>
-          {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <select
+        value={value}
+        onChange={e => onValueChange(e.target.value)}
+        className="bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      >
+        <option value="all">{placeholder}</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   )
 }
@@ -92,29 +92,161 @@ function WeatherBar({ weather }: { weather: Weather }) {
   )
 }
 
+// Hot search combobox for lake selection
+function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const filtered = query.length > 0
+    ? lakes.filter(l => `${l.name} ${l.state}`.toLowerCase().includes(query.toLowerCase())).slice(0, 12)
+    : lakes.slice(0, 12)
+
+  const selectedLake = lakes.find(l => l.name === value)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  function selectLake(lake: Lake) {
+    onChange(lake.name)
+    setQuery('')
+    setOpen(false)
+  }
+
+  function clearSelection() {
+    onChange('')
+    setQuery('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div ref={containerRef} className="relative flex-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+        <MapPin size={12} /> Body of Water
+      </label>
+      <div className="relative">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder={selectedLake ? `${selectedLake.name} — ${selectedLake.state}` : 'Search lakes, rivers, reservoirs...'}
+          value={open ? query : (selectedLake ? `${selectedLake.name} — ${selectedLake.state}` : query)}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => { setOpen(true); if (selectedLake) setQuery('') }}
+          className="w-full bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md pl-8 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
+        />
+        {(value || query) && (
+          <button onClick={clearSelection} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-slate-400">No lakes found</div>
+          ) : (
+            filtered.map(l => (
+              <button
+                key={l.id}
+                onMouseDown={() => selectLake(l)}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 ${value === l.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'}`}
+              >
+                <span>{l.name}</span>
+                <span className="text-slate-400 text-xs shrink-0">{l.state}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BuyButton({ baitName }: { baitName: string }) {
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(baitName + ' fishing lure buy')}`
+  return (
+    <a
+      href={searchUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-3 w-full flex items-center justify-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors"
+    >
+      <ShoppingCart size={12} /> Buy This Bait
+    </a>
+  )
+}
+
 export default function SearchPage() {
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
-  const [filters, setFilters] = useState({
-    season: 'all', timeOfDay: 'all', baitType: 'all',
-    fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all',
+
+  // Right-now filters
+  const [nowFilters, setNowFilters] = useState({
+    baitType: 'all', fishDepth: 'all', locationType: 'all',
+    structure: 'all', waterClarity: 'all', style: 'all',
   })
   const [yearRange, setYearRange] = useState([2019, CURRENT_YEAR])
-  const [filtersOpen, setFiltersOpen] = useState(true)
+
+  // Scenario filters (different time / conditions)
+  const [scenarioFilters, setScenarioFilters] = useState({
+    season: 'all', timeOfDay: 'all', weatherConditions: 'all',
+    waterTemp: 'all', waterClarity: 'all', baitType: 'all',
+    fishDepth: 'all', locationType: 'all', structure: 'all',
+  })
+
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
   const [summary, setSummary] = useState<{ intel: string; today: string }>({ intel: '', today: '' })
+  const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [secondaryLoading, setSecondaryLoading] = useState(false)
+  const [milkRunLoading, setMilkRunLoading] = useState(false)
+  const [milkRun, setMilkRun] = useState<{ patterns: MilkRunPattern[]; proTip: string } | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     fetch('/api/lakes').then(r => r.json()).then(setLakes)
   }, [])
 
-  function setFilter(key: string, value: string) {
-    setFilters(f => ({ ...f, [key]: value }))
+  function setNowFilter(key: string, value: string) {
+    setNowFilters(f => ({ ...f, [key]: value }))
+  }
+  function setScenarioFilter(key: string, value: string) {
+    setScenarioFilters(f => ({ ...f, [key]: value }))
+  }
+
+  // Merge active filters for API call
+  function buildApiFilters(isScenario = false) {
+    if (isScenario) {
+      return {
+        season: scenarioFilters.season,
+        timeOfDay: scenarioFilters.timeOfDay,
+        baitType: scenarioFilters.baitType !== 'all' ? scenarioFilters.baitType : nowFilters.baitType,
+        fishDepth: scenarioFilters.fishDepth !== 'all' ? scenarioFilters.fishDepth : nowFilters.fishDepth,
+        locationType: scenarioFilters.locationType !== 'all' ? scenarioFilters.locationType : nowFilters.locationType,
+        structure: scenarioFilters.structure !== 'all' ? scenarioFilters.structure : nowFilters.structure,
+        waterClarity: scenarioFilters.waterClarity !== 'all' ? scenarioFilters.waterClarity : nowFilters.waterClarity,
+      }
+    }
+    return {
+      baitType: nowFilters.baitType,
+      fishDepth: nowFilters.fishDepth,
+      locationType: nowFilters.locationType,
+      structure: nowFilters.structure,
+      waterClarity: nowFilters.waterClarity,
+    }
   }
 
   async function handleSearch() {
@@ -124,11 +256,14 @@ export default function SearchPage() {
     setError('')
     setResult(null)
     setSummary({ intel: '', today: '' })
+    setSecondaryRec('')
+    setMilkRun(null)
     setWeather(null)
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
-      Object.entries(filters).forEach(([k, v]) => { if (v !== 'all') params.set(k, v) })
+      const apiFilters = buildApiFilters()
+      Object.entries(apiFilters).forEach(([k, v]) => { if (v !== 'all') params.set(k, v) })
       params.set('yearFrom', String(yearRange[0]))
       params.set('yearTo', String(yearRange[1]))
 
@@ -138,7 +273,6 @@ export default function SearchPage() {
       setResult(data)
       setLoading(false)
 
-      // Fetch weather using lake coordinates
       let currentWeather: Weather | null = null
       if (data.coords?.lat && data.coords?.lng) {
         try {
@@ -148,20 +282,18 @@ export default function SearchPage() {
         } catch { /* weather is optional */ }
       }
 
-      // Fetch AI summary with weather context
       fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lake: selectedLake,
           state: data.water?.state,
-          season: filters.season !== 'all' ? filters.season : null,
           sampleSize: data.sampleSize,
           topBaits: data.topBaits,
           topPatterns: data.topPatterns,
           reports: data.reports,
           weather: currentWeather,
-          filters,
+          filters: { ...buildApiFilters(), style: nowFilters.style },
         })
       }).then(r => r.json()).then(d => setSummary({ intel: d.intel || '', today: d.today || '' })).finally(() => setSummaryLoading(false))
 
@@ -169,6 +301,58 @@ export default function SearchPage() {
       setError('Something went wrong. Please try again.')
       setLoading(false)
       setSummaryLoading(false)
+    }
+  }
+
+  async function handleSecondaryRec() {
+    if (!result) return
+    setSecondaryLoading(true)
+    setSecondaryRec('')
+    try {
+      const res = await fetch('/api/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lake: selectedLake,
+          state: result.water?.state,
+          sampleSize: result.sampleSize,
+          topBaits: result.topBaits,
+          topPatterns: result.topPatterns,
+          reports: result.reports,
+          weather,
+          filters: { ...buildApiFilters(), style: nowFilters.style, _secondary: String(Date.now()) },
+        })
+      })
+      const d = await res.json()
+      setSecondaryRec(d.today || '')
+    } catch { /* ignore */ } finally {
+      setSecondaryLoading(false)
+    }
+  }
+
+  async function handleMilkRun() {
+    if (!result || !summary.intel) return
+    setMilkRunLoading(true)
+    setMilkRun(null)
+    try {
+      const res = await fetch('/api/milk-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lake: selectedLake,
+          state: result.water?.state,
+          intel: summary.intel,
+          today: summary.today,
+          topBaits: result.topBaits,
+          topPatterns: result.topPatterns,
+          weather,
+          filters: buildApiFilters(),
+        })
+      })
+      const d = await res.json()
+      setMilkRun(d)
+    } catch { /* ignore */ } finally {
+      setMilkRunLoading(false)
     }
   }
 
@@ -193,15 +377,28 @@ export default function SearchPage() {
     )
   }
 
-  // Parse summary into two sections
-  function parseSummary(text: string): { intel: string; today: string } {
-    const todayMatch = text.match(/\*{0,2}TODAY['']S RECOMMENDATION\*{0,2}[:\s]*([\s\S]*?)$/im)
-    const intelMatch = text.match(/\*{0,2}TOURNAMENT INTEL\*{0,2}[:\s]*([\s\S]*?)(?=\*{0,2}TODAY|$)/im)
-    return {
-      intel: intelMatch ? intelMatch[1].trim() : text,
-      today: todayMatch ? todayMatch[1].trim() : '',
-    }
-  }
+  const BAIT_OPTIONS = [
+    { value: 'soft plastic', label: 'Soft Plastic' }, { value: 'jig', label: 'Jig' },
+    { value: 'crankbait', label: 'Crankbait' }, { value: 'jerkbait', label: 'Jerkbait' },
+    { value: 'topwater', label: 'Topwater' }, { value: 'swimbait', label: 'Swimbait' },
+    { value: 'bladed jig', label: 'Bladed Jig' }, { value: 'spinnerbait', label: 'Spinnerbait' },
+    { value: 'spoon', label: 'Spoon' }, { value: 'drop shot', label: 'Drop Shot' },
+    { value: 'ned rig', label: 'Ned Rig' },
+  ]
+  const DEPTH_OPTIONS = [
+    { value: 'surface', label: 'Surface' }, { value: 'suspended', label: 'Suspended' }, { value: 'bottom', label: 'Bottom' },
+  ]
+  const LOCATION_OPTIONS = [
+    { value: 'shoreline', label: 'Shoreline' }, { value: 'nearshore', label: 'Near Shore' }, { value: 'offshore', label: 'Offshore' },
+  ]
+  const STRUCTURE_OPTIONS = [
+    { value: 'grass', label: 'Grass' }, { value: 'dock', label: 'Docks' }, { value: 'laydown', label: 'Laydowns' },
+    { value: 'point', label: 'Points' }, { value: 'hump', label: 'Humps' }, { value: 'channel', label: 'Channel' },
+    { value: 'timber', label: 'Standing Timber' }, { value: 'rock', label: 'Rock' },
+  ]
+  const CLARITY_OPTIONS = [
+    { value: 'clear', label: 'Clear' }, { value: 'stained', label: 'Stained' }, { value: 'muddy', label: 'Muddy' },
+  ]
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -220,22 +417,9 @@ export default function SearchPage() {
 
         {/* Search + Filters */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
+          {/* Top row: lake search + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin size={12} /> Body of Water
-              </label>
-              <Select onValueChange={(v: string | null) => setSelectedLake(v || '')}>
-                <SelectTrigger className="bg-white border-slate-200 text-slate-800 h-9 text-sm">
-                  <SelectValue placeholder="Select a lake, river, or reservoir..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {lakes.map(l => (
-                    <SelectItem key={l.id} value={l.name}>{l.name} — {l.state}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} />
             <div className="flex items-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
                 className="text-slate-500 hover:text-slate-700 text-xs h-9 gap-1">
@@ -249,36 +433,69 @@ export default function SearchPage() {
           </div>
 
           {filtersOpen && (
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <FilterSelect label="Season" icon={<Sun size={12} />} value={filters.season} onValueChange={v => setFilter('season', v)} placeholder="All seasons"
-                  options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
-                <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={filters.timeOfDay} onValueChange={v => setFilter('timeOfDay', v)} placeholder="Any time"
-                  options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
-                <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={filters.baitType} onValueChange={v => setFilter('baitType', v)} placeholder="All baits"
-                  options={[{ value: 'soft plastic', label: 'Soft Plastic' }, { value: 'jig', label: 'Jig' }, { value: 'crankbait', label: 'Crankbait' }, { value: 'jerkbait', label: 'Jerkbait' }, { value: 'topwater', label: 'Topwater' }, { value: 'swimbait', label: 'Swimbait' }, { value: 'bladed jig', label: 'Bladed Jig' }, { value: 'spinnerbait', label: 'Spinnerbait' }, { value: 'spoon', label: 'Spoon' }]} />
-                <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={filters.fishDepth} onValueChange={v => setFilter('fishDepth', v)} placeholder="Any depth"
-                  options={[{ value: 'surface', label: 'Surface' }, { value: 'suspended', label: 'Suspended' }, { value: 'bottom', label: 'Bottom' }]} />
-                <FilterSelect label="Location" icon={<Anchor size={12} />} value={filters.locationType} onValueChange={v => setFilter('locationType', v)} placeholder="Any location"
-                  options={[{ value: 'shoreline', label: 'Shoreline' }, { value: 'nearshore', label: 'Near Shore' }, { value: 'offshore', label: 'Offshore' }]} />
-                <FilterSelect label="Structure" icon={<Layers size={12} />} value={filters.structure} onValueChange={v => setFilter('structure', v)} placeholder="Any structure"
-                  options={[{ value: 'grass', label: 'Grass' }, { value: 'dock', label: 'Docks' }, { value: 'laydown', label: 'Laydowns' }, { value: 'point', label: 'Points' }, { value: 'hump', label: 'Humps' }, { value: 'channel', label: 'Channel' }, { value: 'timber', label: 'Standing Timber' }, { value: 'rock', label: 'Rock' }]} />
-                <FilterSelect label="Water Clarity" icon={<Thermometer size={12} />} value={filters.waterClarity} onValueChange={v => setFilter('waterClarity', v)} placeholder="Any clarity"
-                  options={[{ value: 'clear', label: 'Clear' }, { value: 'stained', label: 'Stained' }, { value: 'muddy', label: 'Muddy' }]} />
-              </div>
-              <div className="flex flex-col gap-2 pt-1">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Year Range: {yearRange[0]} – {yearRange[1]}
-                </label>
-                <div className="px-1">
-                  <Slider min={2015} max={CURRENT_YEAR} step={1} value={yearRange}
-                    onValueChange={(v: number | readonly number[]) => setYearRange(Array.isArray(v) ? [...v] : [v as number, v as number])}
-                    className="w-full" />
+            <div className="p-4 space-y-5">
+
+              {/* ── Section 1: Right Now ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-1.5 bg-green-50 border border-green-100 rounded-lg px-3 py-1.5">
+                    <Zap size={13} className="text-green-600" />
+                    <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Right Now</span>
+                  </div>
+                  <span className="text-xs text-slate-400">Refine intel for current conditions</span>
                 </div>
-                <div className="flex justify-between text-xs text-slate-400">
-                  <span>2015</span><span>{CURRENT_YEAR}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={nowFilters.baitType} onValueChange={v => setNowFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
+                  <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={nowFilters.fishDepth} onValueChange={v => setNowFilter('fishDepth', v)} placeholder="Any depth" options={DEPTH_OPTIONS} />
+                  <FilterSelect label="Location" icon={<Anchor size={12} />} value={nowFilters.locationType} onValueChange={v => setNowFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
+                  <FilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onValueChange={v => setNowFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                  <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={nowFilters.waterClarity} onValueChange={v => setNowFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
+                  <FilterSelect label="Style" icon={<Feather size={12} />} value={nowFilters.style} onValueChange={v => setNowFilter('style', v)} placeholder="Any style"
+                    options={[{ value: 'power', label: '💪 Power Fishing' }, { value: 'finesse', label: '🪶 Finesse Fishing' }]} />
+                </div>
+                <div className="mt-3 flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock size={12} /> Year Range: {yearRange[0]} – {yearRange[1]}
+                    <span className="ml-1 normal-case font-normal text-slate-400">— adjusts which historical reports are used</span>
+                  </label>
+                  <div className="px-1">
+                    <Slider min={2015} max={CURRENT_YEAR} step={1} value={yearRange}
+                      onValueChange={(v: number | readonly number[]) => setYearRange(Array.isArray(v) ? [...v] : [v as number, v as number])}
+                      className="w-full" />
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-400">
+                    <span>2015</span><span>{CURRENT_YEAR}</span>
+                  </div>
                 </div>
               </div>
+
+              <Separator className="bg-slate-100" />
+
+              {/* ── Section 2: Different Time / Conditions ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-lg px-3 py-1.5">
+                    <Clock size={13} className="text-purple-600" />
+                    <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">Different Time or Conditions</span>
+                  </div>
+                  <span className="text-xs text-slate-400">Generate a scenario report for another time or situation</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <FilterSelect label="Season" icon={<Sun size={12} />} value={scenarioFilters.season} onValueChange={v => setScenarioFilter('season', v)} placeholder="All seasons"
+                    options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
+                  <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={scenarioFilters.timeOfDay} onValueChange={v => setScenarioFilter('timeOfDay', v)} placeholder="Any time"
+                    options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
+                  <FilterSelect label="Weather" icon={<Cloud size={12} />} value={scenarioFilters.weatherConditions} onValueChange={v => setScenarioFilter('weatherConditions', v)} placeholder="Any weather"
+                    options={[{ value: 'sunny', label: 'Sunny / Clear' }, { value: 'overcast', label: 'Overcast / Cloudy' }, { value: 'rainy', label: 'Rainy / Post-Rain' }, { value: 'windy', label: 'Windy' }, { value: 'cold-front', label: 'Cold Front' }]} />
+                  <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} value={scenarioFilters.waterTemp} onValueChange={v => setScenarioFilter('waterTemp', v)} placeholder="Any temp"
+                    options={[{ value: 'cold', label: 'Cold (< 50°F)' }, { value: 'cool', label: 'Cool (50–60°F)' }, { value: 'warm', label: 'Warm (60–70°F)' }, { value: 'hot', label: 'Hot (70°F+)' }]} />
+                  <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={scenarioFilters.waterClarity} onValueChange={v => setScenarioFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
+                  <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={scenarioFilters.baitType} onValueChange={v => setScenarioFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
+                  <FilterSelect label="Location" icon={<Anchor size={12} />} value={scenarioFilters.locationType} onValueChange={v => setScenarioFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
+                  <FilterSelect label="Structure" icon={<Layers size={12} />} value={scenarioFilters.structure} onValueChange={v => setScenarioFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                </div>
+              </div>
+
             </div>
           )}
         </div>
@@ -297,12 +514,10 @@ export default function SearchPage() {
               <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">{result.sampleSize} tournament reports</Badge>
             </div>
 
-            {/* Weather bar */}
             {weather && <WeatherBar weather={weather} />}
 
-            {/* AI Summary card with map */}
+            {/* AI Summary card */}
             <Card className="border-blue-100 shadow-none overflow-hidden">
-              {/* Lake map */}
               {result.coords?.lat && result.coords?.lng && (
                 <LakeMap lat={result.coords.lat} lng={result.coords.lng} name={result.water.name} />
               )}
@@ -323,18 +538,99 @@ export default function SearchPage() {
                     </div>
                   </div>
                 ) : (
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
-                        <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
-                      </div>
-                      {summary.today && (
-                        <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
-                          <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1.5">Today&apos;s Recommendation</p>
-                          <RenderRecommendation text={summary.today} />
-                        </div>
-                      )}
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
+                      <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
                     </div>
+                    {summary.today && (
+                      <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Today&apos;s Recommendation</p>
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={handleSecondaryRec}
+                            disabled={secondaryLoading}
+                            className="text-green-700 hover:text-green-900 hover:bg-green-100 text-xs h-7 gap-1 px-2"
+                          >
+                            <RefreshCw size={11} className={secondaryLoading ? 'animate-spin' : ''} />
+                            {secondaryLoading ? 'Generating...' : 'New Angle'}
+                          </Button>
+                        </div>
+                        <RenderRecommendation text={summary.today} />
+                        {secondaryRec && (
+                          <div className="mt-3 pt-3 border-t border-green-200">
+                            <p className="text-xs font-bold text-green-600 uppercase tracking-wider mb-1.5">Alternative Approach</p>
+                            <RenderRecommendation text={secondaryRec} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Milk Run */}
+                    {!milkRun && summary.intel && (
+                      <div className="pt-1">
+                        <Button
+                          onClick={handleMilkRun}
+                          disabled={milkRunLoading}
+                          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center gap-2"
+                        >
+                          <Route size={15} className={milkRunLoading ? 'animate-pulse' : ''} />
+                          {milkRunLoading ? 'Building Your Milk Run...' : 'Generate Milk Run Plan'}
+                          <Badge className="bg-blue-600 text-white border-0 text-xs ml-1">PRO</Badge>
+                        </Button>
+                        <p className="text-xs text-slate-400 text-center mt-1.5">Get a prioritized 3–5 pattern game plan for a full day on the water</p>
+                      </div>
+                    )}
+
+                    {/* Milk Run Results */}
+                    {milkRun && milkRun.patterns.length > 0 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden mt-2">
+                        <div className="bg-slate-900 px-4 py-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Route size={15} className="text-white" />
+                            <span className="text-white font-bold text-sm">Milk Run Plan</span>
+                            <Badge className="bg-blue-600 text-white border-0 text-xs">PRO</Badge>
+                          </div>
+                          <button onClick={() => setMilkRun(null)} className="text-slate-400 hover:text-white text-xs">
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="divide-y divide-slate-100 bg-white">
+                          {milkRun.patterns.map(p => (
+                            <div key={p.number} className="px-4 py-3 flex gap-3">
+                              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-extrabold">{p.number}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-slate-900 text-sm leading-snug mb-1">{p.name}</p>
+                                <div className="space-y-0.5 text-xs text-slate-600">
+                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">Why</span><span>{p.why}</span></div>
+                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">How</span><span>{p.how}</span></div>
+                                  <div className="flex gap-1.5"><span className="text-slate-400 font-semibold uppercase tracking-wide w-10 shrink-0">Where</span><span>{p.where}</span></div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {milkRun.proTip && (
+                            <div className="px-4 py-3 bg-amber-50 flex items-start gap-2">
+                              <Sparkles size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                              <p className="text-xs text-amber-800"><span className="font-bold">Pro Tip:</span> {milkRun.proTip}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200">
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={handleMilkRun}
+                            disabled={milkRunLoading}
+                            className="text-slate-500 hover:text-slate-700 text-xs h-7 gap-1"
+                          >
+                            <RefreshCw size={11} className={milkRunLoading ? 'animate-spin' : ''} />
+                            Regenerate Plan
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -373,16 +669,16 @@ export default function SearchPage() {
                   <CardContent className="px-5 pb-4 space-y-2">
                     {result.topBaits.slice(0, 6).map(b => {
                       const baitData = result.reports.flatMap((r: any) => r.bait_used || []).find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
+                      const shopUrl = baitData?.product_url || `https://www.google.com/search?q=${encodeURIComponent(b.name + ' fishing lure buy')}`
                       return (
                         <div key={b.name} className="flex items-center justify-between gap-2">
                           <span className="text-slate-700 text-sm flex-1 leading-tight truncate">{b.name}</span>
                           <div className="flex items-center gap-2 shrink-0">
                             <Badge className="bg-slate-100 text-slate-600 border-0 text-xs font-semibold">{b.count}x</Badge>
-                            {baitData?.product_url && (
-                              <a href={baitData.product_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                                <ExternalLink size={13} />
-                              </a>
-                            )}
+                            <a href={shopUrl} target="_blank" rel="noopener noreferrer"
+                              className="text-orange-500 hover:text-orange-700" title="Buy this bait">
+                              <ShoppingCart size={13} />
+                            </a>
                           </div>
                         </div>
                       )
@@ -398,10 +694,8 @@ export default function SearchPage() {
                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Top Bait Breakdown</h3>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {result.topBaits.slice(0, 5).map(b => {
-                    // Collect all bait records for this bait
                     const baitRecords: BaitRecord[] = result.reports.flatMap((r: any) => (r.bait_used || []).filter((bu: BaitRecord) => bu.bait_name === b.name))
                     const colors = [...new Set(baitRecords.map((br: BaitRecord) => br.color).filter(Boolean))]
-                    // Most common presentation
                     const presentationCounts: Record<string, number> = {}
                     result.reports.forEach((r: any) => {
                       if ((r.bait_used || []).some((bu: BaitRecord) => bu.bait_name === b.name) && r.presentation) {
@@ -409,7 +703,6 @@ export default function SearchPage() {
                       }
                     })
                     const technique = Object.entries(presentationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
-                    // Most common structure
                     const structureCounts: Record<string, number> = {}
                     result.reports.forEach((r: any) => {
                       if ((r.bait_used || []).some((bu: BaitRecord) => bu.bait_name === b.name) && r.structure) {
@@ -417,7 +710,6 @@ export default function SearchPage() {
                       }
                     })
                     const structure = Object.entries(structureCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
-                    // Line from data or infer
                     const lineRecord = baitRecords.find(br => br.line_type)
                     const baitType = baitRecords[0]?.bait_type || b.name
                     const weightOz = baitRecords[0]?.weight_oz || 0
@@ -428,14 +720,17 @@ export default function SearchPage() {
                     const productUrl = baitRecords.find(br => br.product_url)?.product_url
 
                     return (
-                      <Card key={b.name} className="border-slate-200 shadow-none bg-white">
+                      <Card key={b.name} className="border-slate-200 shadow-none bg-white flex flex-col">
                         <CardHeader className="pb-2 pt-4 px-4">
-                          <CardTitle className="text-slate-900 text-sm font-bold flex items-center justify-between gap-2">
-                            <span className="flex items-center gap-1.5 truncate">🎣 {b.name}</span>
-                            <Badge className="bg-blue-50 text-blue-700 border-blue-100 text-xs font-semibold shrink-0">{b.count}x</Badge>
+                          <CardTitle className="text-slate-900 text-sm font-bold flex items-start justify-between gap-2">
+                            <span className="flex items-start gap-1.5 min-w-0">
+                              <span className="shrink-0 mt-0.5">🎣</span>
+                              <span className="break-words leading-snug">{b.name}</span>
+                            </span>
+                            <Badge className="bg-blue-50 text-blue-700 border-blue-100 text-xs font-semibold shrink-0 mt-0.5">{b.count}x</Badge>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="px-4 pb-4">
+                        <CardContent className="px-4 pb-4 flex flex-col flex-1">
                           <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center text-slate-300 text-xs text-center mb-3 border border-slate-200 leading-tight">
                             Photo<br />Coming<br />Soon
                           </div>
@@ -461,7 +756,7 @@ export default function SearchPage() {
                           </div>
                           <Separator className="bg-slate-100 mb-3" />
                           <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Suggested Setup</p>
-                          <div className="space-y-1 text-xs">
+                          <div className="space-y-1 text-xs flex-1">
                             <div className="flex gap-2">
                               <span className="text-slate-400 font-semibold w-20 shrink-0 uppercase tracking-wide">Reel</span>
                               <span className="text-slate-700">{tackle.reel}</span>
@@ -475,10 +770,11 @@ export default function SearchPage() {
                               <span className="text-slate-700">{lineDisplay}</span>
                             </div>
                           </div>
+                          <BuyButton baitName={b.name} />
                           {productUrl && (
                             <a href={productUrl} target="_blank" rel="noopener noreferrer"
-                              className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
-                              <ExternalLink size={11} /> Shop this bait
+                              className="mt-1.5 flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                              <ExternalLink size={11} /> View Product Page
                             </a>
                           )}
                         </CardContent>
@@ -491,7 +787,7 @@ export default function SearchPage() {
 
             <Separator className="bg-slate-200" />
 
-            {/* Technique Cards */}
+            {/* Technique Reports */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Technique Reports</h3>
