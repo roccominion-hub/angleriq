@@ -5,16 +5,22 @@ config({ path: '.env.local' })
 
 import { ingestYouTubeForLake } from '../src/lib/youtube-ingest'
 
-const LAKE_ID = '56e7af84-c761-4ece-a13f-748bf048efcf'
+const LAKES: Record<string, { id: string; name: string; state: string }> = {
+  'fork':    { id: '56e7af84-c761-4ece-a13f-748bf048efcf', name: 'Lake Fork', state: 'TX' },
+  'rayburn': { id: '3325696f-8b5d-4236-ab44-76f235434101', name: 'Sam Rayburn Reservoir', state: 'TX' },
+}
+
+const lakeKey = process.argv.find(a => LAKES[a]) || 'fork'
+const LAKE = LAKES[lakeKey]
 const DRY_RUN = process.argv.includes('--dry-run')
 
 async function main() {
-  console.log(`\n🎣 YouTube Ingestion — Lake Fork TX ${DRY_RUN ? '(DRY RUN)' : '(LIVE)'}\n`)
+  console.log(`\n🎣 YouTube Ingestion — ${LAKE.name} ${LAKE.state} ${DRY_RUN ? '(DRY RUN)' : '(LIVE)'}\n`)
 
   const results = await ingestYouTubeForLake({
-    lakeId: LAKE_ID,
-    lakeName: 'Lake Fork',
-    state: 'TX',
+    lakeId: LAKE.id,
+    lakeName: LAKE.name,
+    state: LAKE.state,
     maxResults: 30,
     minScore: 25,
     publishedAfter: '2022-01-01T00:00:00Z',
