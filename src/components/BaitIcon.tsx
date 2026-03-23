@@ -40,11 +40,19 @@ const BAIT_MAP: { file: string; matches: string[] }[] = [
 ]
 
 function resolveIcon(baitName?: string, baitType?: string): string {
-  const combined = `${baitName || ''} ${baitType || ''}`.toLowerCase().trim()
-  if (!combined) return 'default'
-
-  for (const { file, matches } of BAIT_MAP) {
-    if (matches.some(m => combined.includes(m))) return file
+  // Check bait name first — more specific, takes priority
+  const name = (baitName || '').toLowerCase().trim()
+  if (name) {
+    for (const { file, matches } of BAIT_MAP) {
+      if (matches.some(m => name.includes(m))) return file
+    }
+  }
+  // Fall back to bait type only if name didn't match
+  const type = (baitType || '').toLowerCase().trim()
+  if (type) {
+    for (const { file, matches } of BAIT_MAP) {
+      if (matches.some(m => type.includes(m))) return file
+    }
   }
   return 'default'
 }

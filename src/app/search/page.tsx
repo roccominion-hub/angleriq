@@ -33,6 +33,70 @@ interface MilkRunPattern { number: number; name: string; why: string; how: strin
 
 const CURRENT_YEAR = new Date().getFullYear()
 
+// Map bait names/types to their canonical technique
+function inferTechnique(baitName: string, baitType: string, storedPresentation: string): string {
+  const combined = `${baitName} ${baitType}`.toLowerCase()
+
+  // Crankbaits
+  if (combined.match(/10xd|6xd|8xd|deep.?crank|deep.?div/)) return 'Deep cranking'
+  if (combined.match(/squarebill|square.?bill/)) return 'Squarebill cranking'
+  if (combined.match(/lipless|rat-l|rattle/)) return 'Ripping lipless'
+  if (combined.match(/crankbait|crank bait/)) return 'Cranking'
+  if (combined.match(/jerkbait|jerk bait/) && !combined.includes('soft')) return 'Jerkbait'
+
+  // Topwater
+  if (combined.match(/popper|chug/)) return 'Popping'
+  if (combined.match(/buzzbait|buzz bait/)) return 'Buzzing'
+  if (combined.match(/topwater|spook|walker|walk.the.dog/)) return 'Walking topwater'
+  if (combined.match(/frog/) && !combined.includes('toad')) return 'Frogging'
+  if (combined.match(/toad|ribbit|horny toad/)) return 'Swimming toad'
+
+  // Swimbaits / bladed
+  if (combined.match(/swimbait|swim bait|paddle tail/)) return 'Swimbaiting'
+  if (combined.match(/swimjig|swim jig/)) return 'Swimming jig'
+  if (combined.match(/bladed|chatterbait|chatter bait|vibrating jig/)) return 'Bladed jig'
+  if (combined.match(/spinnerbait|spinner bait/)) return 'Spinnerbait'
+
+  // Jigs
+  if (combined.match(/football jig/)) return 'Football jig'
+  if (combined.match(/flipping jig|punch/)) return 'Flipping & pitching'
+  if (combined.match(/jig/) && !combined.match(/swim|blade|spin/)) return 'Jigging'
+
+  // Finesse
+  if (combined.match(/drop.?shot|dropshot/)) return 'Drop shot'
+  if (combined.match(/ned|trd|mushroom/)) return 'Ned rig'
+  if (combined.match(/damiki/)) return 'Damiki rig'
+  if (combined.match(/shaky.?head|shakey.?head/)) return 'Shaky head'
+  if (combined.match(/wacky|neko/)) return 'Wacky / Neko rig'
+  if (combined.match(/senko|stick.?bait/)) return 'Weightless stickbait'
+
+  // Soft plastics
+  if (combined.match(/carolina|c-rig/) || storedPresentation?.toLowerCase().includes('carolina')) {
+    // Only use Carolina rig if the bait is actually fished that way
+    if (combined.match(/lizard|worm|craw|creature|tube/)) return 'Carolina rig'
+  }
+  if (combined.match(/texas|t-rig/)) return 'Texas rig'
+  if (combined.match(/fluke|soft.?jerk|slug|minnow/) && !combined.includes('ned')) return 'Soft jerkbait'
+  if (combined.match(/worm/)) return 'Worm fishing'
+  if (combined.match(/craw|crawfish/)) return 'Craw presentation'
+  if (combined.match(/creature|brush hog|beaver/)) return 'Flipping creature'
+  if (combined.match(/tube/)) return 'Tube fishing'
+  if (combined.match(/grub/)) return 'Grub fishing'
+
+  // Dice / fuzzy
+  if (combined.match(/dice|tumbleweed|nuki|cue bomb|fuzzy/)) return 'Dice bait — finesse'
+
+  // Spoon
+  if (combined.match(/spoon/)) return 'Spooning'
+
+  // Fall back to stored presentation if it seems reasonable (not a rig name mismatch)
+  const rigs = ['texas rig', 'carolina rig', 'drop shot', 'ned rig', 'shaky head']
+  const isPresentationRig = rigs.some(r => storedPresentation?.toLowerCase().includes(r))
+  const isBaitHardware = combined.match(/crank|jerk|spinner|topwater|bladed|swimbait|frog|buzzbait/)
+  if (isPresentationRig && isBaitHardware) return '—' // mismatch — don't show bad data
+  return storedPresentation || '—'
+}
+
 function getTackleSetup(baitType: string, _weightOz: number) {
   const bt = baitType.toLowerCase()
   if (bt.includes('jig') || bt.includes('texas') || bt.includes('soft plastic')) {
@@ -765,7 +829,9 @@ export default function SearchPage() {
                         presentationCounts[r.presentation] = (presentationCounts[r.presentation] || 0) + 1
                       }
                     })
-                    const technique = Object.entries(presentationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+                    const topStoredPresentation = Object.entries(presentationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+                    const cardBaitType = baitRecords[0]?.bait_type || ''
+                    const technique = inferTechnique(b.name, cardBaitType, topStoredPresentation)
                     const structureCounts: Record<string, number> = {}
                     result.reports.forEach((r: any) => {
                       if ((r.bait_used || []).some((bu: BaitRecord) => bu.bait_name === b.name) && r.structure) {
