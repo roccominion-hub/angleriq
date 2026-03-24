@@ -79,7 +79,7 @@ function inferTechnique(baitName: string, baitType: string, storedPresentation: 
   if (combined.match(/fluke|soft.?jerk|slug|minnow/) && !combined.includes('ned')) return 'Soft jerkbait'
   if (combined.match(/worm/)) return 'Worm fishing'
   if (combined.match(/craw|crawfish/)) return 'Craw presentation'
-  if (combined.match(/creature|brush hog|beaver/)) return 'Flipping creature'
+  if (combined.match(/creature|brush hog|beaver|pit boss|rage bug|bruiser|chunk|lobster|craw chunk|twin tail/)) return 'Flipping & pitching'
   if (combined.match(/tube/)) return 'Tube fishing'
   if (combined.match(/grub/)) return 'Grub fishing'
 
@@ -89,11 +89,25 @@ function inferTechnique(baitName: string, baitType: string, storedPresentation: 
   // Spoon
   if (combined.match(/spoon/)) return 'Spooning'
 
-  // Fall back to stored presentation if it seems reasonable (not a rig name mismatch)
+  // Fall back to stored presentation — but clean up multi-technique strings
   const rigs = ['texas rig', 'carolina rig', 'drop shot', 'ned rig', 'shaky head']
   const isPresentationRig = rigs.some(r => storedPresentation?.toLowerCase().includes(r))
   const isBaitHardware = combined.match(/crank|jerk|spinner|topwater|bladed|swimbait|frog|buzzbait/)
   if (isPresentationRig && isBaitHardware) return '—' // mismatch — don't show bad data
+
+  // If presentation lists multiple comma-separated techniques, pick the first one
+  // that is plausible for a soft plastic (avoid surfacing "jerkbait" for a creature bait, etc.)
+  if (storedPresentation && storedPresentation.includes(',')) {
+    const parts = storedPresentation.split(',').map(p => p.trim()).filter(Boolean)
+    const softPlasticFriendly = ['flipping', 'pitching', 'texas', 'carolina', 'worm', 'drop shot', 'ned', 'shaky', 'punching', 'swim']
+    const isSoftPlastic = baitType.toLowerCase().includes('soft') || baitType.toLowerCase().includes('plastic')
+    if (isSoftPlastic) {
+      const best = parts.find(p => softPlasticFriendly.some(k => p.toLowerCase().includes(k)))
+      if (best) return best
+    }
+    return parts[0] // default to first technique listed
+  }
+
   return storedPresentation || '—'
 }
 
