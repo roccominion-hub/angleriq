@@ -13,10 +13,10 @@ import { LakeMap } from '@/components/LakeMap'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
-  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, Moon
+  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
-import { solunarRatingColor, getMoonAge, getMoonIllumination, getMoonPhaseLabel, getSolunarRating, getMoonData, type MoonData } from '@/lib/moonphase'
+import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
@@ -323,16 +323,16 @@ export default function SearchPage() {
   })
   const [yearRange, setYearRange] = useState([2019, CURRENT_YEAR])
 
-  // Scenario filters (different time / conditions)
+  // Scenario filters (future trip)
   const [scenarioFilters, setScenarioFilters] = useState({
     season: 'all', timeOfDay: 'all', weatherConditions: 'all',
     waterTemp: 'all', waterClarity: 'all', baitType: 'all',
     fishDepth: 'all', locationType: 'all', structure: 'all',
+    airTemp: 'all', wind: 'all',
   })
 
   // Future Trip state
   const [tripDate, setTripDate] = useState('')
-  const [futureMoon, setFutureMoon] = useState<MoonData | null>(null)
   const [futureWeatherLoading, setFutureWeatherLoading] = useState(false)
   const [autoFilled, setAutoFilled] = useState<Set<string>>(new Set())
 
@@ -368,28 +368,32 @@ export default function SearchPage() {
   async function handleTripDateChange(date: string) {
     setTripDate(date)
     if (!date) {
-      setFutureMoon(null)
       setAutoFilled(new Set())
       return
     }
 
-    // Compute season and moon from date locally
+    // Compute season from date
     const d = new Date(date + 'T12:00:00Z')
     const month = d.getUTCMonth() + 1
     const season = month >= 3 && month <= 5 ? 'spring'
       : month >= 6 && month <= 8 ? 'summer'
       : month >= 9 && month <= 11 ? 'fall' : 'winter'
 
-    // Use result coords if available, else 0/0 (moon phase doesn't need lat/lng for phase)
     const lat = result?.coords?.lat ?? 0
     const lng = result?.coords?.lng ?? 0
-    const moon = getMoonData(d, lat, lng, 0)
-    setFutureMoon(moon)
 
     const newAutoFilled = new Set<string>(['season'])
     setScenarioFilter('season', season)
 
-    // Fetch forecast weather if coords are available
+    // Auto-fill water temp from season (baseline — may be overridden by forecast)
+    const seasonWaterTemp = season === 'winter' ? 'cold'
+      : season === 'spring' ? 'cool'
+      : season === 'summer' ? 'hot'
+      : 'warm' // fall
+    setScenarioFilter('waterTemp', seasonWaterTemp)
+    newAutoFilled.add('waterTemp')
+
+    // Fetch forecast weather if coords are available and date is within 16 days
     if (result?.coords?.lat && result?.coords?.lng) {
       const now = new Date()
       const daysOut = Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -400,9 +404,37 @@ export default function SearchPage() {
           const wRes = await fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${date}`)
           const wData = await wRes.json()
           if (wData.forecastAvailable) {
-            if (wData.weatherConditions && wData.weatherConditions !== 'all') {
+            // Weather conditions
+            if (wData.weatherConditions) {
               setScenarioFilter('weatherConditions', wData.weatherConditions)
               newAutoFilled.add('weatherConditions')
+            }
+            // Air temp
+            if (wData.tempF != null) {
+              const airTempVal = wData.tempF < 40 ? 'cold'
+                : wData.tempF < 55 ? 'cool'
+                : wData.tempF < 70 ? 'mild'
+                : wData.tempF < 85 ? 'warm'
+                : 'hot'
+              setScenarioFilter('airTemp', airTempVal)
+              newAutoFilled.add('airTemp')
+
+              // Refine water temp from actual air temp forecast
+              const refinedWaterTemp = wData.tempF < 45 ? 'cold'
+                : wData.tempF < 60 ? 'cool'
+                : wData.tempF < 75 ? 'warm'
+                : 'hot'
+              setScenarioFilter('waterTemp', refinedWaterTemp)
+              // waterTemp stays in autoFilled (already added above)
+            }
+            // Wind
+            if (wData.windMph != null) {
+              const windVal = wData.windMph < 5 ? 'calm'
+                : wData.windMph < 15 ? 'light'
+                : wData.windMph < 25 ? 'moderate'
+                : 'heavy'
+              setScenarioFilter('wind', windVal)
+              newAutoFilled.add('wind')
             }
           }
         } catch { /* weather optional */ } finally {
@@ -420,6 +452,10 @@ export default function SearchPage() {
       return {
         season: scenarioFilters.season,
         timeOfDay: scenarioFilters.timeOfDay,
+        weatherConditions: scenarioFilters.weatherConditions,
+        airTemp: scenarioFilters.airTemp,
+        wind: scenarioFilters.wind,
+        waterTemp: scenarioFilters.waterTemp,
         baitType: scenarioFilters.baitType !== 'all' ? scenarioFilters.baitType : nowFilters.baitType,
         fishDepth: scenarioFilters.fishDepth !== 'all' ? scenarioFilters.fishDepth : nowFilters.fishDepth,
         locationType: scenarioFilters.locationType !== 'all' ? scenarioFilters.locationType : nowFilters.locationType,
@@ -707,36 +743,6 @@ export default function SearchPage() {
                     </div>
                   </div>
 
-                  {/* Moon Phase Panel (auto-shown when date selected) */}
-                  {futureMoon && tripDate && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                        <Moon size={12} /> Moon &amp; Solunar — {new Date(tripDate + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                      </p>
-                      <div className="bg-slate-900 text-white rounded-lg px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div>
-                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Moon Phase</p>
-                          <p className="font-bold">{futureMoon.emoji} {futureMoon.phase}</p>
-                          <p className="text-slate-300">{futureMoon.illumination}% illuminated</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Solunar Activity</p>
-                          <p className={`font-bold capitalize ${futureMoon.solunarRating === 'excellent' ? 'text-green-400' : futureMoon.solunarRating === 'good' ? 'text-blue-400' : futureMoon.solunarRating === 'fair' ? 'text-amber-400' : 'text-slate-400'}`}>
-                            {futureMoon.solunarLabel}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Major Periods</p>
-                          {futureMoon.majorPeriods.map((p, i) => <p key={i} className="text-green-300 font-semibold">{p}</p>)}
-                        </div>
-                        <div>
-                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Minor Periods</p>
-                          {futureMoon.minorPeriods.map((p, i) => <p key={i} className="text-blue-300">{p}</p>)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Condition Filters */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     <FilterSelect label="Season" icon={<Sun size={12} />} required
@@ -751,10 +757,23 @@ export default function SearchPage() {
                       onValueChange={v => setScenarioFilterManual('weatherConditions', v)}
                       placeholder="Any weather"
                       options={[{ value: 'sunny', label: 'Sunny / Clear' }, { value: 'overcast', label: 'Overcast / Cloudy' }, { value: 'rainy', label: 'Rainy / Post-Rain' }, { value: 'windy', label: 'Windy' }, { value: 'cold-front', label: 'Cold Front' }]} />
-                    <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} required
+                    <FilterSelect label="Air Temp" icon={<Thermometer size={12} />}
+                      autoFilled={autoFilled.has('airTemp')}
+                      value={scenarioFilters.airTemp}
+                      onValueChange={v => setScenarioFilterManual('airTemp', v)}
+                      placeholder="Any temp"
+                      options={[{ value: 'cold', label: 'Cold (< 40°F)' }, { value: 'cool', label: 'Cool (40–55°F)' }, { value: 'mild', label: 'Mild (55–70°F)' }, { value: 'warm', label: 'Warm (70–85°F)' }, { value: 'hot', label: 'Hot (85°F+)' }]} />
+                    <FilterSelect label="Wind" icon={<Wind size={12} />}
+                      autoFilled={autoFilled.has('wind')}
+                      value={scenarioFilters.wind}
+                      onValueChange={v => setScenarioFilterManual('wind', v)}
+                      placeholder="Any wind"
+                      options={[{ value: 'calm', label: 'Calm (< 5 mph)' }, { value: 'light', label: 'Light (5–15 mph)' }, { value: 'moderate', label: 'Moderate (15–25 mph)' }, { value: 'heavy', label: 'Heavy (25+ mph)' }]} />
+                    <FilterSelect label="Water Temp" icon={<Droplets size={12} />}
+                      autoFilled={autoFilled.has('waterTemp')}
                       value={scenarioFilters.waterTemp}
                       onValueChange={v => setScenarioFilterManual('waterTemp', v)}
-                      placeholder="Any temp"
+                      placeholder="Any water temp"
                       options={[{ value: 'cold', label: 'Cold (< 50°F)' }, { value: 'cool', label: 'Cool (50–60°F)' }, { value: 'warm', label: 'Warm (60–70°F)' }, { value: 'hot', label: 'Hot (70°F+)' }]} />
                     <FilterSelect label="Time of Day" icon={<Clock size={12} />}
                       value={scenarioFilters.timeOfDay}
