@@ -365,86 +365,63 @@ export default function SearchPage() {
     setAutoFilled(prev => { const n = new Set(prev); n.delete(key); return n })
   }
 
-  async function handleTripDateChange(date: string) {
+  function handleTripDateChange(date: string) {
     setTripDate(date)
     if (!date) {
       setAutoFilled(new Set())
       return
     }
-
-    // Compute season from date
+    // Immediately auto-fill season + baseline water temp from date
     const d = new Date(date + 'T12:00:00Z')
     const month = d.getUTCMonth() + 1
     const season = month >= 3 && month <= 5 ? 'spring'
       : month >= 6 && month <= 8 ? 'summer'
       : month >= 9 && month <= 11 ? 'fall' : 'winter'
-
-    const lat = result?.coords?.lat ?? 0
-    const lng = result?.coords?.lng ?? 0
-
-    const newAutoFilled = new Set<string>(['season'])
-    setScenarioFilter('season', season)
-
-    // Auto-fill water temp from season (baseline — may be overridden by forecast)
     const seasonWaterTemp = season === 'winter' ? 'cold'
       : season === 'spring' ? 'cool'
       : season === 'summer' ? 'hot'
-      : 'warm' // fall
-    setScenarioFilter('waterTemp', seasonWaterTemp)
-    newAutoFilled.add('waterTemp')
-
-    // Fetch forecast weather if coords are available and date is within 16 days
-    if (result?.coords?.lat && result?.coords?.lng) {
-      const now = new Date()
-      const daysOut = Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-
-      if (daysOut > 0 && daysOut <= 16) {
-        setFutureWeatherLoading(true)
-        try {
-          const wRes = await fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${date}`)
-          const wData = await wRes.json()
-          if (wData.forecastAvailable) {
-            // Weather conditions
-            if (wData.weatherConditions) {
-              setScenarioFilter('weatherConditions', wData.weatherConditions)
-              newAutoFilled.add('weatherConditions')
-            }
-            // Air temp
-            if (wData.tempF != null) {
-              const airTempVal = wData.tempF < 40 ? 'cold'
-                : wData.tempF < 55 ? 'cool'
-                : wData.tempF < 70 ? 'mild'
-                : wData.tempF < 85 ? 'warm'
-                : 'hot'
-              setScenarioFilter('airTemp', airTempVal)
-              newAutoFilled.add('airTemp')
-
-              // Refine water temp from actual air temp forecast
-              const refinedWaterTemp = wData.tempF < 45 ? 'cold'
-                : wData.tempF < 60 ? 'cool'
-                : wData.tempF < 75 ? 'warm'
-                : 'hot'
-              setScenarioFilter('waterTemp', refinedWaterTemp)
-              // waterTemp stays in autoFilled (already added above)
-            }
-            // Wind
-            if (wData.windMph != null) {
-              const windVal = wData.windMph < 5 ? 'calm'
-                : wData.windMph < 15 ? 'light'
-                : wData.windMph < 25 ? 'moderate'
-                : 'heavy'
-              setScenarioFilter('wind', windVal)
-              newAutoFilled.add('wind')
-            }
-          }
-        } catch { /* weather optional */ } finally {
-          setFutureWeatherLoading(false)
-        }
-      }
-    }
-
-    setAutoFilled(newAutoFilled)
+      : 'warm'
+    setScenarioFilters(f => ({ ...f, season, waterTemp: seasonWaterTemp }))
+    setAutoFilled(new Set(['season', 'waterTemp']))
+    // Forecast fetch (weather/air temp/wind) is handled by useEffect below
   }
+
+  // Fetch forecast whenever tripDate + coords are both available
+  useEffect(() => {
+    if (!tripDate || !result?.coords?.lat || !result?.coords?.lng) return
+    const d = new Date(tripDate + 'T12:00:00Z')
+    const now = new Date()
+    const daysOut = Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    if (daysOut <= 0 || daysOut > 16) return
+
+    setFutureWeatherLoading(true)
+    fetch(`/api/weather?lat=${result.coords.lat}&lng=${result.coords.lng}&date=${tripDate}`)
+      .then(r => r.json())
+      .then(wData => {
+        if (!wData.forecastAvailable) return
+        const updates: Record<string, string> = {}
+        if (wData.weatherConditions) updates.weatherConditions = wData.weatherConditions
+        if (wData.tempF != null) {
+          updates.airTemp = wData.tempF < 40 ? 'cold'
+            : wData.tempF < 55 ? 'cool'
+            : wData.tempF < 70 ? 'mild'
+            : wData.tempF < 85 ? 'warm' : 'hot'
+          // Refine water temp from actual forecast air temp
+          updates.waterTemp = wData.tempF < 45 ? 'cold'
+            : wData.tempF < 60 ? 'cool'
+            : wData.tempF < 75 ? 'warm' : 'hot'
+        }
+        if (wData.windMph != null) {
+          updates.wind = wData.windMph < 5 ? 'calm'
+            : wData.windMph < 15 ? 'light'
+            : wData.windMph < 25 ? 'moderate' : 'heavy'
+        }
+        setScenarioFilters(f => ({ ...f, ...updates }))
+        setAutoFilled(prev => new Set([...prev, ...Object.keys(updates)]))
+      })
+      .catch(() => {})
+      .finally(() => setFutureWeatherLoading(false))
+  }, [tripDate, result?.coords?.lat, result?.coords?.lng])
 
   // Merge active filters for API call
   function buildApiFilters(isScenario = false) {
