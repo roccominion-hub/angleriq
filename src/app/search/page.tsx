@@ -473,6 +473,12 @@ export default function SearchPage() {
     setSecondaryRec('')
     setMilkRun(null)
     setWeather(null)
+    // Clear all filters on every new search
+    setNowFilters({ baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all', style: 'all' })
+    setScenarioFilters({ season: 'all', timeOfDay: 'all', weatherConditions: 'all', waterTemp: 'all', waterClarity: 'all', baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', airTemp: 'all', wind: 'all' })
+    setYearRange([2019, CURRENT_YEAR])
+    setTripDate('')
+    setAutoFilled(new Set())
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
