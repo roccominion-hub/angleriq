@@ -13,10 +13,10 @@ import { LakeMap } from '@/components/LakeMap'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
-  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X
+  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, Moon
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
-import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
+import { solunarRatingColor, getMoonAge, getMoonIllumination, getMoonPhaseLabel, getSolunarRating, getMoonData, type MoonData } from '@/lib/moonphase'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
@@ -120,21 +120,31 @@ function getTackleSetup(baitType: string, _weightOz: number) {
   return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '12-17 lb' }
 }
 
-function FilterSelect({ label, icon, value, onValueChange, options, placeholder }: {
+function FilterSelect({ label, icon, value, onValueChange, options, placeholder, required, autoFilled }: {
   label: string; icon: React.ReactNode; value: string
   onValueChange: (v: string) => void
   options: { value: string; label: string }[]
   placeholder: string
+  required?: boolean
+  autoFilled?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
         {icon}{label}
+        {required && <span className="text-red-400 font-bold leading-none">*</span>}
+        {autoFilled && (
+          <span className="normal-case font-semibold text-[10px] text-green-700 bg-green-50 border border-green-200 px-1 py-0.5 rounded leading-none">auto</span>
+        )}
       </label>
       <select
         value={value}
         onChange={e => onValueChange(e.target.value)}
-        className="bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className={`text-slate-800 h-9 text-sm rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          autoFilled
+            ? 'bg-green-50 border border-green-300'
+            : 'bg-white border border-slate-200'
+        }`}
       >
         <option value="all">{placeholder}</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -146,7 +156,7 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder 
 function WeatherBar({ weather }: { weather: Weather }) {
   const moon = weather.moon
   const solunarColors = moon ? solunarRatingColor(moon.solunarRating) : ''
-  const [showSolunar, setShowSolunar] = useState(false)
+  const [showSolunar, setShowSolunar] = useState(true)
 
   return (
     <div className="space-y-2">
@@ -320,6 +330,12 @@ export default function SearchPage() {
     fishDepth: 'all', locationType: 'all', structure: 'all',
   })
 
+  // Future Trip state
+  const [tripDate, setTripDate] = useState('')
+  const [futureMoon, setFutureMoon] = useState<MoonData | null>(null)
+  const [futureWeatherLoading, setFutureWeatherLoading] = useState(false)
+  const [autoFilled, setAutoFilled] = useState<Set<string>>(new Set())
+
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'now' | 'scenario'>('now')
   const [reportsOpen, setReportsOpen] = useState(false)
@@ -343,6 +359,59 @@ export default function SearchPage() {
   }
   function setScenarioFilter(key: string, value: string) {
     setScenarioFilters(f => ({ ...f, [key]: value }))
+  }
+  function setScenarioFilterManual(key: string, value: string) {
+    setScenarioFilters(f => ({ ...f, [key]: value }))
+    setAutoFilled(prev => { const n = new Set(prev); n.delete(key); return n })
+  }
+
+  async function handleTripDateChange(date: string) {
+    setTripDate(date)
+    if (!date) {
+      setFutureMoon(null)
+      setAutoFilled(new Set())
+      return
+    }
+
+    // Compute season and moon from date locally
+    const d = new Date(date + 'T12:00:00Z')
+    const month = d.getUTCMonth() + 1
+    const season = month >= 3 && month <= 5 ? 'spring'
+      : month >= 6 && month <= 8 ? 'summer'
+      : month >= 9 && month <= 11 ? 'fall' : 'winter'
+
+    // Use result coords if available, else 0/0 (moon phase doesn't need lat/lng for phase)
+    const lat = result?.coords?.lat ?? 0
+    const lng = result?.coords?.lng ?? 0
+    const moon = getMoonData(d, lat, lng, 0)
+    setFutureMoon(moon)
+
+    const newAutoFilled = new Set<string>(['season'])
+    setScenarioFilter('season', season)
+
+    // Fetch forecast weather if coords are available
+    if (result?.coords?.lat && result?.coords?.lng) {
+      const now = new Date()
+      const daysOut = Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (daysOut > 0 && daysOut <= 16) {
+        setFutureWeatherLoading(true)
+        try {
+          const wRes = await fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${date}`)
+          const wData = await wRes.json()
+          if (wData.forecastAvailable) {
+            if (wData.weatherConditions && wData.weatherConditions !== 'all') {
+              setScenarioFilter('weatherConditions', wData.weatherConditions)
+              newAutoFilled.add('weatherConditions')
+            }
+          }
+        } catch { /* weather optional */ } finally {
+          setFutureWeatherLoading(false)
+        }
+      }
+    }
+
+    setAutoFilled(newAutoFilled)
   }
 
   // Merge active filters for API call
@@ -566,8 +635,8 @@ export default function SearchPage() {
                   onClick={() => setFilterTab('scenario')}
                   className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${filterTab === 'scenario' ? 'border-purple-500 text-purple-700 bg-purple-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
                 >
-                  <Clock size={14} className={filterTab === 'scenario' ? 'text-purple-600' : 'text-slate-400'} />
-                  Different Time or Conditions
+                  <Calendar size={14} className={filterTab === 'scenario' ? 'text-purple-600' : 'text-slate-400'} />
+                  Future Trip
                 </button>
               </div>
 
@@ -601,23 +670,113 @@ export default function SearchPage() {
                 </div>
               )}
 
-              {/* Scenario tab */}
+              {/* Future Trip tab */}
               {filterTab === 'scenario' && (
                 <div className="p-4 space-y-4">
-                  <p className="text-xs text-slate-400">Generate a report for a different time, season, or set of conditions — useful for planning a future trip.</p>
+                  <p className="text-xs text-slate-400">
+                    Plan intel for a future trip. Select a date and we&apos;ll auto-fill season, moon phase, and — if your trip is within 16 days — forecast weather conditions.
+                    Fields marked <span className="text-red-400 font-bold">*</span> are required for the best intel.
+                  </p>
+
+                  {/* Date Picker */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar size={12} /> Trip Date
+                    </label>
+                    <div className="flex items-center flex-wrap gap-3">
+                      <input
+                        type="date"
+                        value={tripDate}
+                        onChange={e => handleTripDateChange(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                      {futureWeatherLoading && (
+                        <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <RefreshCw size={11} className="animate-spin" /> Fetching forecast…
+                        </span>
+                      )}
+                      {tripDate && !futureWeatherLoading && autoFilled.size > 0 && (
+                        <span className="text-xs text-green-700 font-semibold flex items-center gap-1 bg-green-50 border border-green-200 px-2 py-1 rounded-md">
+                          ✓ Conditions auto-filled from {autoFilled.has('weatherConditions') ? 'forecast' : 'date'}
+                        </span>
+                      )}
+                      {tripDate && !result?.coords && (
+                        <span className="text-xs text-slate-400 italic">Select a lake and search to auto-fill weather</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Moon Phase Panel (auto-shown when date selected) */}
+                  {futureMoon && tripDate && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Moon size={12} /> Moon &amp; Solunar — {new Date(tripDate + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <div className="bg-slate-900 text-white rounded-lg px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Moon Phase</p>
+                          <p className="font-bold">{futureMoon.emoji} {futureMoon.phase}</p>
+                          <p className="text-slate-300">{futureMoon.illumination}% illuminated</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Solunar Activity</p>
+                          <p className={`font-bold capitalize ${futureMoon.solunarRating === 'excellent' ? 'text-green-400' : futureMoon.solunarRating === 'good' ? 'text-blue-400' : futureMoon.solunarRating === 'fair' ? 'text-amber-400' : 'text-slate-400'}`}>
+                            {futureMoon.solunarLabel}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Major Periods</p>
+                          {futureMoon.majorPeriods.map((p, i) => <p key={i} className="text-green-300 font-semibold">{p}</p>)}
+                        </div>
+                        <div>
+                          <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Minor Periods</p>
+                          {futureMoon.minorPeriods.map((p, i) => <p key={i} className="text-blue-300">{p}</p>)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Condition Filters */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    <FilterSelect label="Season" icon={<Sun size={12} />} value={scenarioFilters.season} onValueChange={v => setScenarioFilter('season', v)} placeholder="All seasons"
+                    <FilterSelect label="Season" icon={<Sun size={12} />} required
+                      autoFilled={autoFilled.has('season')}
+                      value={scenarioFilters.season}
+                      onValueChange={v => setScenarioFilterManual('season', v)}
+                      placeholder="All seasons"
                       options={[{ value: 'spring', label: 'Spring' }, { value: 'summer', label: 'Summer' }, { value: 'fall', label: 'Fall' }, { value: 'winter', label: 'Winter' }]} />
-                    <FilterSelect label="Time of Day" icon={<Clock size={12} />} value={scenarioFilters.timeOfDay} onValueChange={v => setScenarioFilter('timeOfDay', v)} placeholder="Any time"
-                      options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
-                    <FilterSelect label="Weather" icon={<Cloud size={12} />} value={scenarioFilters.weatherConditions} onValueChange={v => setScenarioFilter('weatherConditions', v)} placeholder="Any weather"
+                    <FilterSelect label="Weather" icon={<Cloud size={12} />} required
+                      autoFilled={autoFilled.has('weatherConditions')}
+                      value={scenarioFilters.weatherConditions}
+                      onValueChange={v => setScenarioFilterManual('weatherConditions', v)}
+                      placeholder="Any weather"
                       options={[{ value: 'sunny', label: 'Sunny / Clear' }, { value: 'overcast', label: 'Overcast / Cloudy' }, { value: 'rainy', label: 'Rainy / Post-Rain' }, { value: 'windy', label: 'Windy' }, { value: 'cold-front', label: 'Cold Front' }]} />
-                    <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} value={scenarioFilters.waterTemp} onValueChange={v => setScenarioFilter('waterTemp', v)} placeholder="Any temp"
+                    <FilterSelect label="Water Temp" icon={<Thermometer size={12} />} required
+                      value={scenarioFilters.waterTemp}
+                      onValueChange={v => setScenarioFilterManual('waterTemp', v)}
+                      placeholder="Any temp"
                       options={[{ value: 'cold', label: 'Cold (< 50°F)' }, { value: 'cool', label: 'Cool (50–60°F)' }, { value: 'warm', label: 'Warm (60–70°F)' }, { value: 'hot', label: 'Hot (70°F+)' }]} />
-                    <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={scenarioFilters.waterClarity} onValueChange={v => setScenarioFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
-                    <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={scenarioFilters.baitType} onValueChange={v => setScenarioFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
-                    <FilterSelect label="Location" icon={<Anchor size={12} />} value={scenarioFilters.locationType} onValueChange={v => setScenarioFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
-                    <FilterSelect label="Structure" icon={<Layers size={12} />} value={scenarioFilters.structure} onValueChange={v => setScenarioFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                    <FilterSelect label="Time of Day" icon={<Clock size={12} />}
+                      value={scenarioFilters.timeOfDay}
+                      onValueChange={v => setScenarioFilterManual('timeOfDay', v)}
+                      placeholder="Any time"
+                      options={[{ value: 'morning', label: 'Morning' }, { value: 'midday', label: 'Midday' }, { value: 'evening', label: 'Evening' }, { value: 'night', label: 'Night' }]} />
+                    <FilterSelect label="Water Clarity" icon={<Droplets size={12} />}
+                      value={scenarioFilters.waterClarity}
+                      onValueChange={v => setScenarioFilterManual('waterClarity', v)}
+                      placeholder="Any clarity" options={CLARITY_OPTIONS} />
+                    <FilterSelect label="Bait Type" icon={<Fish size={12} />}
+                      value={scenarioFilters.baitType}
+                      onValueChange={v => setScenarioFilterManual('baitType', v)}
+                      placeholder="All baits" options={BAIT_OPTIONS} />
+                    <FilterSelect label="Location" icon={<Anchor size={12} />}
+                      value={scenarioFilters.locationType}
+                      onValueChange={v => setScenarioFilterManual('locationType', v)}
+                      placeholder="Any location" options={LOCATION_OPTIONS} />
+                    <FilterSelect label="Structure" icon={<Layers size={12} />}
+                      value={scenarioFilters.structure}
+                      onValueChange={v => setScenarioFilterManual('structure', v)}
+                      placeholder="Any structure" options={STRUCTURE_OPTIONS} />
                   </div>
                 </div>
               )}
