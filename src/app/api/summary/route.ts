@@ -355,7 +355,7 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
   const intelExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const todayExpiry = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
 
-  if (!cachedIntel && intelText) {
+  if (!cachedIntel && intelText && intelText.length > 50) {
     await supabase.from('summary_cache').upsert({
       cache_key: intelKey,
       intel: intelText,
@@ -364,7 +364,7 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     })
   }
 
-  if (!cachedToday && todayText) {
+  if (!cachedToday && todayText && todayText.length > 50) {
     await supabase.from('summary_cache').upsert({
       cache_key: todayKey,
       intel: intelText || '',
