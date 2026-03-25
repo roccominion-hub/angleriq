@@ -1,25 +1,10 @@
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Logo } from '@/components/Logo'
-import { MapPin, Trophy, Sparkles, ChevronRight } from 'lucide-react'
+import { MapPin, Trophy, Sparkles } from 'lucide-react'
+import { HomeNav, HomeCTA } from '@/components/HomeNav'
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
-        <Logo className="h-8 w-auto" />
-        <div className="flex gap-3 items-center">
-          <Link href="/search" className="text-sm font-semibold text-slate-600 hover:text-blue-600 transition-colors">
-            Search
-          </Link>
-          <Link href="/search">
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-5">
-              Get Started Free
-            </Button>
-          </Link>
-        </div>
-      </nav>
+      <HomeNav />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-slate-50 to-white px-6 py-24 text-center">
@@ -36,12 +21,7 @@ export default function Home() {
           — then delivers actionable fishing intelligence for your body of water.
         </p>
         <div className="flex gap-3 justify-center">
-          <Link href="/search">
-            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg">
-              Search a Lake
-              <ChevronRight size={18} className="ml-1" />
-            </Button>
-          </Link>
+          <HomeCTA />
         </div>
       </section>
 
