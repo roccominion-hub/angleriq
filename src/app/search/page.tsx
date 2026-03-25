@@ -726,7 +726,11 @@ export default function SearchPage() {
         coords: result?.coords,
         water: result?.water,
       },
-      summary_data: summary,
+      summary_data: {
+        ...summary,
+        secondaryRec: secondaryRec || null,
+        milkRun: milkRun || null,
+      },
       weather_data: weather,
     }).select('id').single()
     if (data) setSavedReportId(data.id)
