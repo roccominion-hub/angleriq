@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +18,8 @@ import {
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
+import { NavUserMenu } from '@/components/NavUserMenu'
+import { createClient } from '@/lib/supabase/client'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
@@ -520,8 +523,11 @@ function FilterBreadcrumbs({
 }
 
 export default function SearchPage() {
+  const router = useRouter()
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
+  const [savedReportId, setSavedReportId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   // Right-now filters
   const [nowFilters, setNowFilters] = useState({
@@ -560,6 +566,10 @@ export default function SearchPage() {
   useEffect(() => {
     fetch('/api/lakes').then(r => r.json()).then(setLakes)
   }, [])
+
+  useEffect(() => {
+    setSavedReportId(null)
+  }, [selectedLake])
 
   function setNowFilter(key: string, value: string) {
     setNowFilters(f => ({ ...f, [key]: value }))
@@ -697,6 +707,32 @@ export default function SearchPage() {
     setAutoFilled(new Set())
   }
 
+  async function saveReport() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/auth/login?next=/search'); return }
+    setSaving(true)
+    const { data } = await supabase.from('saved_reports').insert({
+      user_id: user.id,
+      lake_name: selectedLake,
+      lake_state: result?.water?.state,
+      lake_type: result?.water?.type,
+      trip_date: tripDate || null,
+      filters: buildApiFilters(!!tripDate),
+      result_data: {
+        topBaits: result?.topBaits,
+        topPatterns: result?.topPatterns,
+        sampleSize: result?.sampleSize,
+        coords: result?.coords,
+        water: result?.water,
+      },
+      summary_data: summary,
+      weather_data: weather,
+    }).select('id').single()
+    if (data) setSavedReportId(data.id)
+    setSaving(false)
+  }
+
   async function handleSearch() {
     if (!selectedLake) return
     setLoading(true)
@@ -707,6 +743,7 @@ export default function SearchPage() {
     setSecondaryRec('')
     setMilkRun(null)
     setWeather(null)
+    setSavedReportId(null)
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -866,9 +903,7 @@ export default function SearchPage() {
     <main className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">
-          Get Started Free
-        </Button>
+        <NavUserMenu />
       </nav>
 
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -1067,6 +1102,26 @@ export default function SearchPage() {
             </div>
 
             {weather && <WeatherBar weather={weather} />}
+
+            {result && !loading && (
+              <div className="flex justify-end mb-1">
+                {savedReportId ? (
+                  <span className="flex items-center gap-1.5 text-green-700 text-sm font-semibold bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
+                    ✓ Report saved — <Link href="/account" className="underline underline-offset-2">view in My Reports</Link>
+                  </span>
+                ) : (
+                  <Button
+                    onClick={saveReport}
+                    disabled={saving || !summary.intel}
+                    variant="outline"
+                    size="sm"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold text-xs h-8 gap-1.5"
+                  >
+                    {saving ? 'Saving...' : '💾 Save Report'}
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* AI Summary card */}
             <Card className="border-blue-100 shadow-none overflow-hidden">
