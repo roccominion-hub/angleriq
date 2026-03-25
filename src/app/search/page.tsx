@@ -20,7 +20,7 @@ import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
-interface Weather { tempF: number; feelsLikeF: number; cloudCoverPct: number; windMph: number; precipitation: number; skyCondition: string; timeOfDay: string; season: string; weatherDesc: string; moon?: MoonData }
+interface Weather { tempF?: number; feelsLikeF?: number; tempLowF?: number; cloudCoverPct?: number; windMph?: number; precipitation?: number; skyCondition?: string; timeOfDay?: string; season?: string; weatherDesc?: string; moon?: MoonData; forecastDate?: string; weatherConditions?: string }
 interface SearchResult {
   water: Lake & { lat: number; lng: number }
   sampleSize: number
@@ -241,22 +241,49 @@ function WeatherBar({ weather }: { weather: Weather }) {
   const moon = weather.moon
   const solunarColors = moon ? solunarRatingColor(moon.solunarRating) : ''
   const [showSolunar, setShowSolunar] = useState(true)
+  const isForecast = !!weather.forecastDate
+
+  // Format trip date for display
+  const formattedTripDate = weather.forecastDate
+    ? new Date(weather.forecastDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    : null
 
   return (
     <div className="space-y-2">
-      {/* Current conditions row */}
-      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5">
-        <span className="font-bold text-slate-800">{weather.tempF}°F</span>
+      {/* Conditions row */}
+      <div className={`flex flex-wrap items-center gap-3 text-sm text-slate-600 rounded-lg px-4 py-2.5 border ${isForecast ? 'bg-purple-50 border-purple-200' : 'bg-slate-50 border-slate-200'}`}>
+        {/* Forecast badge + date */}
+        {isForecast && (
+          <>
+            <span className="text-xs font-bold text-purple-700 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-full uppercase tracking-wide">Trip Forecast</span>
+            <span className="font-semibold text-purple-800">{formattedTripDate}</span>
+            <span className="text-slate-400">·</span>
+          </>
+        )}
+        <span className="font-bold text-slate-800">
+          {weather.tempF}°F{weather.tempLowF != null ? ` / ${weather.tempLowF}°F` : ''}
+        </span>
         <span className="text-slate-400">·</span>
         <span className="capitalize">{weather.skyCondition}</span>
         <span className="text-slate-400">·</span>
         <span className="flex items-center gap-1"><Wind size={13} />{weather.windMph} mph</span>
-        {weather.precipitation > 0 && (
+        {(weather.precipitation ?? 0) > 0 && (
           <><span className="text-slate-400">·</span>
           <span className="flex items-center gap-1"><Droplets size={13} />{weather.precipitation}mm</span></>
         )}
-        <span className="text-slate-400">·</span>
-        <span className="capitalize text-blue-600 font-semibold">{weather.timeOfDay}</span>
+        {/* Only show timeOfDay for current conditions or if explicitly set */}
+        {!isForecast && weather.timeOfDay && (
+          <>
+            <span className="text-slate-400">·</span>
+            <span className="capitalize text-blue-600 font-semibold">{weather.timeOfDay}</span>
+          </>
+        )}
+        {isForecast && weather.timeOfDay && (
+          <>
+            <span className="text-slate-400">·</span>
+            <span className="capitalize text-purple-700 font-semibold">{weather.timeOfDay}</span>
+          </>
+        )}
 
         {/* Moon + solunar inline */}
         {moon && (
@@ -697,12 +724,25 @@ export default function SearchPage() {
       let currentWeather: Weather | null = null
       if (data.coords?.lat && data.coords?.lng) {
         try {
-          const wRes = await fetch(`/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`)
+          // If a trip date is set, fetch forecast for that date; otherwise fetch current conditions
+          const weatherUrl = tripDate
+            ? `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}&date=${tripDate}`
+            : `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`
+          const wRes = await fetch(weatherUrl)
           currentWeather = await wRes.json()
+
+          // For future trips, use user-selected timeOfDay (or omit if not set)
+          if (tripDate) {
+            const selectedTime = scenarioFilters.timeOfDay !== 'all' ? scenarioFilters.timeOfDay : undefined
+            currentWeather = { ...currentWeather, timeOfDay: selectedTime }
+          }
+
           setWeather(currentWeather)
         } catch { /* weather is optional */ }
       }
 
+      // Build filters: use scenario filters when trip date is set, now filters otherwise
+      const isScenario = !!tripDate
       fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -714,7 +754,7 @@ export default function SearchPage() {
           topPatterns: data.topPatterns,
           reports: data.reports,
           weather: currentWeather,
-          filters: { ...buildApiFilters(), style: nowFilters.style },
+          filters: { ...buildApiFilters(isScenario), style: nowFilters.style },
         })
       }).then(r => r.json()).then(d => setSummary({ intel: d.intel || '', today: d.today || '' })).finally(() => setSummaryLoading(false))
 
