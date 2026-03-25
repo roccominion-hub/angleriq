@@ -326,6 +326,84 @@ function BuyButton({ baitName }: { baitName: string }) {
   )
 }
 
+// Label maps for filter breadcrumbs
+const NOW_FILTER_LABELS: Record<string, Record<string, string>> = {
+  baitType: { 'soft plastic': 'Soft Plastic', jig: 'Jig', crankbait: 'Crankbait', jerkbait: 'Jerkbait', topwater: 'Topwater', swimbait: 'Swimbait', 'bladed jig': 'Bladed Jig', spinnerbait: 'Spinnerbait', spoon: 'Spoon', 'drop shot': 'Drop Shot', 'ned rig': 'Ned Rig' },
+  fishDepth: { surface: 'Surface', suspended: 'Suspended', bottom: 'Bottom' },
+  locationType: { shoreline: 'Shoreline', nearshore: 'Near Shore', offshore: 'Offshore' },
+  structure: { grass: 'Grass', dock: 'Docks', laydown: 'Laydowns', point: 'Points', hump: 'Humps', channel: 'Channel', timber: 'Timber', rock: 'Rock' },
+  waterClarity: { clear: 'Clear Water', stained: 'Stained', muddy: 'Muddy' },
+  style: { power: '💪 Power Fishing', finesse: '🪶 Finesse' },
+}
+const SCENARIO_FILTER_LABELS: Record<string, Record<string, string>> = {
+  season: { spring: '🌱 Spring', summer: '☀️ Summer', fall: '🍂 Fall', winter: '❄️ Winter' },
+  timeOfDay: { morning: '🌅 Morning', midday: '☀️ Midday', evening: '🌇 Evening', night: '🌙 Night' },
+  weatherConditions: { sunny: '☀️ Sunny', overcast: '☁️ Overcast', rainy: '🌧️ Rainy', windy: '💨 Windy', 'cold-front': '🥶 Cold Front' },
+  airTemp: { cold: 'Air: Cold', cool: 'Air: Cool', mild: 'Air: Mild', warm: 'Air: Warm', hot: 'Air: Hot' },
+  wind: { calm: 'Wind: Calm', light: 'Wind: Light', moderate: 'Wind: Moderate', heavy: 'Wind: Heavy' },
+  waterTemp: { cold: 'Water: Cold', cool: 'Water: Cool', warm: 'Water: Warm', hot: 'Water: Hot' },
+  waterClarity: { clear: 'Clear Water', stained: 'Stained', muddy: 'Muddy' },
+  baitType: { 'soft plastic': 'Soft Plastic', jig: 'Jig', crankbait: 'Crankbait', jerkbait: 'Jerkbait', topwater: 'Topwater', swimbait: 'Swimbait', 'bladed jig': 'Bladed Jig', spinnerbait: 'Spinnerbait', spoon: 'Spoon', 'drop shot': 'Drop Shot', 'ned rig': 'Ned Rig' },
+  locationType: { shoreline: 'Shoreline', nearshore: 'Near Shore', offshore: 'Offshore' },
+  structure: { grass: 'Grass', dock: 'Docks', laydown: 'Laydowns', point: 'Points', hump: 'Humps', channel: 'Channel', timber: 'Timber', rock: 'Rock' },
+}
+
+function FilterBreadcrumbs({
+  nowFilters, scenarioFilters, yearRange, tripDate, autoFilled,
+  onRemoveNow, onRemoveScenario, onClearAll,
+}: {
+  nowFilters: Record<string, string>
+  scenarioFilters: Record<string, string>
+  yearRange: number[]
+  tripDate: string
+  autoFilled: Set<string>
+  onRemoveNow: (key: string) => void
+  onRemoveScenario: (key: string) => void
+  onClearAll: () => void
+}) {
+  const chips: { label: string; onRemove: () => void; auto?: boolean }[] = []
+
+  Object.entries(nowFilters).forEach(([key, val]) => {
+    if (val === 'all') return
+    const label = NOW_FILTER_LABELS[key]?.[val] ?? val
+    chips.push({ label, onRemove: () => onRemoveNow(key) })
+  })
+
+  if (tripDate) {
+    chips.push({ label: `📅 ${tripDate}`, onRemove: () => onRemoveScenario('_tripDate') })
+  }
+
+  Object.entries(scenarioFilters).forEach(([key, val]) => {
+    if (val === 'all') return
+    const label = SCENARIO_FILTER_LABELS[key]?.[val] ?? val
+    chips.push({ label, onRemove: () => onRemoveScenario(key), auto: autoFilled.has(key) })
+  })
+
+  if (yearRange[0] !== 2019 || yearRange[1] !== CURRENT_YEAR) {
+    chips.push({ label: `${yearRange[0]}–${yearRange[1]}`, onRemove: () => onRemoveNow('_yearRange') })
+  }
+
+  if (chips.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wide shrink-0">Filters:</span>
+      {chips.map((chip, i) => (
+        <span key={i} className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${chip.auto ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-slate-200 text-slate-700'}`}>
+          {chip.label}
+          {chip.auto && <span className="text-[9px] text-green-500 font-bold uppercase leading-none">auto</span>}
+          <button onClick={chip.onRemove} className="ml-0.5 text-slate-400 hover:text-slate-700 leading-none">
+            <X size={10} />
+          </button>
+        </span>
+      ))}
+      <button onClick={onClearAll} className="text-xs text-red-500 hover:text-red-700 font-semibold ml-1 underline underline-offset-2">
+        Clear All
+      </button>
+    </div>
+  )
+}
+
 export default function SearchPage() {
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
@@ -370,6 +448,15 @@ export default function SearchPage() {
 
   function setNowFilter(key: string, value: string) {
     setNowFilters(f => ({ ...f, [key]: value }))
+  }
+  function removeNowFilter(key: string) {
+    if (key === '_yearRange') { setYearRange([2019, CURRENT_YEAR]); return }
+    setNowFilters(f => ({ ...f, [key]: 'all' }))
+  }
+  function removeScenarioFilter(key: string) {
+    if (key === '_tripDate') { setTripDate(''); setAutoFilled(new Set()); return }
+    setScenarioFilters(f => ({ ...f, [key]: 'all' }))
+    setAutoFilled(prev => { const n = new Set(prev); n.delete(key); return n })
   }
   function setScenarioFilter(key: string, value: string) {
     setScenarioFilters(f => ({ ...f, [key]: value }))
@@ -463,6 +550,14 @@ export default function SearchPage() {
     }
   }
 
+  function clearAllFilters() {
+    setNowFilters({ baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all', style: 'all' })
+    setScenarioFilters({ season: 'all', timeOfDay: 'all', weatherConditions: 'all', waterTemp: 'all', waterClarity: 'all', baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', airTemp: 'all', wind: 'all' })
+    setYearRange([2019, CURRENT_YEAR])
+    setTripDate('')
+    setAutoFilled(new Set())
+  }
+
   async function handleSearch() {
     if (!selectedLake) return
     setLoading(true)
@@ -473,12 +568,6 @@ export default function SearchPage() {
     setSecondaryRec('')
     setMilkRun(null)
     setWeather(null)
-    // Clear all filters on every new search
-    setNowFilters({ baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all', style: 'all' })
-    setScenarioFilters({ season: 'all', timeOfDay: 'all', weatherConditions: 'all', waterTemp: 'all', waterClarity: 'all', baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', airTemp: 'all', wind: 'all' })
-    setYearRange([2019, CURRENT_YEAR])
-    setTripDate('')
-    setAutoFilled(new Set())
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -652,6 +741,17 @@ export default function SearchPage() {
               </Button>
             </div>
           </div>
+
+          <FilterBreadcrumbs
+            nowFilters={nowFilters}
+            scenarioFilters={scenarioFilters}
+            yearRange={yearRange}
+            tripDate={tripDate}
+            autoFilled={autoFilled}
+            onRemoveNow={removeNowFilter}
+            onRemoveScenario={removeScenarioFilter}
+            onClearAll={clearAllFilters}
+          />
 
           {filtersOpen && (
             <div>
