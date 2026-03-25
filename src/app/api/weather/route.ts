@@ -79,12 +79,23 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // --- Too far out — return season + moon only ---
+    // --- Too far out — return season + moon + seasonal averages ---
     if (isTooFarOut && dateParam) {
       const month = targetDate.getUTCMonth() + 1
       const season = getSeasonFromMonth(month)
       const moon = getMoonData(targetDate, latF, lngF, 0)
-      return NextResponse.json({ season, moon, forecastAvailable: false, forecastDate: dateParam })
+      const seasonalAverages: Record<string, { airTemp: string; wind: string; waterTemp: string }> = {
+        spring: { airTemp: 'mild', wind: 'moderate', waterTemp: 'cool' },
+        summer: { airTemp: 'hot', wind: 'light', waterTemp: 'hot' },
+        fall: { airTemp: 'cool', wind: 'moderate', waterTemp: 'warm' },
+        winter: { airTemp: 'cold', wind: 'light', waterTemp: 'cold' },
+      }
+      return NextResponse.json({
+        season, moon,
+        forecastAvailable: false,
+        forecastDate: dateParam,
+        seasonalAverages: seasonalAverages[season] || null,
+      })
     }
 
     // --- Current conditions (default) ---

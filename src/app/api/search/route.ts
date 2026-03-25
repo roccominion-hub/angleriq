@@ -11,13 +11,15 @@ export async function GET(req: NextRequest) {
   const lake = searchParams.get('lake')
   const season = searchParams.get('season')
   const timeOfDay = searchParams.get('timeOfDay')
-  const baitType = searchParams.get('baitType')
   const fishDepth = searchParams.get('fishDepth')
-  const locationType = searchParams.get('locationType')
-  const structure = searchParams.get('structure')
   const waterClarity = searchParams.get('waterClarity')
   const yearFrom = searchParams.get('yearFrom') ? parseInt(searchParams.get('yearFrom')!) : 2015
   const yearTo = searchParams.get('yearTo') ? parseInt(searchParams.get('yearTo')!) : new Date().getFullYear()
+
+  // Multi-value filters (comma-separated)
+  const baitTypes = searchParams.get('baitType')?.split(',').map(s => s.trim()).filter(s => s && s !== 'all') || []
+  const locationTypes = searchParams.get('locationType')?.split(',').map(s => s.trim()).filter(s => s && s !== 'all') || []
+  const structureVals = searchParams.get('structure')?.split(',').map(s => s.trim()).filter(s => s && s !== 'all') || []
 
   if (!lake) return NextResponse.json({ error: 'lake is required' }, { status: 400 })
 
@@ -45,21 +47,41 @@ export async function GET(req: NextRequest) {
   if (season) query = query.eq('season', season)
   if (timeOfDay) query = query.eq('time_of_day', timeOfDay)
   if (fishDepth) query = query.eq('fish_depth', fishDepth)
-  if (locationType) query = query.eq('location_type', locationType)
-  if (structure) query = query.ilike('structure', `%${structure}%`)
   if (waterClarity) query = query.eq('conditions.water_clarity', waterClarity)
   if (yearFrom) query = query.gte('reported_date', `${yearFrom}-01-01`)
   if (yearTo) query = query.lte('reported_date', `${yearTo}-12-31`)
+
+  // Multi-value location/structure filters
+  if (locationTypes.length === 1) query = query.eq('location_type', locationTypes[0])
+  else if (locationTypes.length > 1) query = query.in('location_type', locationTypes)
+
+  if (structureVals.length === 1) query = query.ilike('structure', `%${structureVals[0]}%`)
+  else if (structureVals.length > 1) {
+    const orClause = structureVals.map(s => `structure.ilike.%${s}%`).join(',')
+    query = query.or(orClause)
+  }
 
   const { data: reports, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Filter reports by baitType if specified (post-query, related table)
+  let filteredReports = reports || []
+  if (baitTypes.length > 0) {
+    filteredReports = filteredReports.filter((r: any) =>
+      r.bait_used?.some((b: any) =>
+        baitTypes.some(bt => b.bait_type?.toLowerCase().includes(bt) || b.bait_name?.toLowerCase().includes(bt))
+      )
+    )
+  }
+  // Fall back to all reports if filter yields 0
+  const reportsForAgg = filteredReports.length > 0 ? filteredReports : (reports || [])
+
   // Aggregate bait frequency
   const baitFrequency: Record<string, number> = {}
   const patternFrequency: Record<string, number> = {}
 
-  reports?.forEach(r => {
+  reportsForAgg.forEach((r: any) => {
     r.bait_used?.forEach((b: any) => {
       const key = b.bait_name || b.bait_type
       if (key) baitFrequency[key] = (baitFrequency[key] || 0) + 1
@@ -87,10 +109,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     water,
-    sampleSize: reports?.length || 0,
+    sampleSize: reportsForAgg.length,
+    unfilteredCount: reports?.length || 0,
     topBaits,
     topPatterns,
-    reports: reports?.slice(0, 20) || [],
+    reports: reportsForAgg.slice(0, 20),
     coords: { lat: water.lat, lng: water.lng },
   })
 }

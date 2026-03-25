@@ -134,6 +134,76 @@ function getTackleSetup(baitType: string, _weightOz: number) {
   return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '12-17 lb' }
 }
 
+function toggleMultiFilter(
+  setter: React.Dispatch<React.SetStateAction<any>>,
+  key: string,
+  value: string
+) {
+  setter((f: any) => {
+    const current = f[key] === 'all' ? [] : (f[key] as string).split(',').filter(Boolean)
+    const updated = current.includes(value) ? current.filter((v: string) => v !== value) : [...current, value]
+    return { ...f, [key]: updated.length === 0 ? 'all' : updated.join(',') }
+  })
+}
+
+function MultiFilterSelect({ label, icon, value, onToggle, options, placeholder }: {
+  label: string; icon: React.ReactNode; value: string
+  onToggle: (v: string) => void
+  options: { value: string; label: string }[]
+  placeholder: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = value === 'all' || !value ? [] : value.split(',').filter(Boolean)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const displayText = selected.length === 0
+    ? placeholder
+    : selected.length === 1
+      ? options.find(o => o.value === selected[0])?.label || selected[0]
+      : `${selected.length} selected`
+
+  return (
+    <div ref={ref} className="flex flex-col gap-1.5 relative">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+        {icon}{label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`text-slate-800 h-9 text-sm rounded-md px-2.5 text-left flex items-center justify-between gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          selected.length > 0 ? 'bg-blue-50 border border-blue-300' : 'bg-white border border-slate-200'
+        }`}
+      >
+        <span className={selected.length > 0 ? 'text-blue-800 font-semibold' : 'text-slate-500'}>{displayText}</span>
+        <ChevronDown size={13} className="text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {options.map(o => (
+            <label key={o.value} className="flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={selected.includes(o.value)}
+                onChange={() => onToggle(o.value)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FilterSelect({ label, icon, value, onValueChange, options, placeholder, required, autoFilled }: {
   label: string; icon: React.ReactNode; value: string
   onValueChange: (v: string) => void
@@ -364,9 +434,18 @@ function FilterBreadcrumbs({
   const chips: { label: string; onRemove: () => void; auto?: boolean }[] = []
 
   Object.entries(nowFilters).forEach(([key, val]) => {
-    if (val === 'all') return
-    const label = NOW_FILTER_LABELS[key]?.[val] ?? val
-    chips.push({ label, onRemove: () => onRemoveNow(key) })
+    if (val === 'all' || !val) return
+    const values = val.includes(',') ? val.split(',') : [val]
+    values.forEach(v => {
+      const label = NOW_FILTER_LABELS[key]?.[v] ?? v
+      chips.push({ label, onRemove: () => {
+        if (val.includes(',')) {
+          onRemoveNow(key + ':' + v)
+        } else {
+          onRemoveNow(key)
+        }
+      }})
+    })
   })
 
   if (tripDate) {
@@ -374,9 +453,18 @@ function FilterBreadcrumbs({
   }
 
   Object.entries(scenarioFilters).forEach(([key, val]) => {
-    if (val === 'all') return
-    const label = SCENARIO_FILTER_LABELS[key]?.[val] ?? val
-    chips.push({ label, onRemove: () => onRemoveScenario(key), auto: autoFilled.has(key) })
+    if (val === 'all' || !val) return
+    const values = val.includes(',') ? val.split(',') : [val]
+    values.forEach(v => {
+      const label = SCENARIO_FILTER_LABELS[key]?.[v] ?? v
+      chips.push({ label, onRemove: () => {
+        if (val.includes(',')) {
+          onRemoveScenario(key + ':' + v)
+        } else {
+          onRemoveScenario(key)
+        }
+      }, auto: autoFilled.has(key) })
+    })
   })
 
   if (yearRange[0] !== 2019 || yearRange[1] !== CURRENT_YEAR) {
@@ -449,14 +537,25 @@ export default function SearchPage() {
   function setNowFilter(key: string, value: string) {
     setNowFilters(f => ({ ...f, [key]: value }))
   }
-  function removeNowFilter(key: string) {
-    if (key === '_yearRange') { setYearRange([2019, CURRENT_YEAR]); return }
-    setNowFilters(f => ({ ...f, [key]: 'all' }))
+  function removeNowFilter(keyOrKeyVal: string) {
+    if (keyOrKeyVal === '_yearRange') { setYearRange([2019, CURRENT_YEAR]); return }
+    if (keyOrKeyVal.includes(':')) {
+      const [key, val] = keyOrKeyVal.split(':')
+      toggleMultiFilter(setNowFilters, key, val)
+      return
+    }
+    setNowFilters(f => ({ ...f, [keyOrKeyVal]: 'all' }))
   }
-  function removeScenarioFilter(key: string) {
-    if (key === '_tripDate') { setTripDate(''); setAutoFilled(new Set()); return }
-    setScenarioFilters(f => ({ ...f, [key]: 'all' }))
-    setAutoFilled(prev => { const n = new Set(prev); n.delete(key); return n })
+  function removeScenarioFilter(keyOrKeyVal: string) {
+    if (keyOrKeyVal === '_tripDate') { setTripDate(''); setAutoFilled(new Set()); return }
+    if (keyOrKeyVal.includes(':')) {
+      const [key, val] = keyOrKeyVal.split(':')
+      toggleMultiFilter(setScenarioFilters, key, val)
+      setAutoFilled(prev => { const n = new Set(prev); n.delete(key); return n })
+      return
+    }
+    setScenarioFilters(f => ({ ...f, [keyOrKeyVal]: 'all' }))
+    setAutoFilled(prev => { const n = new Set(prev); n.delete(keyOrKeyVal); return n })
   }
   function setScenarioFilter(key: string, value: string) {
     setScenarioFilters(f => ({ ...f, [key]: value }))
@@ -493,32 +592,45 @@ export default function SearchPage() {
     const d = new Date(tripDate + 'T12:00:00Z')
     const now = new Date()
     const daysOut = Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysOut <= 0 || daysOut > 16) return
+    if (daysOut <= 0) return
 
     setFutureWeatherLoading(true)
     fetch(`/api/weather?lat=${result.coords.lat}&lng=${result.coords.lng}&date=${tripDate}`)
       .then(r => r.json())
       .then(wData => {
-        if (!wData.forecastAvailable) return
-        const updates: Record<string, string> = {}
-        if (wData.weatherConditions) updates.weatherConditions = wData.weatherConditions
-        if (wData.tempF != null) {
-          updates.airTemp = wData.tempF < 40 ? 'cold'
-            : wData.tempF < 55 ? 'cool'
-            : wData.tempF < 70 ? 'mild'
-            : wData.tempF < 85 ? 'warm' : 'hot'
-          // Refine water temp from actual forecast air temp
-          updates.waterTemp = wData.tempF < 45 ? 'cold'
-            : wData.tempF < 60 ? 'cool'
-            : wData.tempF < 75 ? 'warm' : 'hot'
+        if (wData.forecastAvailable) {
+          // Use real forecast data
+          const updates: Record<string, string> = {}
+          if (wData.weatherConditions) updates.weatherConditions = wData.weatherConditions
+          if (wData.tempF != null) {
+            updates.airTemp = wData.tempF < 40 ? 'cold'
+              : wData.tempF < 55 ? 'cool'
+              : wData.tempF < 70 ? 'mild'
+              : wData.tempF < 85 ? 'warm' : 'hot'
+            updates.waterTemp = wData.tempF < 45 ? 'cold'
+              : wData.tempF < 60 ? 'cool'
+              : wData.tempF < 75 ? 'warm' : 'hot'
+          }
+          if (wData.windMph != null) {
+            updates.wind = wData.windMph < 5 ? 'calm'
+              : wData.windMph < 15 ? 'light'
+              : wData.windMph < 25 ? 'moderate' : 'heavy'
+          }
+          if (Object.keys(updates).length > 0) {
+            setScenarioFilters(f => ({ ...f, ...updates }))
+            setAutoFilled(prev => new Set([...prev, ...Object.keys(updates)]))
+          }
+        } else if (wData.seasonalAverages) {
+          // Use seasonal averages for far-out dates (only fill if not already manually set)
+          const avgs = wData.seasonalAverages
+          setScenarioFilters(f => ({
+            ...f,
+            airTemp: f.airTemp === 'all' ? avgs.airTemp : f.airTemp,
+            wind: f.wind === 'all' ? avgs.wind : f.wind,
+            waterTemp: f.waterTemp === 'all' ? avgs.waterTemp : f.waterTemp,
+          }))
+          setAutoFilled(prev => new Set([...prev, 'airTemp', 'wind', 'waterTemp']))
         }
-        if (wData.windMph != null) {
-          updates.wind = wData.windMph < 5 ? 'calm'
-            : wData.windMph < 15 ? 'light'
-            : wData.windMph < 25 ? 'moderate' : 'heavy'
-        }
-        setScenarioFilters(f => ({ ...f, ...updates }))
-        setAutoFilled(prev => new Set([...prev, ...Object.keys(updates)]))
       })
       .catch(() => {})
       .finally(() => setFutureWeatherLoading(false))
@@ -778,10 +890,10 @@ export default function SearchPage() {
                 <div className="p-4 space-y-4">
                   <p className="text-xs text-slate-400">Refine the intel and recommendation for your current conditions.</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    <FilterSelect label="Bait Type" icon={<Fish size={12} />} value={nowFilters.baitType} onValueChange={v => setNowFilter('baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
+                    <MultiFilterSelect label="Bait Type" icon={<Fish size={12} />} value={nowFilters.baitType} onToggle={v => toggleMultiFilter(setNowFilters, 'baitType', v)} placeholder="All baits" options={BAIT_OPTIONS} />
                     <FilterSelect label="Fish Depth" icon={<Layers size={12} />} value={nowFilters.fishDepth} onValueChange={v => setNowFilter('fishDepth', v)} placeholder="Any depth" options={DEPTH_OPTIONS} />
-                    <FilterSelect label="Location" icon={<Anchor size={12} />} value={nowFilters.locationType} onValueChange={v => setNowFilter('locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
-                    <FilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onValueChange={v => setNowFilter('structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
+                    <MultiFilterSelect label="Location" icon={<Anchor size={12} />} value={nowFilters.locationType} onToggle={v => toggleMultiFilter(setNowFilters, 'locationType', v)} placeholder="Any location" options={LOCATION_OPTIONS} />
+                    <MultiFilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onToggle={v => toggleMultiFilter(setNowFilters, 'structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
                     <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={nowFilters.waterClarity} onValueChange={v => setNowFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
                     <FilterSelect label="Style" icon={<Feather size={12} />} value={nowFilters.style} onValueChange={v => setNowFilter('style', v)} placeholder="Any style"
                       options={[{ value: 'power', label: '💪 Power Fishing' }, { value: 'finesse', label: '🪶 Finesse Fishing' }]} />
@@ -881,17 +993,17 @@ export default function SearchPage() {
                       value={scenarioFilters.waterClarity}
                       onValueChange={v => setScenarioFilterManual('waterClarity', v)}
                       placeholder="Any clarity" options={CLARITY_OPTIONS} />
-                    <FilterSelect label="Bait Type" icon={<Fish size={12} />}
+                    <MultiFilterSelect label="Bait Type" icon={<Fish size={12} />}
                       value={scenarioFilters.baitType}
-                      onValueChange={v => setScenarioFilterManual('baitType', v)}
+                      onToggle={v => toggleMultiFilter(setScenarioFilters, 'baitType', v)}
                       placeholder="All baits" options={BAIT_OPTIONS} />
-                    <FilterSelect label="Location" icon={<Anchor size={12} />}
+                    <MultiFilterSelect label="Location" icon={<Anchor size={12} />}
                       value={scenarioFilters.locationType}
-                      onValueChange={v => setScenarioFilterManual('locationType', v)}
+                      onToggle={v => toggleMultiFilter(setScenarioFilters, 'locationType', v)}
                       placeholder="Any location" options={LOCATION_OPTIONS} />
-                    <FilterSelect label="Structure" icon={<Layers size={12} />}
+                    <MultiFilterSelect label="Structure" icon={<Layers size={12} />}
                       value={scenarioFilters.structure}
-                      onValueChange={v => setScenarioFilterManual('structure', v)}
+                      onToggle={v => toggleMultiFilter(setScenarioFilters, 'structure', v)}
                       placeholder="Any structure" options={STRUCTURE_OPTIONS} />
                   </div>
                 </div>

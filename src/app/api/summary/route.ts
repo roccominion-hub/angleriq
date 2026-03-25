@@ -17,6 +17,8 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   if (timeOfDay) queryParts.push(timeOfDay)
   if (conditions) queryParts.push(conditions)
   if (filters.pattern && filters.pattern !== 'all') queryParts.push(filters.pattern)
+  const baitTypes = filters.baitType && filters.baitType !== 'all' ? filters.baitType.split(',').map((s: string) => s.trim()) : []
+  if (baitTypes.length > 0) queryParts.push(baitTypes.join(' OR '))
   if (filters.bait_type && filters.bait_type !== 'all') queryParts.push(filters.bait_type)
   const queryText = queryParts.join(', ')
 
@@ -190,6 +192,95 @@ ${moonContext}` : `Current season: ${season || 'unknown'}`
     : ''
 
   const hasRag = rag.chunks.length > 0 || hasTechniqueRag
+
+  // --- Filter-aware prompt sections ---
+  const prefLines: string[] = []
+  if (filters) {
+    // baitType — check against topBaits and reports
+    const filterBaitTypes = filters.baitType && filters.baitType !== 'all'
+      ? filters.baitType.split(',').map((s: string) => s.trim())
+      : []
+    if (filterBaitTypes.length > 0) {
+      const matchingBaits = (topBaits || []).filter((b: any) =>
+        filterBaitTypes.some((bt: string) => b.name.toLowerCase().includes(bt.toLowerCase()))
+      )
+      if (matchingBaits.length > 0) {
+        prefLines.push(`Bait type preference: ${filterBaitTypes.join(', ')} — SUPPORTED by tournament data (${matchingBaits.map((b: any) => `${b.name} ×${b.count}`).join(', ')}). PRIORITIZE these bait types in your recommendation.`)
+      } else {
+        prefLines.push(`Bait type preference: ${filterBaitTypes.join(', ')} — NOTE: No significant tournament data on this lake specifically for this bait category. Acknowledge this gap and suggest the closest proven alternative. Do NOT ignore this note.`)
+      }
+    }
+
+    // fishDepth
+    if (filters.fishDepth && filters.fishDepth !== 'all') {
+      prefLines.push(`Depth preference: ${filters.fishDepth} — Angler wants to fish ${filters.fishDepth}. Adjust structure and technique suggestions accordingly.`)
+    }
+
+    // locationType
+    const filterLocationTypes = filters.locationType && filters.locationType !== 'all'
+      ? filters.locationType.split(',').map((s: string) => s.trim())
+      : []
+    if (filterLocationTypes.length > 0) {
+      prefLines.push(`Location preference: ${filterLocationTypes.join(', ')} — Focus patterns and structure on ${filterLocationTypes.join('/')} areas.`)
+    }
+
+    // structure
+    const filterStructureVals = filters.structure && filters.structure !== 'all'
+      ? filters.structure.split(',').map((s: string) => s.trim())
+      : []
+    if (filterStructureVals.length > 0) {
+      prefLines.push(`Structure preference: ${filterStructureVals.join(', ')} — Prioritize patterns that use ${filterStructureVals.join('/')} structure.`)
+    }
+
+    // style
+    if (filters.style && filters.style !== 'all') {
+      prefLines.push(`Fishing style: ${filters.style === 'power' ? 'POWER FISHING — Prioritize fast-moving, reaction baits and covering water.' : 'FINESSE FISHING — Prioritize slow, subtle presentations, lighter line, and finesse rigs.'}`)
+    }
+  }
+
+  // Conditions filter context — find historically matching reports
+  const condLines: string[] = []
+  if (filters) {
+    const scenarioConditions: string[] = []
+    if (filters.season && filters.season !== 'all') scenarioConditions.push(`Season: ${filters.season}`)
+    if (filters.timeOfDay && filters.timeOfDay !== 'all') scenarioConditions.push(`Time: ${filters.timeOfDay}`)
+    if (filters.weatherConditions && filters.weatherConditions !== 'all') scenarioConditions.push(`Weather: ${filters.weatherConditions}`)
+    if (filters.airTemp && filters.airTemp !== 'all') scenarioConditions.push(`Air temp: ${filters.airTemp}`)
+    if (filters.wind && filters.wind !== 'all') scenarioConditions.push(`Wind: ${filters.wind}`)
+    if (filters.waterTemp && filters.waterTemp !== 'all') scenarioConditions.push(`Water temp: ${filters.waterTemp}`)
+    if (filters.waterClarity && filters.waterClarity !== 'all') scenarioConditions.push(`Water clarity: ${filters.waterClarity}`)
+
+    if (scenarioConditions.length > 0) {
+      const matchingReports = (reports || []).filter((r: any) => {
+        let score = 0
+        if (filters.season && filters.season !== 'all' && r.season === filters.season) score++
+        if (filters.waterClarity && filters.waterClarity !== 'all' && r.conditions?.[0]?.water_clarity === filters.waterClarity) score++
+        if (filters.waterTemp && filters.waterTemp !== 'all') {
+          const wt = r.conditions?.[0]?.water_temp_f
+          if (wt) {
+            const bucket = wt < 50 ? 'cold' : wt < 60 ? 'cool' : wt < 70 ? 'warm' : 'hot'
+            if (bucket === filters.waterTemp) score++
+          }
+        }
+        return score >= 1
+      })
+      condLines.push(`PLANNED TRIP CONDITIONS: ${scenarioConditions.join(', ')}`)
+      if (matchingReports.length > 0) {
+        condLines.push(`Historical reports matching these conditions (${matchingReports.length} found): ${matchingReports.slice(0, 4).map((r: any) => `${r.pattern || 'pattern'}${r.season ? ' in ' + r.season : ''}`).join('; ')}`)
+        condLines.push(`Use these condition-matched reports as primary reference for the recommendation. These are real tournament results caught in similar conditions.`)
+      } else {
+        condLines.push(`No exact condition matches found in tournament data. Extrapolate from known patterns on this fishery adjusted for the planned conditions.`)
+      }
+    }
+  }
+
+  const prefFilterSection = prefLines.length > 0
+    ? `\nANGLER PREFERENCES — YOU MUST FOLLOW THESE:\n${prefLines.join('\n')}\n`
+    : ''
+  const condFilterSection = condLines.length > 0
+    ? `\nSCENARIO CONDITIONS CONTEXT:\n${condLines.join('\n')}\n`
+    : ''
+
   const intelInstruction = hasTechniqueRag
     ? `Use the VERIFIED TOURNAMENT REPORTS above as your PRIMARY source for the TOURNAMENT INTEL section. These are real tournament results from this fishery. Be specific — cite actual baits, techniques, structure, and depths from the reports. Do not add generic information not grounded in these sources.`
     : hasRag
@@ -208,7 +299,7 @@ ${historicalConditionsContext}
 ${weatherContext}
 
 ${colorContext}
-
+${prefFilterSection}${condFilterSection}
 ${intelInstruction}
 
 Write a detailed fishing intelligence report in TWO clearly labeled sections:
@@ -232,7 +323,9 @@ Write a detailed, actionable recommendation for fishing RIGHT NOW based on the c
 - [Solunar/moon phase note if relevant — mention major bite windows if solunar activity is good]
 - [Any other relevant condition note]
 
-Be direct and confident. Write like a knowledgeable local guide giving advice to a serious angler, not a generic fishing article. Avoid filler phrases.`
+Be direct and confident. Write like a knowledgeable local guide giving advice to a serious angler, not a generic fishing article. Avoid filler phrases.
+
+If ANGLER PREFERENCES were specified above, your recommendation MUST directly address them — either confirming tournament support for that approach or clearly noting the gap and offering a proven alternative. Never silently ignore specified preferences.`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
