@@ -7,19 +7,22 @@ interface LakeMapProps {
 }
 
 export function LakeMap({ lat, lng, name }: LakeMapProps) {
-  const bbox = `${lng - 0.15},${lat - 0.10},${lng + 0.15},${lat + 0.10}`
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`
-  const link = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=11/${lat}/${lng}`
+  // Use OSM static map image — no iframe, no CORS/X-Frame-Options issues
+  const zoom = 11
+  const width = 800
+  const height = 160
+  const src = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&markers=${lat},${lng},red-pushpin`
+  const link = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${zoom}/${lat}/${lng}`
 
   return (
     <div className="relative w-full overflow-hidden rounded-t-xl border-b border-blue-100" style={{ height: '160px' }}>
-      <iframe
+      <img
         src={src}
-        width="100%"
-        height="160"
-        style={{ border: 0, display: 'block' }}
+        alt={`Map of ${name}`}
+        width={width}
+        height={height}
+        className="w-full h-full object-cover"
         loading="lazy"
-        title={`Map of ${name}`}
       />
       <a
         href={link}

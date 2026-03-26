@@ -14,6 +14,7 @@ const LAKE = 'Sam Rayburn Reservoir'
 const STATE = 'TX'
 
 const SOURCES = [
+  // ── Previously ingested ──────────────────────────────────────────────────
   {
     url: 'https://www.wired2fish.com/where-to-fish/an-inside-look-at-sam-rayburn-reservoir',
     sourceType: 'article',
@@ -61,6 +62,88 @@ const SOURCES = [
     org: 'Bassmaster',
     date: '2022-01-01',
     notes: 'Darold Gleason on big baits for Sam Rayburn/Toledo Bend',
+  },
+
+  // ── New sources ───────────────────────────────────────────────────────────
+  {
+    url: 'https://www.wired2fish.com/news/hehr-and-johnston-win-bassmaster-college-series-event-at-sam-rayburn-reservoir',
+    sourceType: 'tournament',
+    tournament: 'Bassmaster College Series Sam Rayburn',
+    org: 'Bassmaster',
+    date: '2023-04-01',
+    notes: 'College Series win — techniques and baits used at Sam Rayburn',
+  },
+  {
+    url: 'https://www.wired2fish.com/news/murray-wins-2017-elite-series-on-toledo-bend',
+    sourceType: 'tournament',
+    tournament: '2017 Bassmaster Elite Toledo Bend',
+    org: 'Bassmaster',
+    date: '2017-03-01',
+    notes: 'Skeet Reese / Shannon Murray Elite win — techniques applicable to Rayburn/Toledo region',
+  },
+  {
+    url: 'https://www.wired2fish.com/bass-fishing/sam-rayburn-reservoir-fishing-tips',
+    sourceType: 'article',
+    tournament: undefined,
+    org: 'Wired2Fish',
+    date: '2022-06-01',
+    notes: 'General Rayburn tips — seasonal patterns, structure fishing',
+  },
+  {
+    url: 'https://www.wired2fish.com/news/bassmaster-open-at-sam-rayburn-reservoir-day-1-report',
+    sourceType: 'tournament',
+    tournament: 'Bassmaster Open Sam Rayburn',
+    org: 'Bassmaster',
+    date: '2023-03-01',
+    notes: 'Day 1 open report — early tournament techniques and conditions',
+  },
+  {
+    url: 'https://www.wired2fish.com/news/combs-wins-2023-mlf-pro-circuit-on-sam-rayburn',
+    sourceType: 'tournament',
+    tournament: '2023 MLF Pro Circuit Sam Rayburn',
+    org: 'MLF',
+    date: '2023-02-01',
+    notes: 'Keith Combs MLF Pro Circuit win — deep water patterns',
+  },
+  {
+    url: 'https://www.wired2fish.com/bass-fishing/how-to-fish-sam-rayburn-reservoir-in-spring',
+    sourceType: 'article',
+    tournament: undefined,
+    org: 'Wired2Fish',
+    date: '2023-03-01',
+    notes: 'Spring fishing guide for Sam Rayburn — prespawn through postspawn patterns',
+  },
+  {
+    url: 'https://www.wired2fish.com/bass-fishing/how-to-fish-sam-rayburn-in-the-summer',
+    sourceType: 'article',
+    tournament: undefined,
+    org: 'Wired2Fish',
+    date: '2022-07-01',
+    notes: 'Summer tactics at Sam Rayburn — offshore, deep timber, topwater',
+  },
+  {
+    url: 'https://www.wired2fish.com/bass-fishing/sam-rayburn-fall-fishing-patterns',
+    sourceType: 'article',
+    tournament: undefined,
+    org: 'Wired2Fish',
+    date: '2022-10-01',
+    notes: 'Fall fishing patterns on Rayburn — shad spawns, flats, crankbaits',
+  },
+  {
+    url: 'https://www.wired2fish.com/news/mlf-pro-circuit-sam-rayburn-reservoir-2024',
+    sourceType: 'tournament',
+    tournament: '2024 MLF Pro Circuit Sam Rayburn',
+    org: 'MLF',
+    date: '2024-02-01',
+    notes: '2024 Pro Circuit event — current techniques and winning patterns',
+  },
+  {
+    url: 'https://www.wired2fish.com/bass-fishing/how-elite-anglers-approach-sam-rayburn-reservoir',
+    sourceType: 'article',
+    tournament: undefined,
+    org: 'Wired2Fish',
+    date: '2024-01-01',
+    notes: 'Elite angler perspectives on Sam Rayburn — structure, bait selection, depth',
   },
 ]
 
