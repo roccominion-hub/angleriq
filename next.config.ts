@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'staticmap.openstreetmap.de',
+        hostname: 'unpkg.com',
       },
     ],
   },
