@@ -55,7 +55,7 @@ function inferTechnique(baitName: string, baitType: string, storedPresentation: 
   if (combined.match(/toad|ribbit|horny toad/)) return 'Swimming toad'
 
   // Swimbaits / bladed
-  if (combined.match(/swimbait|swim bait|paddle tail/)) return 'Swimbaiting'
+  if (combined.match(/swimbait|swim bait|paddle tail|keitech|round jighead|round jig head/)) return 'Swimbaiting'
   if (combined.match(/swimjig|swim jig/)) return 'Swimming jig'
   if (combined.match(/bladed|chatterbait|chatter bait|vibrating jig/)) return 'Bladed jig'
   if (combined.match(/spinnerbait|spinner bait/)) return 'Spinnerbait'
@@ -413,7 +413,7 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
 }
 
 function BuyButton({ baitName }: { baitName: string }) {
-  const searchUrl = `https://www.basspro.com/shop/SearchDisplay?searchTerm=${encodeURIComponent(baitName)}`
+  const searchUrl = `https://www.basspro.com/SearchDisplay#q=${encodeURIComponent(baitName)}`
   return (
     <a
       href={searchUrl}
@@ -1282,7 +1282,7 @@ export default function SearchPage() {
                   <CardContent className="px-5 pb-4 space-y-2">
                     {result.topBaits.slice(0, 6).map(b => {
                       const baitData = result.reports.flatMap((r: any) => r.bait_used || []).find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
-                      const shopUrl = baitData?.product_url || `https://www.basspro.com/shop/SearchDisplay?searchTerm=${encodeURIComponent(b.name)}`
+                      const shopUrl = baitData?.product_url || `https://www.basspro.com/SearchDisplay#q=${encodeURIComponent(b.name)}`
                       return (
                         <div key={b.name} className="flex items-center justify-between gap-2">
                           <span className="text-slate-700 text-sm flex-1 leading-tight truncate">{b.name}</span>

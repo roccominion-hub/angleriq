@@ -364,7 +364,13 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     })
   }
 
-  if (!cachedToday && todayText && todayText.length > 50) {
+  // Safeguard: Today's Recommendation must have all 3 numbered sections to be usable
+  const todayIsComplete = todayText.length > 100
+    && /1\./.test(todayText)
+    && /2\./.test(todayText)
+    && /3\./.test(todayText)
+
+  if (!cachedToday && todayIsComplete) {
     await supabase.from('summary_cache').upsert({
       cache_key: todayKey,
       intel: intelText || '',
@@ -373,5 +379,12 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     })
   }
 
-  return NextResponse.json({ intel: intelText, today: todayText, cached: false })
+  // If Today's section is incomplete, return a placeholder so the UI can show a graceful message
+  const todayOutput = todayIsComplete
+    ? todayText
+    : todayText.length > 50
+      ? todayText + '\n\n*Additional details temporarily unavailable — check back shortly.*'
+      : ''
+
+  return NextResponse.json({ intel: intelText, today: todayOutput, cached: false })
 }
