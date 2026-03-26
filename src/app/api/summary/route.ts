@@ -379,12 +379,5 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     })
   }
 
-  // If Today's section is incomplete, return a placeholder so the UI can show a graceful message
-  const todayOutput = todayIsComplete
-    ? todayText
-    : todayText.length > 50
-      ? todayText + '\n\n*Additional details temporarily unavailable — check back shortly.*'
-      : ''
-
-  return NextResponse.json({ intel: intelText, today: todayOutput, cached: false })
+  return NextResponse.json({ intel: intelText, today: todayText, cached: false })
 }
