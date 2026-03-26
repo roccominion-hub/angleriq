@@ -413,7 +413,7 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
 }
 
 function BuyButton({ baitName }: { baitName: string }) {
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(baitName + ' fishing lure buy')}`
+  const searchUrl = `https://www.basspro.com/shop/en/searchResults?Ntt=${encodeURIComponent(baitName)}`
   return (
     <a
       href={searchUrl}
@@ -1282,7 +1282,7 @@ export default function SearchPage() {
                   <CardContent className="px-5 pb-4 space-y-2">
                     {result.topBaits.slice(0, 6).map(b => {
                       const baitData = result.reports.flatMap((r: any) => r.bait_used || []).find((bu: BaitRecord) => bu.bait_name === b.name && bu.product_url)
-                      const shopUrl = baitData?.product_url || `https://www.google.com/search?q=${encodeURIComponent(b.name + ' fishing lure buy')}`
+                      const shopUrl = baitData?.product_url || `https://www.basspro.com/shop/en/searchResults?Ntt=${encodeURIComponent(b.name)}`
                       return (
                         <div key={b.name} className="flex items-center justify-between gap-2">
                           <span className="text-slate-700 text-sm flex-1 leading-tight truncate">{b.name}</span>
