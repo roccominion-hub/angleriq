@@ -24,11 +24,10 @@ export async function GET(req: NextRequest) {
 
   if (error || !lake) return NextResponse.json({ error: 'Lake not found' }, { status: 404 })
 
-  const conditions = await getLakeConditions(lake.usgs_site_no, lake.lat, lake.lng)
+  const conditions = await getLakeConditions(lake.wdft_slug, lake.lat, lake.lng)
 
   return NextResponse.json({
     lake: { id: lake.id, name: lake.name, lat: lake.lat, lng: lake.lng },
     conditions,
-    wdftUrl: lake.wdft_slug ? `https://www.waterdatafortexas.org/reservoirs/individual/${lake.wdft_slug}` : null,
   })
 }

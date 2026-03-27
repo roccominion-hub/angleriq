@@ -20,7 +20,7 @@ export function LakeLevel({ lakeId, lakeName }: LakeLevelProps) {
 
   const wl = data?.conditions?.waterLevel
 
-  if (!loading && !wl) return null
+  if (!loading && !wl) return null  // no WDFT slug for this lake
 
   const TrendIcon = wl?.trend === 'rising' ? TrendingUp : wl?.trend === 'falling' ? TrendingDown : Minus
   const trendColor = wl?.trend === 'rising' ? 'text-green-500' : wl?.trend === 'falling' ? 'text-red-500' : 'text-slate-400'
@@ -58,26 +58,47 @@ export function LakeLevel({ lakeId, lakeName }: LakeLevelProps) {
             </div>
           </div>
 
+          {/* % full + above/below pool */}
+          <div className="flex gap-4 text-sm">
+            <div>
+              <span className="text-slate-400">Pool: </span>
+              <span className="font-bold text-slate-800">{wl.percentFull}% full</span>
+            </div>
+            {wl.abovePoolFt !== 0 && (
+              <div>
+                <span className="text-slate-400">vs. conservation: </span>
+                <span className={`font-bold ${wl.abovePoolFt >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {wl.abovePoolFt >= 0 ? '+' : ''}{wl.abovePoolFt.toFixed(2)} ft
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* 24h change */}
           <div className="flex items-center gap-1.5 text-sm">
             <span className="text-slate-400">24h change:</span>
             <span className={`font-bold ${trendColor}`}>
-              {wl.deltaft >= 0 ? '+' : ''}{wl.deltaft.toFixed(2)} ft
+              {wl.deltaFt >= 0 ? '+' : ''}{wl.deltaFt.toFixed(2)} ft
             </span>
           </div>
 
-          {/* Trend bar */}
-          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                wl.trend === 'rising' ? 'bg-green-400' : wl.trend === 'falling' ? 'bg-red-400' : 'bg-slate-300'
-              }`}
-              style={{ width: `${Math.min(100, 50 + (wl.deltaft / 0.5) * 50)}%` }}
-            />
+          {/* Pool fill bar */}
+          <div className="space-y-1">
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-blue-400 transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, wl.percentFull))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
+              <span>0%</span>
+              <span>Conservation Pool</span>
+              <span>100%</span>
+            </div>
           </div>
 
-          {lastUpdated && (
-            <p className="text-xs text-slate-400">Updated {lastUpdated} · USGS</p>
+          {wl.date && (
+            <p className="text-xs text-slate-400">As of {wl.date} · TWDB / waterdatafortexas.org</p>
           )}
         </div>
       ) : null}

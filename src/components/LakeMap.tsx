@@ -82,6 +82,18 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng])
 
+  // Center map on waterbody polygon bounds once features load
+  useEffect(() => {
+    if (!mapRef.current || !features?.waterbodies?.features?.length) return
+    import('leaflet').then(L => {
+      const wbLayer = L.geoJSON(features.waterbodies)
+      const bounds = wbLayer.getBounds()
+      if (bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+      }
+    })
+  }, [features])
+
   // Flowlines overlay
   useEffect(() => {
     if (!mapRef.current || !features?.flowlines) return
@@ -91,18 +103,21 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       if (!overlays.has('flowlines')) return
       flowlinesLayerRef.current = L.geoJSON(features.flowlines, {
         style: f => ({
-          color: f?.properties?.FTYPE === 460 ? '#60a5fa' : '#93c5fd',
-          weight: f?.properties?.FTYPE === 460 ? 3 : 1.5,
+          color: '#60a5fa',
+          weight: f?.properties?.FTYPE === 460 ? 2.5 : 1.5,
           opacity: 0.85,
+          dashArray: f?.properties?.FLOWDIR === 1 ? undefined : '4 3',
         }),
         onEachFeature: (f, layer) => {
-          if (f.properties?.GNIS_NAME) layer.bindPopup(`<b>${f.properties.GNIS_NAME}</b>`)
+          const name = f.properties?.GNIS_NAME
+          const cfs  = f.properties?.flowCfs
+          layer.bindPopup(name ? `<b>${name}</b>${cfs ? `<br>${cfs} cfs` : ''}` : 'Stream')
         },
       }).addTo(mapRef.current)
     })
   }, [features, overlays])
 
-  // Wind arrows overlay — grid of directional arrows across the lake
+  // Wind arrows — dense grid confined to lake polygon
   useEffect(() => {
     if (!mapRef.current) return
     import('leaflet').then(L => {
@@ -114,27 +129,61 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       const rotation = windIconRotation(wind.directionDeg)
       const group = L.layerGroup()
 
-      // Place wind arrows in a 3x3 grid around the lake center
-      const offsets = [-0.06, 0, 0.06]
-      for (const dlat of offsets) {
-        for (const dlng of offsets) {
-          const icon = L.divIcon({
-            className: '',
-            html: `<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg)">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#60a5fa" opacity="0.85">
-                <path d="M12 2L8 10h8L12 2z"/>
-                <rect x="11" y="10" width="2" height="12" fill="#60a5fa"/>
-              </svg>
-            </div>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
-          })
-          L.marker([lat + dlat, lng + dlng], { icon, interactive: false }).addTo(group)
+      // Extract lake polygon rings for point-in-polygon test
+      const lakePolygons: number[][][] = []
+      if (features?.waterbodies?.features) {
+        for (const f of features.waterbodies.features) {
+          const geom = f.geometry
+          if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
+          if (geom?.type === 'MultiPolygon') {
+            for (const poly of geom.coordinates) lakePolygons.push(poly[0])
+          }
         }
       }
+
+      // Ray-casting point-in-polygon
+      function inPolygon(px: number, py: number, ring: number[][]): boolean {
+        let inside = false
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const [xi, yi] = ring[i], [xj, yj] = ring[j]
+          if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside
+        }
+        return inside
+      }
+      function inAnyLake(lng: number, lat: number): boolean {
+        if (!lakePolygons.length) return true // fallback: no polygon data, show everywhere
+        return lakePolygons.some(ring => inPolygon(lng, lat, ring))
+      }
+
+      // Bounding box from map or waterbody
+      const bounds = features?.waterbodies?.features?.length
+        ? L.geoJSON(features.waterbodies).getBounds()
+        : mapRef.current.getBounds()
+
+      if (!bounds?.isValid?.()) return
+
+      const step = 0.018 // ~2km spacing
+      const swLat = bounds.getSouth(), neLat = bounds.getNorth()
+      const swLng = bounds.getWest(),  neLng = bounds.getEast()
+
+      const arrowHtml = `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#93c5fd" opacity="0.9">
+          <path d="M12 3L7 12h10L12 3z"/>
+          <rect x="11" y="12" width="2" height="9" fill="#93c5fd"/>
+        </svg>
+      </div>`
+
+      for (let plat = swLat; plat <= neLat; plat += step) {
+        for (let plng = swLng; plng <= neLng; plng += step) {
+          if (!inAnyLake(plng, plat)) continue
+          const icon = L.divIcon({ className: '', html: arrowHtml, iconSize: [24, 24], iconAnchor: [12, 12] })
+          L.marker([plat, plng], { icon, interactive: false }).addTo(group)
+        }
+      }
+
       windLayerRef.current = group.addTo(mapRef.current)
     })
-  }, [conditions, overlays, lat, lng])
+  }, [conditions, features, overlays, lat, lng])
 
   // Inflow markers (always shown when data available)
   const inflowsAdded = useRef(false)
