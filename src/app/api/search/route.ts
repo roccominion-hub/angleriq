@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       tournament_result ( angler_name, place, total_weight, tournament ( name, organization, start_date ) )
     `)
     .eq('body_of_water_id', water.id)
+    .order('confidence', { ascending: false })
     .order('reported_date', { ascending: false })
 
   if (season) query = query.eq('season', season)

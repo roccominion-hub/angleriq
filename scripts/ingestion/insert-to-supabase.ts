@@ -86,7 +86,11 @@ export async function insertTechniqueReport(params: {
         structure: item.structure,
         depth_range_ft: item.depth_range_ft,
         notes: item.notes,
-        confidence: 0.8, // tournament source = high confidence
+        confidence: params.sourceType === 'tournament' ? 0.95
+          : params.sourceType === 'article' ? 0.80
+          : params.sourceType === 'youtube' ? 0.65
+          : params.sourceType === 'forum'   ? 0.45
+          : 0.50,
       })
       .select('id')
       .single()
