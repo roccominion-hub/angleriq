@@ -57,23 +57,19 @@ function resolveIcon(baitName?: string, baitType?: string): string {
   return 'default'
 }
 
-export function BaitIcon({ baitName, baitType, size = 'md' }: {
+export function BaitIcon({ baitName, baitType }: {
   baitName?: string
   baitType?: string
-  size?: 'sm' | 'md' | 'lg'
 }) {
   const file = resolveIcon(baitName, baitType)
   const src = `/baits/${file}.png`
 
-  const dims = { sm: 48, md: 96, lg: 140 }[size]
-
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="relative w-full h-full">
       <Image
         src={src}
         alt={baitName || baitType || 'fishing lure'}
-        width={dims}
-        height={dims}
+        fill
         className="object-contain drop-shadow-sm"
         onError={(e) => {
           // Fall back to default if image missing
