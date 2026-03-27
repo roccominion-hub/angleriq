@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   // Get body of water
   const { data: water } = await supabase
     .from('body_of_water')
-    .select('id, name, state, type, species, lat, lng')
+    .select('id, name, state, type, species, lat, lng, usgs_site_no, wdft_slug')
     .ilike('name', `%${lake}%`)
     .single()
 

@@ -1159,7 +1159,7 @@ export default function SearchPage() {
             {/* AI Summary card */}
             <Card className="border-blue-100 shadow-none overflow-hidden pt-0">
               {result.coords?.lat && result.coords?.lng && (
-                <LakeMap lat={result.coords.lat} lng={result.coords.lng} name={result.water.name} />
+                <LakeMap lakeId={result.water.id} lakeName={result.water.name} lat={result.coords.lat} lng={result.coords.lng} />
               )}
               <CardHeader className="pb-2 pt-4 px-5">
                 <CardTitle className="text-blue-800 text-sm font-bold flex items-center gap-2">
