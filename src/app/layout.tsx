@@ -12,6 +12,11 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: "AnglerIQ — Tournament-Proven Fishing Intel",
   description: "Search tournament-winning techniques, baits, and conditions by body of water.",
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

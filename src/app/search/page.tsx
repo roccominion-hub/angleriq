@@ -797,7 +797,34 @@ export default function SearchPage() {
           weather: currentWeather,
           filters: { ...buildApiFilters(isScenario), style: nowFilters.style },
         })
-      }).then(r => r.json()).then(d => setSummary({ intel: d.intel || '', today: d.today || '' })).finally(() => setSummaryLoading(false))
+      }).then(r => r.json()).then(async d => {
+        const intel = d.intel || ''
+        setSummary({ intel, today: '' })
+        setSummaryLoading(false)
+        // Auto-trigger Recommended Plan
+        if (intel) {
+          setMilkRunLoading(true)
+          try {
+            const milkRes = await fetch('/api/milk-run', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                lake: selectedLake,
+                state: data.water?.state,
+                intel,
+                topBaits: data.topBaits,
+                topPatterns: data.topPatterns,
+                weather: currentWeather,
+                filters: buildApiFilters(isScenario),
+              })
+            })
+            const milkData = await milkRes.json()
+            setMilkRun(milkData)
+          } catch { /* ignore */ } finally {
+            setMilkRunLoading(false)
+          }
+        }
+      }).catch(() => setSummaryLoading(false))
 
     } catch {
       setError('Something went wrong. Please try again.')
@@ -1102,7 +1129,9 @@ export default function SearchPage() {
                 <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{result.water.name}</h2>
                 <p className="text-slate-400 text-sm mt-0.5">{result.water.state} · {result.water.type} · {result.water.species?.join(', ')}</p>
               </div>
-              <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">{result.sampleSize} tournament reports</Badge>
+              <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">
+                {result.sampleSize < 15 ? 'Limited' : result.sampleSize < 50 ? 'Substantial' : 'Exhaustive'} Data Coverage
+              </Badge>
             </div>
 
             {weather && <WeatherBar weather={weather} />}
@@ -1154,56 +1183,20 @@ export default function SearchPage() {
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
                       <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
                     </div>
-                    {summary.today && (
-                      <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3">
-                        <div className="flex items-center justify-between mb-1.5 gap-2">
-                          <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Today&apos;s Recommendation</p>
-                          <button
-                            onClick={handleSecondaryRec}
-                            disabled={secondaryLoading}
-                            className="flex items-center gap-1.5 bg-white border border-green-300 text-green-800 hover:bg-green-100 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
-                          >
-                            <RefreshCw size={11} className={secondaryLoading ? 'animate-spin' : ''} />
-                            {secondaryLoading ? 'Generating...' : 'Another Approach'}
-                          </button>
-                        </div>
-                        <RenderRecommendation text={summary.today} />
-                        {secondaryRec && (
-                          <div className="mt-3 pt-3 border-t border-green-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Try Something Different</p>
-                            </div>
-                            <RenderRecommendation text={secondaryRec} />
-                          </div>
-                        )}
+                    {/* Recommended Plan (auto-generated) */}
+                    {milkRunLoading && !milkRun && (
+                      <div className="space-y-2 pt-1">
+                        <Skeleton className="h-4 w-full bg-slate-100" />
+                        <Skeleton className="h-4 w-5/6 bg-slate-100" />
+                        <Skeleton className="h-4 w-4/6 bg-slate-100" />
                       </div>
                     )}
-
-                    {/* Milk Run */}
-                    {!milkRun && summary.intel && (
-                      <div className="pt-1">
-                        <Button
-                          onClick={handleMilkRun}
-                          disabled={milkRunLoading}
-                          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center gap-2"
-                        >
-                          <Route size={15} className={milkRunLoading ? 'animate-pulse' : ''} />
-                          {milkRunLoading ? 'Building Your Milk Run...' : 'Generate Milk Run Plan'}
-                          <Badge className="bg-blue-600 text-white border-0 text-xs ml-1">PRO</Badge>
-                        </Button>
-                        <p className="text-xs text-slate-400 text-center mt-1.5">Get a prioritized 3–5 pattern game plan for a full day on the water</p>
-                      </div>
-                    )}
-
-                    {/* Milk Run Results */}
                     {milkRun && milkRun.patterns.length > 0 && (
                       <div className="border border-slate-200 rounded-xl overflow-hidden mt-2">
                         <div className="bg-slate-900 px-4 py-3 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Route size={15} className="text-white" />
-                            <span className="text-white font-bold text-sm">Milk Run Plan</span>
-                            <Badge className="bg-blue-600 text-white border-0 text-xs">PRO</Badge>
+                            <span className="text-white font-bold text-sm">Recommended Plan</span>
                           </div>
                           <button onClick={() => setMilkRun(null)} className="text-slate-400 hover:text-white text-xs">
                             <X size={14} />
@@ -1238,7 +1231,7 @@ export default function SearchPage() {
                             className="text-slate-500 hover:text-slate-700 text-xs h-7 gap-1"
                           >
                             <RefreshCw size={11} className={milkRunLoading ? 'animate-spin' : ''} />
-                            Regenerate Plan
+                            {milkRunLoading ? 'Rebuilding...' : 'Regenerate Plan'}
                           </Button>
                         </div>
                       </div>
@@ -1247,6 +1240,13 @@ export default function SearchPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ── Additional Intel from Articles ─────────────────────── */}
+            <div>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Trophy size={14} /> Additional Intel from Articles
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">Supporting patterns and baits identified from source articles. The Tournament Intel and Recommended Plan above are the primary actionable findings.</p>
 
             <div className="grid md:grid-cols-2 gap-4">
               {/* Top Patterns */}
@@ -1397,6 +1397,8 @@ export default function SearchPage() {
               </div>
             )}
 
+            </div>{/* end Additional Intel from Articles */}
+
             <Separator className="bg-slate-200" />
 
             {/* Technique Reports */}
@@ -1410,8 +1412,14 @@ export default function SearchPage() {
                   {reportsOpen ? <><ChevronUp size={14} /> Collapse</> : <><ChevronDown size={14} /> Show {result.reports.length} Reports</>}
                 </button>
               </div>
-              {reportsOpen && <div className="grid sm:grid-cols-2 gap-3">
-                {result.reports.slice(0, 20).map((r: any) => (
+              {reportsOpen && (() => {
+                const allReports = result.reports.slice(0, 20)
+                const richReports = allReports.filter((r: any) => r.bait_used?.length > 0 || r.angler_name)
+                const thinReports = allReports.filter((r: any) => !r.bait_used?.length && !r.angler_name)
+                return (
+                  <div className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                {richReports.map((r: any) => (
                   <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -1452,7 +1460,29 @@ export default function SearchPage() {
                     {r.notes && <p className="text-slate-400 text-xs leading-relaxed border-t border-slate-100 pt-2">{r.notes}</p>}
                   </div>
                 ))}
-              </div>}
+              </div>
+              {thinReports.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Additional Supporting Articles</p>
+                  <ul className="space-y-1.5">
+                    {thinReports.map((r: any) => (
+                      <li key={r.id} className="flex items-start gap-2 text-xs text-slate-600">
+                        <span className="text-slate-300 mt-0.5">—</span>
+                        <span className="leading-relaxed">
+                          {r.notes || r.pattern || (r.source_url ? new URL(r.source_url).hostname.replace('www.', '') : 'Source article')}
+                          {r.source_url && (
+                            <a href={r.source_url} target="_blank" rel="noopener noreferrer"
+                              className="ml-1 text-blue-500 hover:text-blue-700">↗</a>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+              )
+              })()}
             </div>
           </div>
         )}

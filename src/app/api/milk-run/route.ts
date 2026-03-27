@@ -9,17 +9,19 @@ export async function POST(req: NextRequest) {
 
   const prompt = `You are an expert bass fishing tournament guide for ${lake}, ${state}.
 
+CRITICAL RULES:
+- Recommend artificial lures ONLY. Never suggest live bait, cut bait, or natural bait.
+- Target largemouth, smallmouth, spotted, and Guadalupe bass only. Do not mention other species as targets.
+- Use bait-category-appropriate colors: frog colors (black, white, natural, olive) for frogs; manufacturer color names (sexy shad, ghost, chartreuse shad, bone) for hard baits; soft plastic colors (Green Pumpkin, Watermelon Red, Black/Blue) for soft plastics only.
+
 INTELLIGENCE SUMMARY:
 ${intel}
-
-TODAY'S RECOMMENDATION:
-${today}
 
 TOP BAITS: ${topBaits?.slice(0, 6).map((b: any) => `${b.name} (${b.count}x)`).join(', ')}
 TOP PATTERNS: ${topPatterns?.slice(0, 4).map((p: any) => `${p.pattern} (${p.count}x)`).join(', ')}
 CONDITIONS: ${conditionSummary}
 
-Generate a "Milk Run" plan — a prioritized sequence of 3 to 5 fishing patterns/spots for a productive day on ${lake}. This should read like a confident game plan from a local guide. Format EXACTLY as follows:
+Generate a "Recommended Plan" — a prioritized sequence of 3 to 5 artificial lure fishing patterns for a productive day on ${lake}. This should read like a confident game plan from a local guide. Format EXACTLY as follows:
 
 MILK RUN PLAN
 

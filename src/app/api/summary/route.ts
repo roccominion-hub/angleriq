@@ -288,6 +288,11 @@ ${moonContext}` : `Current season: ${season || 'unknown'}`
     : `Write based on the tournament data and your knowledge of this specific fishery. Be specific — name bait types, structure, depths, presentations. Write like a seasoned guide who knows this lake.`
 
   const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
+
+IMPORTANT RULES — follow these in every response without exception:
+- ARTIFICIAL LURES ONLY. Never recommend live bait, cut bait, dead bait, or natural bait of any kind. This app is for tournament and serious hobby bass anglers who fish artificial lures exclusively.
+- BASS ONLY. This app targets largemouth, smallmouth, spotted, and Guadalupe bass. If you reference other species (crappie, white bass, striper, chain pickerel), only mention them in the context of habitat they share with bass — always clarify you're describing where bass can also be found ("bass relate to the same brush piles that hold crappie," not "target crappie").
+- BAIT-SPECIFIC COLORS. When recommending colors for frogs (hollow body, swimming toads), use color names frogs actually come in: black, white, natural, olive/orange belly, green/brown, shad, bone — NOT soft plastic names like "Watermelon Red" or "Green Pumpkin." For hard baits (crankbaits, jerkbaits, bladed jigs), use manufacturer color names: sexy shad, chartreuse shad, ghost, chrome/blue back, bone, natural shad, fire tiger — NOT soft plastic colors. Soft plastic colors (Green Pumpkin, Watermelon Red, June Bug, Black/Blue, etc.) apply only to soft plastics.
 NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
 
 ${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}
@@ -305,14 +310,14 @@ ${intelInstruction}
 Write a detailed fishing intelligence report in TWO clearly labeled sections:
 
 **TOURNAMENT INTEL**
-Write 4-5 sentences covering: the dominant historical patterns on this fishery, the top baits and why they work here, key structure and depth ranges, and any seasonal tendencies. Be specific — name the bait types, the structure, the depths, the presentations.
+Write 4-5 sentences covering: the dominant historical patterns on this fishery, the top artificial lures and why they work here, key structure and depth ranges, and any seasonal tendencies. Be specific — name the lure types, the structure, the depths, the presentations. Only reference largemouth, smallmouth, spotted, or Guadalupe bass.
 
 **TODAY'S RECOMMENDATION**
-Write a detailed, actionable recommendation for fishing RIGHT NOW based on the current conditions. Cover:
+Write a detailed, actionable recommendation for fishing RIGHT NOW with artificial lures based on the current conditions. Cover:
 
 1. The primary technique and presentation you'd start with, and why it fits these conditions.
 
-2. Top bait color recommendations:
+2. Top lure color recommendations (use colors appropriate to each lure category — frog colors for frogs, manufacturer hard bait colors for crankbaits/jerkbaits, soft plastic colors for soft plastics):
 - [Color 1]: [why it works right now — sky conditions, water clarity, light penetration]
 - [Color 2]: [why it works right now]
 - [Color 3]: [why it works right now]
@@ -323,7 +328,7 @@ Write a detailed, actionable recommendation for fishing RIGHT NOW based on the c
 - [Solunar/moon phase note if relevant — mention major bite windows if solunar activity is good]
 - [Any other relevant condition note]
 
-Be direct and confident. Write like a knowledgeable local guide giving advice to a serious angler, not a generic fishing article. Avoid filler phrases.
+Be direct and confident. Write like a knowledgeable local guide giving advice to a serious tournament angler, not a generic fishing article. Avoid filler phrases.
 
 If ANGLER PREFERENCES were specified above, your recommendation MUST directly address them — either confirming tournament support for that approach or clearly noting the gap and offering a proven alternative. Never silently ignore specified preferences.`
 
