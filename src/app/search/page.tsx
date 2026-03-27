@@ -1157,7 +1157,7 @@ export default function SearchPage() {
             )}
 
             {/* AI Summary card */}
-            <Card className="border-blue-100 shadow-none overflow-hidden">
+            <Card className="border-blue-100 shadow-none overflow-hidden pt-0">
               {result.coords?.lat && result.coords?.lng && (
                 <LakeMap lat={result.coords.lat} lng={result.coords.lng} name={result.water.name} />
               )}
