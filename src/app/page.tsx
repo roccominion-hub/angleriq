@@ -13,7 +13,7 @@ export default function Home() {
         {/* Water photo background — rippled lake surface */}
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: 'url(https://images.unsplash.com/photo-57JG4i2U_M8?w=1600&q=80&auto=format&fit=crop)' }}
+          style={{ backgroundImage: 'url(/hero-lake.jpg)' }}
         />
 
         {/* Grid overlay */}
