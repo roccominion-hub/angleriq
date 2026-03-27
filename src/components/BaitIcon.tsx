@@ -6,7 +6,7 @@ const BAIT_MAP: { file: string; matches: string[] }[] = [
   { file: 'crankbait-deep',     matches: ['10xd', '6xd', '8xd', 'deep crank', 'deep diving', 'deep-diving', 'deep diver', '10 xd', '6 xd', 'dxd', 'deep crankbait'] },
   { file: 'crankbait-shallow',  matches: ['crankbait', 'crank bait', 'crank', 'shallow crank', 'medium crank', 'flat-sided', 'flat sided'] },
   { file: 'jerkbait',           matches: ['jerkbait', 'jerk bait', 'suspending jerk', 'hard jerk', 'pointer', 'vision 110', 'slash', 'enticer'] },
-  { file: 'swimbait',           matches: ['swimbait', 'swim bait', 'paddle tail', 'boot tail', 'keitech', 'round jighead', 'round jig head', 'shad tail', 'swimsenko', 'stunna', 'berkley stunna', 'aruku shad', 'livetarget straight tail'] },
+  { file: 'swimbait',           matches: ['swimbait', 'swim bait', 'paddle tail', 'boot tail', 'keitech', 'round jighead', 'round jig head', 'shad tail', 'swimsenko', 'stunna', 'berkley stunna', 'aruku shad', 'livetarget straight tail', 'glide bait', 'glidebait', 'glide', 'deps', 'slide swimmer', 'megabass', 'triple trout', 'big hammer', 'huddleston', 'mattlures', 'matt lures', '250', 'wake bait', 'wakebait', 'line thru'] },
   { file: 'swimjig',            matches: ['swimjig', 'swim jig', 'swimming jig'] },
   { file: 'bladed-jig',         matches: ['bladed jig', 'bladed', 'chatterbait', 'chatter bait', 'vibrating jig', 'z-man jack hammer', 'jackhammer'] },
   { file: 'jig',                matches: ['jig', 'football jig', 'flipping jig', 'casting jig', 'finesse jig', 'hair jig', 'arky', 'punch rig', 'punch bait'] },

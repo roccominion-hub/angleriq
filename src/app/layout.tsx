@@ -13,7 +13,10 @@ export const metadata: Metadata = {
   title: "AnglerIQ — Tournament-Proven Fishing Intel",
   description: "Search tournament-winning techniques, baits, and conditions by body of water.",
   icons: {
-    icon: '/favicon.svg',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+    ],
     shortcut: '/favicon.ico',
     apple: '/favicon.svg',
   },
