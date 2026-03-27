@@ -76,7 +76,7 @@ export default function AccountPage() {
   @media print { body { margin: 20px; } }
 </style></head><body>
 <h1>🎣 ${report.lake_name}</h1>
-<div class="meta">${result.water?.state || ''} · ${result.water?.type || ''} · ${report.trip_date ? 'Trip: ' + report.trip_date : 'Report date: ' + new Date(report.created_at).toLocaleDateString()} · ${result.sampleSize < 15 ? 'Limited' : result.sampleSize < 50 ? 'Substantial' : 'Exhaustive'} Data Coverage</div>
+<div class="meta">${result.water?.state || ''} · ${result.water?.type || ''} · ${report.trip_date ? 'Trip: ' + report.trip_date : 'Report date: ' + new Date(report.created_at).toLocaleDateString()} · ${result.sampleSize < 15 ? 'Adequate' : result.sampleSize < 50 ? 'Substantial' : 'Exhaustive'} Data Coverage</div>
 ${weather.tempF ? `<div class="weather">⛅ ${weather.tempF}°F · ${weather.skyCondition || ''} · ${weather.windMph || 0} mph wind · ${weather.season || ''}</div>` : ''}
 ${summary.intel ? `<h2>Tournament Intel</h2><div class="intel">${summary.intel}</div>` : ''}
 ${summary.milkRun && summary.milkRun.patterns?.length > 0 ? `

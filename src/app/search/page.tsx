@@ -1130,7 +1130,7 @@ export default function SearchPage() {
                 <p className="text-slate-400 text-sm mt-0.5">{result.water.state} · {result.water.type} · {result.water.species?.join(', ')}</p>
               </div>
               <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-semibold">
-                {result.sampleSize < 15 ? 'Limited' : result.sampleSize < 50 ? 'Substantial' : 'Exhaustive'} Data Coverage
+                {result.sampleSize < 15 ? 'Adequate' : result.sampleSize < 50 ? 'Substantial' : 'Exhaustive'} Data Coverage
               </Badge>
             </div>
 
