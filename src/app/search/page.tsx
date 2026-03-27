@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { Logo } from '@/components/Logo'
 import { LakeMap } from '@/components/LakeMap'
+import { LakeLevel } from '@/components/LakeLevel'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
@@ -1135,6 +1136,9 @@ export default function SearchPage() {
             </div>
 
             {weather && <WeatherBar weather={weather} />}
+
+            {/* Lake Level card */}
+            <LakeLevel lakeId={result.water.id} lakeName={result.water.name} />
 
             {result && !loading && (
               <div className="flex justify-end mb-1">
