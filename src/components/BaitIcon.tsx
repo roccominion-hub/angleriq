@@ -65,18 +65,20 @@ export function BaitIcon({ baitName, baitType }: {
   const src = `/baits/${file}.png`
 
   return (
-    <div className="relative w-full h-full">
-      <Image
-        src={src}
-        alt={baitName || baitType || 'fishing lure'}
-        fill
-        className="object-contain drop-shadow-sm"
-        onError={(e) => {
-          // Fall back to default if image missing
-          const img = e.currentTarget as HTMLImageElement
-          if (!img.src.includes('default')) img.src = '/baits/default.png'
-        }}
-      />
+    <div className="w-full h-full flex items-center justify-center">
+      {/* Fixed 72×72 canvas — every bait image gets the same bounding box */}
+      <div className="relative w-[72px] h-[72px] shrink-0">
+        <Image
+          src={src}
+          alt={baitName || baitType || 'fishing lure'}
+          fill
+          className="object-contain drop-shadow-sm"
+          onError={(e) => {
+            const img = e.currentTarget as HTMLImageElement
+            if (!img.src.includes('default')) img.src = '/baits/default.png'
+          }}
+        />
+      </div>
     </div>
   )
 }
