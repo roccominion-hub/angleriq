@@ -24,8 +24,8 @@ export function HomeNav() {
     : null
 
   return (
-    <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950 sticky top-0 z-10">
-      <Logo className="h-8 w-auto" />
+    <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
+      <Logo className="h-8 w-auto" variant="light" />
       <div className="flex gap-3 items-center">
         {user ? (
           <>

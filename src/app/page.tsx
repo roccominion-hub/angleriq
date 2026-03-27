@@ -8,7 +8,7 @@ export default function Home() {
       <HomeNav />
 
       {/* Hero */}
-      <section className="relative px-6 py-28 text-center overflow-hidden">
+      <section className="relative px-6 py-28 text-center overflow-hidden z-0">
 
         {/* Water photo background — rippled lake surface */}
         <div
