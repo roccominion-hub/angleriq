@@ -91,7 +91,33 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  // Filter live/natural/dead bait — artificial lures only
+  const LIVE_BAIT_BLOCKLIST = [
+    'live', 'dead', 'cut', 'shad', 'minnow', 'worm', 'leech', 'crawfish', 'crayfish',
+    'nightcrawler', 'night crawler', 'cricket', 'grasshopper', 'stinkbait', 'stink bait',
+    'smelly', 'chicken liver', 'dough bait', 'power bait', 'powerbait', 'gulp alive',
+    'natural bait', 'live bait', 'cut bait', 'blood bait', 'sucker', 'herring', 'sardine',
+    'anchovy', 'shrimp', 'crab', 'eel', 'frog' // live frog (hollow body frogs are fine — handled by name match below)
+  ]
+  // Terms that indicate an ARTIFICIAL lure even if a blocklist word is present
+  const ARTIFICIAL_EXCEPTIONS = [
+    'zoom', 'strike king', 'berkley', 'yum', 'reaction', 'rapala', 'lucky craft',
+    'ribbon tail', 'trick worm', 'senko', 'rage', 'brush hog', 'ned', 'chigger',
+    'roboworm', 'fluke', 'swimbait', 'jig', 'crank', 'spinner', 'bladed',
+    'hollow body', 'whopper', 'popper', 'buzzbait', 'topwater', 'spoon', 'blade bait',
+    'keitech', 'zman', 'z-man', 'swimsenko', 'elaztech', 'paddle tail', 'boot tail'
+  ]
+
+  function isLiveBait(name: string): boolean {
+    const lower = name.toLowerCase()
+    // If it matches an artificial exception, keep it
+    if (ARTIFICIAL_EXCEPTIONS.some(e => lower.includes(e))) return false
+    // If it matches a live bait term, filter it
+    return LIVE_BAIT_BLOCKLIST.some(term => lower.includes(term))
+  }
+
   const topBaits = Object.entries(baitFrequency)
+    .filter(([name]) => !isLiveBait(name))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }))

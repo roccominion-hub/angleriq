@@ -1168,14 +1168,13 @@ export default function SearchPage() {
               </CardHeader>
               <CardContent className="px-5 pb-4">
                 {summaryLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-full bg-blue-50" />
-                    <Skeleton className="h-4 w-5/6 bg-blue-50" />
-                    <Skeleton className="h-4 w-4/6 bg-blue-50" />
-                    <div className="pt-3">
-                      <Skeleton className="h-4 w-full bg-blue-50" />
-                      <Skeleton className="h-4 w-3/4 bg-blue-50 mt-2" />
-                    </div>
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-3.5 w-full skeleton-shimmer-blue" />
+                    <Skeleton className="h-3.5 w-5/6 skeleton-shimmer-blue" />
+                    <Skeleton className="h-3.5 w-4/6 skeleton-shimmer-blue" />
+                    <Skeleton className="h-3.5 w-full skeleton-shimmer-blue" />
+                    <Skeleton className="h-3.5 w-3/4 skeleton-shimmer-blue" />
+                    <p className="text-xs text-blue-400 animate-pulse pt-1">Analyzing tournament data…</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1185,10 +1184,18 @@ export default function SearchPage() {
                     </div>
                     {/* Recommended Plan (auto-generated) */}
                     {milkRunLoading && !milkRun && (
-                      <div className="space-y-2 pt-1">
-                        <Skeleton className="h-4 w-full bg-slate-100" />
-                        <Skeleton className="h-4 w-5/6 bg-slate-100" />
-                        <Skeleton className="h-4 w-4/6 bg-slate-100" />
+                      <div className="space-y-3 pt-1">
+                        {[1,2,3].map(n => (
+                          <div key={n} className="flex gap-3 items-start">
+                            <Skeleton className="w-7 h-7 rounded-full shrink-0 skeleton-shimmer" />
+                            <div className="flex-1 space-y-1.5">
+                              <Skeleton className="h-3.5 w-3/4 skeleton-shimmer" />
+                              <Skeleton className="h-3 w-full skeleton-shimmer" />
+                              <Skeleton className="h-3 w-5/6 skeleton-shimmer" />
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-slate-400 animate-pulse pt-1">Building your plan…</p>
                       </div>
                     )}
                     {milkRun && milkRun.patterns.length > 0 && (

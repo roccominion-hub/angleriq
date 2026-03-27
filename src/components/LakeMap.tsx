@@ -8,17 +8,26 @@ interface LakeMapProps {
   name: string
 }
 
+const MAP_HEIGHT = 190
+
 export function LakeMap({ lat, lng, name }: LakeMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const link = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=11/${lat}/${lng}`
 
   useEffect(() => {
+    // Inject Leaflet CSS once via JS to avoid inline <link> creating a gap
+    if (!document.getElementById('leaflet-css')) {
+      const el = document.createElement('link')
+      el.id = 'leaflet-css'
+      el.rel = 'stylesheet'
+      el.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(el)
+    }
+
     if (!mapRef.current || mapInstanceRef.current) return
 
-    // Dynamically import Leaflet to avoid SSR issues
     import('leaflet').then((L) => {
-      // Fix default icon paths broken by webpack
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -56,26 +65,19 @@ export function LakeMap({ lat, lng, name }: LakeMapProps) {
   }, [lat, lng])
 
   return (
-    <>
-      {/* Leaflet CSS */}
-      <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      />
-      <div
-        className="relative w-full overflow-hidden rounded-t-xl border-b border-blue-100"
-        style={{ height: '160px' }}
+    <div
+      className="relative w-full overflow-hidden border-b border-blue-100"
+      style={{ height: `${MAP_HEIGHT}px` }}
+    >
+      <div ref={mapRef} style={{ height: `${MAP_HEIGHT}px`, width: '100%' }} />
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute bottom-2 right-2 bg-white/80 text-xs text-blue-600 px-2 py-0.5 rounded shadow hover:bg-white z-[1000]"
       >
-        <div ref={mapRef} style={{ height: '160px', width: '100%' }} />
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-2 right-2 bg-white/80 text-xs text-blue-600 px-2 py-0.5 rounded shadow hover:bg-white z-[1000]"
-        >
-          View larger map
-        </a>
-      </div>
-    </>
+        View larger map
+      </a>
+    </div>
   )
 }
