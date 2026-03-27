@@ -24,12 +24,12 @@ export function HomeNav() {
     : null
 
   return (
-    <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+    <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950 sticky top-0 z-10">
       <Logo className="h-8 w-auto" />
       <div className="flex gap-3 items-center">
         {user ? (
           <>
-            <Link href="/search" className="text-sm font-semibold text-slate-600 hover:text-blue-600 transition-colors">
+            <Link href="/search" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
               Search
             </Link>
             <div className="relative">
@@ -63,7 +63,7 @@ export function HomeNav() {
           </>
         ) : (
           <>
-            <Link href="/auth/login" className="text-sm font-semibold text-slate-600 hover:text-blue-600 transition-colors">
+            <Link href="/auth/login" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
               Sign In
             </Link>
             <Link href="/auth/signup">
@@ -78,29 +78,23 @@ export function HomeNav() {
   )
 }
 
-export function HomeCTA({ isLoggedIn }: { isLoggedIn?: boolean }) {
+export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean; variant?: 'dark' | 'light' }) {
   const supabase = createClient()
-  const router = useRouter()
   const [user, setUser] = useState<any>(isLoggedIn ? true : null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
   }, [])
 
-  if (user) {
-    return (
-      <Link href="/search">
-        <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg">
-          Search a Lake
-          <span className="ml-1">›</span>
-        </Button>
-      </Link>
-    )
-  }
+  const btnClass = variant === 'light'
+    ? 'bg-white hover:bg-blue-50 text-blue-600 font-bold text-base px-8 rounded-lg'
+    : 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg'
+
+  const href = user ? '/search' : '/auth/signup'
 
   return (
-    <Link href="/auth/signup">
-      <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg">
+    <Link href={href}>
+      <Button size="lg" className={btnClass}>
         Search a Lake
         <span className="ml-1">›</span>
       </Button>
