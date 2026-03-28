@@ -54,7 +54,6 @@ const MAPPINGS: Record<string, { usgs_site_no: string; wdft_slug: string }> = {
 
   // Additional lakes in DB that also appear in USGS list
   "Lake Graham":                 { usgs_site_no: "08088400", wdft_slug: "graham" },
-  "Lake Granbury":               { usgs_site_no: "08090900", wdft_slug: "granbury" },
   "Lake J.B. Thomas":            { usgs_site_no: "08118000", wdft_slug: "j-b-thomas" },
   "Lake Waxahachie":             { usgs_site_no: "08063600", wdft_slug: "waxahachie" },
   "Lake Pat Cleburne":           { usgs_site_no: "08091900", wdft_slug: "pat-cleburne" },
