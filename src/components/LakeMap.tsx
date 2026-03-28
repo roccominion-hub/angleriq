@@ -76,9 +76,9 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     }).catch(() => setLoading(false))
   }, [lakeId])
 
-  // Init Leaflet map
+  // Init map + waterbody fill together once features are loaded — avoids re-center flash
   useEffect(() => {
-    if (mapRef.current || !mapDivRef.current) return
+    if (mapRef.current || !mapDivRef.current || !features) return
     import('leaflet').then(L => {
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
@@ -86,52 +86,40 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         iconUrl: '/leaflet/marker-icon.png',
         shadowUrl: '/leaflet/marker-shadow.png',
       })
+
+      // Start at fallback lat/lng; will immediately fitBounds if polygon available
       const map = L.map(mapDivRef.current!, { center: [lat, lng], zoom: 13, zoomControl: true })
       tileLayerRef.current = L.tileLayer(TILE_LAYERS.satellite.url, {
         attribution: TILE_LAYERS.satellite.attribution, maxZoom: 19,
       }).addTo(map)
 
-      // Track zoom level for dynamic wind spacing
       map.on('zoomend', () => setZoom(map.getZoom()))
-
       mapRef.current = map
-    })
-    return () => { mapRef.current?.remove(); mapRef.current = null }
-  }, [lat, lng])
 
-  // Waterbody fill layer + fit bounds once features load
-  useEffect(() => {
-    if (!mapRef.current || !features) return
-    import('leaflet').then(L => {
-      waterbodyLayerRef.current?.remove()
-      waterbodyLayerRef.current = null
-
+      // Render waterbody fill + fit bounds in the same tick — no visible flash
       const wb = features?.waterbodies
       const featureCount = wb?.features?.length ?? 0
-      console.log('[LakeMap] waterbodies featureCount:', featureCount, wb?.features?.map((f: any) => f.properties?.FTYPE))
+      if (featureCount) {
+        waterbodyLayerRef.current = L.geoJSON(wb, {
+          style: {
+            fillColor: '#7dd3fc',
+            fillOpacity: 0.35,
+            color: '#38bdf8',
+            weight: 2,
+            opacity: 0.9,
+          },
+          interactive: false,
+        }).addTo(map)
 
-      if (!featureCount) return
-
-      // Render lake polygon with light blue fill — satellite imagery shows through
-      waterbodyLayerRef.current = L.geoJSON(wb, {
-        style: {
-          fillColor: '#7dd3fc',   // sky-300
-          fillOpacity: 0.35,
-          color: '#38bdf8',       // sky-400 outline
-          weight: 2,
-          opacity: 0.9,
-        },
-        interactive: false,
-      }).addTo(mapRef.current)
-
-      // Fit map to lake bounds so lake is centered regardless of lat/lng accuracy
-      const bounds = waterbodyLayerRef.current.getBounds()
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
-        setZoom(mapRef.current.getZoom())
+        const bounds = waterbodyLayerRef.current.getBounds()
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+          setZoom(map.getZoom())
+        }
       }
     })
-  }, [features])
+    return () => { mapRef.current?.remove(); mapRef.current = null }
+  }, [lat, lng, features])
 
   // Flowlines overlay
   useEffect(() => {
@@ -326,8 +314,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         ))}
       </div>
 
-      {/* Map canvas */}
-      <div ref={mapDivRef} style={{ height: 520 }} className="w-full z-0" />
+      {/* Map canvas — skeleton shown until features load */}
+      <div className="relative" style={{ height: 520 }}>
+        {!features && (
+          <div className="absolute inset-0 bg-slate-800 flex items-center justify-center z-10">
+            <span className="text-slate-500 text-sm animate-pulse">Loading map…</span>
+          </div>
+        )}
+        <div ref={mapDivRef} className="w-full h-full z-0" />
+      </div>
 
       {/* Inflow strip */}
       {cond?.inflows?.length > 0 && (
