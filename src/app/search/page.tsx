@@ -14,7 +14,7 @@ import { LakeMap } from '@/components/LakeMap'
 import { LakeLevel } from '@/components/LakeLevel'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
-  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets,
+  Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
@@ -241,11 +241,22 @@ function FilterSelect({ label, icon, value, onValueChange, options, placeholder,
   )
 }
 
-function WeatherBar({ weather }: { weather: Weather }) {
+function WeatherBar({ weather, lakeId }: { weather: Weather; lakeId?: string }) {
   const moon = weather.moon
   const solunarColors = moon ? solunarRatingColor(moon.solunarRating) : ''
   const [showSolunar, setShowSolunar] = useState(true)
+  const [showLevel, setShowLevel] = useState(true)
+  const [lakeLevel, setLakeLevel] = useState<any>(null)
   const isForecast = !!weather.forecastDate
+
+  // Async lake level fetch — loads independently after conditions row renders
+  useEffect(() => {
+    if (!lakeId) return
+    fetch(`/api/lake-conditions?lakeId=${lakeId}`)
+      .then(r => r.json())
+      .then(d => setLakeLevel(d?.conditions?.waterLevel ?? null))
+      .catch(() => {})
+  }, [lakeId])
 
   // Format trip date for display
   const formattedTripDate = weather.forecastDate
@@ -304,6 +315,26 @@ function WeatherBar({ weather }: { weather: Weather }) {
             </button>
           </>
         )}
+
+        {/* Lake level pill — loads async, appears once data arrives */}
+        {lakeLevel && (
+          <>
+            <span className="text-slate-400">·</span>
+            <button
+              onClick={() => setShowLevel(o => !o)}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded border transition-colors ${
+                lakeLevel.trend === 'rising'  ? 'border-green-400 text-green-700' :
+                lakeLevel.trend === 'falling' ? 'border-red-400 text-red-700'    :
+                                                'border-slate-300 text-slate-600'
+              }`}
+            >
+              <Waves size={11} />
+              <span>{lakeLevel.valueFt.toLocaleString()} ft</span>
+              <span className="opacity-60">· {lakeLevel.percentFull}% full</span>
+              <ChevronDown size={11} className={`transition-transform ${showLevel ? 'rotate-180' : ''}`} />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Solunar detail panel */}
@@ -327,6 +358,42 @@ function WeatherBar({ weather }: { weather: Weather }) {
           <div>
             <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Minor Periods</p>
             {moon.minorPeriods.map((p, i) => <p key={i} className="text-blue-300">{p}</p>)}
+          </div>
+        </div>
+      )}
+
+      {/* Lake level detail panel */}
+      {lakeLevel && showLevel && (
+        <div className="bg-slate-900 text-white rounded-lg px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Current Level</p>
+            <p className="font-bold">{lakeLevel.valueFt.toLocaleString()} <span className="text-slate-400 font-normal">ft</span></p>
+            {lakeLevel.date && <p className="text-slate-500 mt-0.5">as of {lakeLevel.date}</p>}
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Trend</p>
+            <p className={`font-bold capitalize ${lakeLevel.trend === 'rising' ? 'text-green-400' : lakeLevel.trend === 'falling' ? 'text-red-400' : 'text-slate-400'}`}>
+              {lakeLevel.trend === 'rising' ? '↑' : lakeLevel.trend === 'falling' ? '↓' : '—'} {lakeLevel.trend}
+            </p>
+            <p className="text-slate-300 mt-0.5">{lakeLevel.deltaFt >= 0 ? '+' : ''}{lakeLevel.deltaFt?.toFixed(2)} ft / 24h</p>
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Pool Status</p>
+            <p className="font-bold">{lakeLevel.percentFull}% full</p>
+            {lakeLevel.abovePoolFt !== undefined && lakeLevel.abovePoolFt !== 0 && (
+              <p className={`mt-0.5 ${lakeLevel.abovePoolFt >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {lakeLevel.abovePoolFt >= 0 ? '+' : ''}{lakeLevel.abovePoolFt.toFixed(2)} ft vs. pool
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-slate-400 uppercase tracking-wider font-semibold mb-1">Capacity</p>
+            <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden mt-1.5">
+              <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(100, Math.max(0, lakeLevel.percentFull))}%` }} />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-500 font-semibold mt-1">
+              <span>0%</span><span>100%</span>
+            </div>
           </div>
         </div>
       )}
@@ -1135,10 +1202,7 @@ export default function SearchPage() {
               </Badge>
             </div>
 
-            {weather && <WeatherBar weather={weather} />}
-
-            {/* Lake Level card */}
-            <LakeLevel lakeId={result.water.id} lakeName={result.water.name} />
+            {weather && <WeatherBar weather={weather} lakeId={result.water.id} />}
 
             {result && !loading && (
               <div className="flex justify-end mb-1">
