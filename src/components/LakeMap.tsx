@@ -103,7 +103,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       if (!overlays.has('flowlines')) return
       flowlinesLayerRef.current = L.geoJSON(features.flowlines, {
         style: f => ({
-          color: '#60a5fa',
+          color: '#a855f7',
           weight: f?.properties?.FTYPE === 460 ? 2.5 : 1.5,
           opacity: 0.85,
           dashArray: f?.properties?.FLOWDIR === 1 ? undefined : '4 3',
