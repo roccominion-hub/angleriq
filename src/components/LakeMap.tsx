@@ -39,6 +39,17 @@ function windIconRotation(fromDeg: number) {
   return (fromDeg + 180) % 360
 }
 
+// Degrees of lat/lng per pixel at a given zoom level (Mercator, ~equator).
+// Multiply by desired pixel spacing to get grid step.
+function degreesPerPixel(zoom: number): number {
+  return 360 / (256 * Math.pow(2, zoom))
+}
+
+// Target ~64px of screen spacing between wind arrows.
+function windStepForZoom(zoom: number): number {
+  return degreesPerPixel(zoom) * 64
+}
+
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const mapRef = useRef<any>(null)
   const mapDivRef = useRef<HTMLDivElement>(null)
@@ -47,9 +58,11 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const [baseLayer, setBaseLayer] = useState<BaseLayer>('satellite')
   const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set(['flowlines']))
   const [loading, setLoading] = useState(true)
+  const [zoom, setZoom] = useState(13)
   const flowlinesLayerRef = useRef<any>(null)
   const windLayerRef = useRef<any>(null)
   const tileLayerRef = useRef<any>(null)
+  const waterbodyLayerRef = useRef<any>(null)
 
   // Fetch conditions + features
   useEffect(() => {
@@ -77,19 +90,40 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       tileLayerRef.current = L.tileLayer(TILE_LAYERS.satellite.url, {
         attribution: TILE_LAYERS.satellite.attribution, maxZoom: 19,
       }).addTo(map)
+
+      // Track zoom level for dynamic wind spacing
+      map.on('zoomend', () => setZoom(map.getZoom()))
+
       mapRef.current = map
     })
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng])
 
-  // Center map on waterbody polygon bounds once features load
+  // Waterbody fill layer + fit bounds once features load
   useEffect(() => {
     if (!mapRef.current || !features?.waterbodies?.features?.length) return
     import('leaflet').then(L => {
-      const wbLayer = L.geoJSON(features.waterbodies)
-      const bounds = wbLayer.getBounds()
+      // Remove old layer
+      waterbodyLayerRef.current?.remove()
+      waterbodyLayerRef.current = null
+
+      // Render lake polygon with light blue fill (mimics USGS water data style)
+      waterbodyLayerRef.current = L.geoJSON(features.waterbodies, {
+        style: {
+          fillColor: '#7dd3fc',   // sky-300 — readable on both satellite and topo
+          fillOpacity: 0.30,
+          color: '#38bdf8',       // sky-400 outline
+          weight: 1.5,
+          opacity: 0.75,
+        },
+        interactive: false,
+      }).addTo(mapRef.current)
+
+      // Fit map to lake bounds so the lake is centered regardless of lat/lng accuracy
+      const bounds = waterbodyLayerRef.current.getBounds()
       if (bounds.isValid()) {
         mapRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+        setZoom(mapRef.current.getZoom())
       }
     })
   }, [features])
@@ -117,7 +151,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [features, overlays])
 
-  // Wind arrows — dense grid confined to lake polygon
+  // Wind arrows — dense grid confined to lake polygon, step tied to zoom
   useEffect(() => {
     if (!mapRef.current) return
     import('leaflet').then(L => {
@@ -151,22 +185,23 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         return inside
       }
       function inAnyLake(lng: number, lat: number): boolean {
-        if (!lakePolygons.length) return true // fallback: no polygon data, show everywhere
+        if (!lakePolygons.length) return true
         return lakePolygons.some(ring => inPolygon(lng, lat, ring))
       }
 
-      // Bounding box from map or waterbody
       const bounds = features?.waterbodies?.features?.length
         ? L.geoJSON(features.waterbodies).getBounds()
         : mapRef.current.getBounds()
 
       if (!bounds?.isValid?.()) return
 
-      const step = 0.0045 // ~0.5km spacing
+      // Dynamic step: ~64px of screen separation at current zoom level
+      const step = windStepForZoom(zoom)
+
       const swLat = bounds.getSouth(), neLat = bounds.getNorth()
       const swLng = bounds.getWest(),  neLng = bounds.getEast()
 
-      // Arrow color: white on topo (light map), blue on satellite (dark map)
+      // Arrow color: dark on topo, light blue on satellite
       const arrowColor = baseLayer === 'topo' ? '#1e3a5f' : '#93c5fd'
 
       const arrowHtml = `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg)">
@@ -186,7 +221,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       windLayerRef.current = group.addTo(mapRef.current)
     })
-  }, [conditions, features, overlays, lat, lng, baseLayer])
+  }, [conditions, features, overlays, baseLayer, zoom])
 
   // Inflow markers (always shown when data available)
   const inflowsAdded = useRef(false)
@@ -256,7 +291,6 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       {/* Map layer controls */}
       <div className="bg-slate-800 px-4 py-2 flex items-center gap-2 border-b border-slate-700/40">
-        {/* Satellite / Topo toggle — clearly two states */}
         <div className="flex rounded-md overflow-hidden border border-slate-600 text-xs font-semibold">
           <button
             onClick={() => setBaseLayer('satellite')}
@@ -272,7 +306,6 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           </button>
         </div>
 
-        {/* Overlay toggles */}
         {(['flowlines', 'wind'] as OverlayKey[]).map(key => (
           <button
             key={key}
