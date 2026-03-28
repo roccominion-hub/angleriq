@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Worth'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15637636/lake-worth-workingmans-start-this-week-3-25', notes: 'Lake Worth Workingman tournament - patterns' },
 ]
 

@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Purtis Creek State Park Lake'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15612680/purtis-creek', notes: 'Purtis Creek fishing report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15621771/purtis-creek', notes: 'Purtis Creek bass fishing' },
 ]

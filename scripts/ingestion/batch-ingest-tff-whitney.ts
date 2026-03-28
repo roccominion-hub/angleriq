@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Whitney'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15624394/mlf-lake-whitney-and-waco', notes: 'MLF Lake Whitney tournament - patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15627913/mlf-lake-whitney-and-waco', notes: 'MLF Lake Whitney and Waco - techniques' },
 ]

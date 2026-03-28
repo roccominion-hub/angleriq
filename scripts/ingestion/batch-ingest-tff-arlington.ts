@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Arlington'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15627030/no-live-scope-open-arlington-3-14-is-on', notes: 'Lake Arlington No Live-Scope Open tournament' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15631104/no-live-scope-open-arlington-3-14-is-on', notes: 'Lake Arlington tournament - patterns and techniques' },
 ]

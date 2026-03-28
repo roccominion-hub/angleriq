@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Hubbard Creek Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   // No pre-loaded threads; dynamic search will find them
 ]
 

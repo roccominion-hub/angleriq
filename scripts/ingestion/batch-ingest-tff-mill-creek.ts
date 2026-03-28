@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Mill Creek Lake'; const STATE = 'TX'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15621867/mill-creek-reservoir-canton-tx', notes: 'Mill Creek Reservoir Canton TX fishing report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15622420/mill-creek-reservoir-canton-tx', notes: 'Mill Creek Reservoir bass techniques' },
 ]

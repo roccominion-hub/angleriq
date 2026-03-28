@@ -225,7 +225,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = '${cfg.lake}'; const STATE = '${cfg.state}'
 
-const KNOWN_THREADS = [
+const KNOWN_THREADS: string[] = [
 ${sourcesCode}
 ]
 
