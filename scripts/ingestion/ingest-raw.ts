@@ -14,7 +14,7 @@ import { insertTechniqueReport } from './insert-to-supabase'
 
 async function main() {
   const [textFile, bodyOfWater, state, sourceType, sourceUrl, tournamentName, organization, reportedDate] = process.argv.slice(2)
-  const apiKey = process.env.ANTHROPIC_API_KEY!
+  const apiKey = process.env.GEMINI_API_KEY!
 
   const text = readFileSync(textFile, 'utf-8')
   console.log(`\n🎣 AnglerIQ Raw Ingestion | ${bodyOfWater}, ${state}`)

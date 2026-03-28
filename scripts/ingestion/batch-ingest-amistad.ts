@@ -22,7 +22,7 @@ const SOURCES = [
 
 async function main() {
   console.log(`\n🎣 ${LAKE} — ${SOURCES.length} sources`)
-  const apiKey = process.env.ANTHROPIC_API_KEY!
+  const apiKey = process.env.GEMINI_API_KEY!
   let total = 0, errors = 0
   for (const [i, s] of SOURCES.entries()) {
     console.log(`\n[${i+1}/${SOURCES.length}] ${s.url.slice(0,70)}\n     ${s.notes}`)

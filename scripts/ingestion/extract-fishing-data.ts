@@ -46,32 +46,38 @@ export async function extractFishingData(
   text: string,
   apiKey: string
 ): Promise<any[]> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Extract fishing technique data from this text:\n\n${text.slice(0, 8000)}`
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `Extract fishing technique data from this text:\n\n${text.slice(0, 8000)}` }]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json',
         }
-      ]
-    })
-  })
+      })
+    }
+  )
 
   if (!response.ok) {
-    throw new Error(`Anthropic API error: ${response.status}`)
+    const err = await response.text()
+    throw new Error(`Gemini API error: ${response.status} — ${err.slice(0, 200)}`)
   }
 
   const data = await response.json() as any
-  const raw = data.content[0].text.trim()
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
   // Strip markdown code fences if present
   const content = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 

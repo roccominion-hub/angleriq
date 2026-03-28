@@ -1,0 +1,22 @@
+# YouTube Queue — Phase 2 Bass Fishing Videos
+# Format: LAKE NAME | URL | description
+# Note: Brave Search API was unavailable during this ingestion run.
+# YouTube URLs should be added here for Phase 2 processing via video transcript pipeline.
+# 
+# Suggested search terms for each lake:
+# Possum Kingdom Lake | https://youtube.com/search?q=possum+kingdom+lake+bass+fishing | Search for bass fishing tutorials
+# Bois d'Arc Lake | https://youtube.com/search?q=bois+darc+lake+bass+fishing+texas | New lake, look for 2022-2024 videos
+# Lake Bob Sandlin | https://youtube.com/search?q=lake+bob+sandlin+bass+fishing | East TX hydrilla lake
+# Cypress Springs Lake | https://youtube.com/search?q=cypress+springs+lake+bass+fishing+texas | Private lake, limited content
+# Hubbard Creek Reservoir | https://youtube.com/search?q=hubbard+creek+reservoir+fishing+texas | West TX lake
+# Lake Palestine | https://youtube.com/search?q=lake+palestine+texas+bass+fishing | Top East TX lake
+# Eagle Mountain Lake | https://youtube.com/search?q=eagle+mountain+lake+bass+fishing+fort+worth | DFW area
+# Lake Ray Hubbard | https://youtube.com/search?q=lake+ray+hubbard+bass+fishing | DFW urban lake
+# Choke Canyon Reservoir | https://youtube.com/search?q=choke+canyon+reservoir+bass+fishing+texas | South TX trophy lake
+# Cedar Creek Reservoir | https://youtube.com/search?q=cedar+creek+reservoir+bass+fishing+texas | Large East TX lake
+# Richland Chambers Reservoir | https://youtube.com/search?q=richland+chambers+bass+fishing | Central TX elite fishery
+# Lake Travis | https://youtube.com/search?q=lake+travis+bass+fishing+austin | Clear Hill Country lake
+# Lake Whitney | https://youtube.com/search?q=lake+whitney+texas+bass+fishing | Brazos River, white bass run
+# Lake Buchanan | https://youtube.com/search?q=lake+buchanan+texas+stripers+bass | Highland Lakes striper
+# Joe Pool Lake | https://youtube.com/search?q=joe+pool+lake+bass+fishing+dallas | DFW hydrilla lake
+# Squaw Creek Reservoir | https://youtube.com/search?q=squaw+creek+reservoir+bass+fishing+texas | Nuclear plant warm water

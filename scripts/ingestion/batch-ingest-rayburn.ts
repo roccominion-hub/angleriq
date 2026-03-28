@@ -151,7 +151,7 @@ async function main() {
   console.log(`\n🎣 Batch Ingestion — ${LAKE}, ${STATE}`)
   console.log(`📦 ${SOURCES.length} sources queued\n`)
 
-  const apiKey = process.env.ANTHROPIC_API_KEY!
+  const apiKey = process.env.GEMINI_API_KEY!
   let totalReports = 0
   let errors = 0
 

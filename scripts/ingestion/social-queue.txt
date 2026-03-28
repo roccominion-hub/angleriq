@@ -1,0 +1,19 @@
+# Social/Forum Queue — Phase 3
+# Format: LAKE NAME | URL | description | source_type
+# Note: Brave Search API was unavailable during this ingestion run.
+# Forum and social content should be verified before adding to ingest scripts.
+#
+# Recommended sources to search manually:
+#
+# texasfishingforum.com — search each lake name for reports (not forum threads, look for articles)
+# texassportsman.com — has lake-specific bass fishing reports
+# bassmaster.com/fishing-lake/ — has Texas lake pages
+# wired2fish.com — search for Texas lake articles
+#
+# LAKE-SPECIFIC FORUM THREADS TO INVESTIGATE:
+# Possum Kingdom Lake | https://www.texasfishingforum.com/forum/freshwater/possum-kingdom-lake | Forums - verify article quality
+# Lake Palestine | https://www.texasfishingforum.com/forum/freshwater/lake-palestine | Strong East TX community
+# Cedar Creek Reservoir | https://www.texasfishingforum.com/forum/freshwater/cedar-creek-reservoir | Active forum
+# Richland Chambers | https://www.texasfishingforum.com/forum/freshwater/richland-chambers | Very active community
+# Lake Ray Hubbard | https://www.texasfishingforum.com/forum/freshwater/lake-ray-hubbard | DFW urban lake community
+# Choke Canyon | https://www.texasfishingforum.com/forum/freshwater/choke-canyon | South TX bass community
