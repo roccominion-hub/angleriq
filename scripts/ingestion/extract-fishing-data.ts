@@ -42,34 +42,28 @@ Return a JSON array of technique objects. Each object should have these fields (
 
 Return ONLY valid JSON array. No explanation. If no fishing technique data found, return [].`
 
-export async function extractFishingData(
-  text: string,
-  apiKey: string
-): Promise<any[]> {
+async function callGemini(text: string, apiKey: string, attempt = 1): Promise<any[]> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `Extract fishing technique data from this text:\n\n${text.slice(0, 8000)}` }]
-          }
-        ],
-        generationConfig: {
-          maxOutputTokens: 8192,
-          responseMimeType: 'application/json',
-        }
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: `Extract fishing technique data from this text:\n\n${text.slice(0, 8000)}` }] }],
+        generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' }
       })
     }
   )
+
+  // 429 rate limit — exponential backoff, up to 3 retries
+  if (response.status === 429) {
+    if (attempt > 3) throw new Error(`Gemini API error: 429 — rate limit, max retries exceeded`)
+    const wait = attempt * 20000 // 20s, 40s, 60s
+    console.log(`     ⏳ Rate limited — waiting ${wait/1000}s before retry ${attempt}/3...`)
+    await new Promise(r => setTimeout(r, wait))
+    return callGemini(text, apiKey, attempt + 1)
+  }
 
   if (!response.ok) {
     const err = await response.text()
@@ -78,7 +72,6 @@ export async function extractFishingData(
 
   const data = await response.json() as any
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
-  // Strip markdown code fences if present
   const content = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   try {
@@ -87,4 +80,8 @@ export async function extractFishingData(
     console.error('Failed to parse AI response:', content)
     return []
   }
+}
+
+export async function extractFishingData(text: string, apiKey: string): Promise<any[]> {
+  return callGemini(text, apiKey)
 }

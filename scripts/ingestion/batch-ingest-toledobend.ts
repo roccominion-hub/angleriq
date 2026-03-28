@@ -197,7 +197,7 @@ async function main() {
       console.log(`     ✅ Inserted`)
 
       // Rate limit AI calls
-      await new Promise(r => setTimeout(r, 5000))
+      await new Promise(r => setTimeout(r, 8000))
 
     } catch (e: any) {
       console.error(`     ❌ Error: ${e.message?.slice(0, 100)}`)

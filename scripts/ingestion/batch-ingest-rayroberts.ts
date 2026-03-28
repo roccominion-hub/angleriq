@@ -120,7 +120,7 @@ async function main() {
 
       totalReports += extracted.length
       console.log(`     ✅ Inserted`)
-      await new Promise(r => setTimeout(r, 5000))
+      await new Promise(r => setTimeout(r, 8000))
 
     } catch (e: any) {
       console.error(`     ❌ ${e.message?.slice(0, 100)}`)
