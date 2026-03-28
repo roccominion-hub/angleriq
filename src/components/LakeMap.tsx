@@ -162,14 +162,17 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       if (!bounds?.isValid?.()) return
 
-      const step = 0.018 // ~2km spacing
+      const step = 0.0045 // ~0.5km spacing
       const swLat = bounds.getSouth(), neLat = bounds.getNorth()
       const swLng = bounds.getWest(),  neLng = bounds.getEast()
 
+      // Arrow color: white on topo (light map), blue on satellite (dark map)
+      const arrowColor = baseLayer === 'topo' ? '#1e3a5f' : '#93c5fd'
+
       const arrowHtml = `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#93c5fd" opacity="0.9">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="${arrowColor}" opacity="0.9">
           <path d="M12 3L7 12h10L12 3z"/>
-          <rect x="11" y="12" width="2" height="9" fill="#93c5fd"/>
+          <rect x="11" y="12" width="2" height="9" fill="${arrowColor}"/>
         </svg>
       </div>`
 
@@ -183,7 +186,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       windLayerRef.current = group.addTo(mapRef.current)
     })
-  }, [conditions, features, overlays, lat, lng])
+  }, [conditions, features, overlays, lat, lng, baseLayer])
 
   // Inflow markers (always shown when data available)
   const inflowsAdded = useRef(false)
