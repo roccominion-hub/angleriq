@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Fork'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15617507/10-03-of-unders-on-fork', notes: 'Lake Fork 10-0 bass catch report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15619562/fishing-at-fork', notes: 'Fishing at Lake Fork - techniques and patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15620513/10-13-on-fork-in-30-mph-winds', notes: '10-13lb on Lake Fork in 30 mph winds' },

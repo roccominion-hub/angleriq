@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Toledo Bend Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15625500/toledo-bend-sharelunker', notes: 'Toledo Bend ShareLunker program - big bass report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15630138/sam-rayburn-or-toledo-bend', notes: 'Toledo Bend comparison - techniques and patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15634942/toledo-bend-sharelunker', notes: 'Toledo Bend ShareLunker - techniques' },

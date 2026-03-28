@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Bridgeport'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15618657/5th-annual-pops-open-bridgeport-4-4', notes: 'Lake Bridgeport 5th Annual Pops Open' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15640512/5th-annual-pops-open-bridgeport-4-4', notes: 'Lake Bridgeport Pops Open tournament patterns' },
 ]

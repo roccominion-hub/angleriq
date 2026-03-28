@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Squaw Creek Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15627692/squaw-creek', notes: 'Squaw Creek fishing report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15636288/squaw-creek-advice', notes: 'Squaw Creek fishing advice - patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15637017/squaw-creek-closes-march-29-2026', notes: 'Squaw Creek closure notice and fishing update' },

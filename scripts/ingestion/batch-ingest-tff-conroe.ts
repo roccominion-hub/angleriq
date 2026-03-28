@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Conroe'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/13582579/lake-conroe-bass-fishing-for-brush-pile-bigs-over-23-pounds', notes: 'Lake Conroe bass fishing for brush pile bigs over 23 pounds' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/13466699/lake-conroe-fishing', notes: 'Lake Conroe fishing report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/13450259/lake-conroe', notes: 'Lake Conroe bass fishing thread' },

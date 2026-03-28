@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Amistad'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15575979/amistad-bass-1-6-26', notes: 'Lake Amistad bass report January 2026' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15640601/amistad-oh-ivie-3-27-26', notes: 'Lake Amistad fishing report 3/27/26' },
 ]

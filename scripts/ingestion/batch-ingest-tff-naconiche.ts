@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Lake Naconiche'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15639123/lake-naconiche', notes: 'Lake Naconiche fishing report' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15639882/lake-naconiche', notes: 'Lake Naconiche bass fishing patterns' },
 ]

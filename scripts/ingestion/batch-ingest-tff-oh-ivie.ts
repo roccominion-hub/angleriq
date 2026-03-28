@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'O.H. Ivie Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15616224/oh-ivie-bass-2-21-25', notes: 'O.H. Ivie bass report 2/21/25' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15623585/fished-oh-ivie', notes: 'Fished O.H. Ivie - patterns and baits' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15640106/mlf-stage-4-oh-ivie-brownwood', notes: 'MLF Stage 4 O.H. Ivie - tournament patterns' },

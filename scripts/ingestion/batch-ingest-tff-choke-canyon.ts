@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Choke Canyon Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15620437/lake-corpus-and-choke', notes: 'Choke Canyon and Corpus bass patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15623969/lake-corpus-and-choke', notes: 'Choke Canyon fishing techniques' },
 ]

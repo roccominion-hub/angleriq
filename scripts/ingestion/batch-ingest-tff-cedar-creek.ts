@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Cedar Creek Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15601939/no-ffs-open-cedar-creek-3-7', notes: 'No FFS Open Cedar Creek - patterns and techniques' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15623929/cedar-creek-march-27th-30', notes: 'Cedar Creek fishing report March 27-30' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15628223/no-ffs-open-cedar-creek-3-7', notes: 'No FFS Open Cedar Creek tournament report' },

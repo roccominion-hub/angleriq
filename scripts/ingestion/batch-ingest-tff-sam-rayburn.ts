@@ -7,7 +7,7 @@ import { findTffThreadsForLake } from './tff-utils'
 
 const LAKE = 'Sam Rayburn Reservoir'; const STATE = 'TX'
 
-const KNOWN_THREADS: string[] = [
+const KNOWN_THREADS: { url: string; notes: string }[] = [
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15615144/6-of-the-top-10-in-the-rayburn-bass-open-23-years-old-and-under', notes: 'Rayburn Bass Open - top 10 patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15619699/local-kid-leading-bass-collegient-tourney-on-rayburn', notes: 'College tournament on Sam Rayburn - patterns' },
   { url: 'https://texasfishingforum.com/forums/ubbthreads.php/topics/15630138/sam-rayburn-or-toledo-bend', notes: 'Sam Rayburn vs Toledo Bend comparison - techniques' },
