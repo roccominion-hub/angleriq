@@ -59,6 +59,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set(['flowlines']))
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(13)
+  const [mapReady, setMapReady] = useState(false)
   const flowlinesLayerRef = useRef<any>(null)
   const windLayerRef = useRef<any>(null)
   const tileLayerRef = useRef<any>(null)
@@ -95,6 +96,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       map.on('zoomend', () => setZoom(map.getZoom()))
       mapRef.current = map
+      setMapReady(true)
 
       // Render waterbody fill + fit bounds in the same tick — no visible flash
       const wb = features?.waterbodies
@@ -142,7 +144,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         },
       }).addTo(mapRef.current)
     })
-  }, [features, overlays])
+  }, [features, overlays, mapReady])
 
   // Wind arrows — dense grid confined to lake polygon, step tied to zoom
   useEffect(() => {
@@ -214,7 +216,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       windLayerRef.current = group.addTo(mapRef.current)
     })
-  }, [conditions, features, overlays, baseLayer, zoom])
+  }, [conditions, features, overlays, baseLayer, zoom, mapReady])
 
   // Inflow markers (always shown when data available)
   const inflowsAdded = useRef(false)
