@@ -168,21 +168,63 @@ export async function getLakeConditions(
   return { waterLevel, inflows, wind, waterTempF: null }
 }
 
-// NHD structural features (flowlines + waterbodies)
-export async function getLakeFeatures(lat: number, lng: number, radiusDeg = 0.18) {
+// NHD structural features (flowlines) + Nominatim waterbody polygon
+export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.18) {
   const xmin = lng - radiusDeg, ymin = lat - radiusDeg
   const xmax = lng + radiusDeg, ymax = lat + radiusDeg
   const bbox = `${xmin},${ymin},${xmax},${ymax}`
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
-  const [flowlines, waterbodies] = await Promise.allSettled([
+
+  // Flowlines from NHD (streams/rivers feeding the lake)
+  const flowlinesResult = await Promise.resolve(
     fetch(`${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`, { next: { revalidate: 86400 } })
-      .then(r => r.ok ? r.json() : null),
-    // FTYPE 390 = LakePond, 436 = Reservoir (most TX lakes are reservoirs)
-    fetch(`${BASE}/8/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&f=geojson&where=FTYPE+IN+(390,436)`, { next: { revalidate: 86400 } })
-      .then(r => r.ok ? r.json() : null),
-  ])
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+  )
+
+  // Waterbody polygon from Nominatim (OSM) — far more reliable than NHD for TX reservoirs
+  let waterbodies = null
+  if (lakeName) {
+    try {
+      const query = state ? `${lakeName} ${state}` : lakeName
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=3&featuretype=water`
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' },
+        next: { revalidate: 86400 },
+      })
+      if (res.ok) {
+        const results = await res.json() as any[]
+        // Pick the result with the largest polygon (most likely the right lake)
+        const waterResult = results
+          .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+          .sort((a, b) => {
+            const sizeA = a.geojson?.coordinates?.flat(3).length ?? 0
+            const sizeB = b.geojson?.coordinates?.flat(3).length ?? 0
+            return sizeB - sizeA
+          })[0]
+        if (waterResult?.geojson) {
+          waterbodies = {
+            type: 'FeatureCollection',
+            features: [{
+              type: 'Feature',
+              geometry: waterResult.geojson,
+              properties: {
+                name: waterResult.display_name,
+                osm_id: waterResult.osm_id,
+                centroidLat: parseFloat(waterResult.lat),
+                centroidLng: parseFloat(waterResult.lon),
+              },
+            }],
+          }
+        }
+      }
+    } catch {
+      // Nominatim unavailable — proceed without polygon
+    }
+  }
+
   return {
-    flowlines: flowlines.status === 'fulfilled' ? flowlines.value : null,
-    waterbodies: waterbodies.status === 'fulfilled' ? waterbodies.value : null,
+    flowlines: flowlinesResult,
+    waterbodies,
   }
 }

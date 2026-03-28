@@ -18,12 +18,12 @@ export async function GET(req: NextRequest) {
 
   const { data: lake } = await supabase
     .from('body_of_water')
-    .select('lat, lng')
+    .select('lat, lng, name, state')
     .eq('id', lakeId)
     .single()
 
   if (!lake) return NextResponse.json({ error: 'Lake not found' }, { status: 404 })
 
-  const features = await getLakeFeatures(lake.lat, lake.lng)
+  const features = await getLakeFeatures(lake.lat, lake.lng, lake.name, lake.state)
   return NextResponse.json(features)
 }
