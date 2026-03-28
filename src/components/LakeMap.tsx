@@ -101,25 +101,30 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
   // Waterbody fill layer + fit bounds once features load
   useEffect(() => {
-    if (!mapRef.current || !features?.waterbodies?.features?.length) return
+    if (!mapRef.current || !features) return
     import('leaflet').then(L => {
-      // Remove old layer
       waterbodyLayerRef.current?.remove()
       waterbodyLayerRef.current = null
 
-      // Render lake polygon with light blue fill (mimics USGS water data style)
-      waterbodyLayerRef.current = L.geoJSON(features.waterbodies, {
+      const wb = features?.waterbodies
+      const featureCount = wb?.features?.length ?? 0
+      console.log('[LakeMap] waterbodies featureCount:', featureCount, wb?.features?.map((f: any) => f.properties?.FTYPE))
+
+      if (!featureCount) return
+
+      // Render lake polygon with light blue fill — satellite imagery shows through
+      waterbodyLayerRef.current = L.geoJSON(wb, {
         style: {
-          fillColor: '#7dd3fc',   // sky-300 — readable on both satellite and topo
-          fillOpacity: 0.30,
+          fillColor: '#7dd3fc',   // sky-300
+          fillOpacity: 0.35,
           color: '#38bdf8',       // sky-400 outline
-          weight: 1.5,
-          opacity: 0.75,
+          weight: 2,
+          opacity: 0.9,
         },
         interactive: false,
       }).addTo(mapRef.current)
 
-      // Fit map to lake bounds so the lake is centered regardless of lat/lng accuracy
+      // Fit map to lake bounds so lake is centered regardless of lat/lng accuracy
       const bounds = waterbodyLayerRef.current.getBounds()
       if (bounds.isValid()) {
         mapRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })

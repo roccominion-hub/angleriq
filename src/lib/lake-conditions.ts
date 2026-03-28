@@ -177,7 +177,8 @@ export async function getLakeFeatures(lat: number, lng: number, radiusDeg = 0.18
   const [flowlines, waterbodies] = await Promise.allSettled([
     fetch(`${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`, { next: { revalidate: 86400 } })
       .then(r => r.ok ? r.json() : null),
-    fetch(`${BASE}/8/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&f=geojson&where=FTYPE=390`, { next: { revalidate: 86400 } })
+    // FTYPE 390 = LakePond, 436 = Reservoir (most TX lakes are reservoirs)
+    fetch(`${BASE}/8/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&f=geojson&where=FTYPE+IN+(390,436)`, { next: { revalidate: 86400 } })
       .then(r => r.ok ? r.json() : null),
   ])
   return {
