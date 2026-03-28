@@ -45,7 +45,7 @@ async function main() {
         })
         await insertTechniqueReport({ bodyOfWaterName: lake.name, state: STATE, sourceType: s.sourceType as any, sourceUrl: s.url, reportedDate: s.date, tournamentName: s.tournament, organization: s.org, extracted })
         total += extracted.length; console.log('     ✅ Inserted')
-        await new Promise(r => setTimeout(r, 2000))
+        await new Promise(r => setTimeout(r, 5000))
       } catch (e: any) { console.error(`     ❌ ${e.message?.slice(0,100)}`); errors++ }
     }
     console.log(`\n${'─'.repeat(50)}\n✅ ${lake.name}: ${total} reports, ${errors} errors`)
