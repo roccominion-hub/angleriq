@@ -188,10 +188,20 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
   let waterbodies = null
   if (lakeName) {
     try {
+      // Build query variants to handle OSM name differences:
+      // DB "Lake Ray Roberts" → OSM "Ray Roberts Lake"
+      // DB "O.H. Ivie Reservoir" → OSM "O. H. Ivie Lake"
+      const coreName = lakeName
+        .replace(/^Lake\s+/i, '')      // "Lake Ray Roberts" → "Ray Roberts"
+        .replace(/\s+Lake$/i, '')      // "Somerville Lake" → "Somerville"
+        .replace(/\s+Reservoir$/i, '') // "O.H. Ivie Reservoir" → "O.H. Ivie"
+        .trim()
+      const stateStr = state ?? ''
       const queries = [
-        state ? `${lakeName} ${state}` : lakeName,
-        // Fallback: try with "Reservoir" suffix for lakes that OSM names differently
-        state ? `${lakeName} Reservoir ${state}` : `${lakeName} Reservoir`,
+        `${lakeName} ${stateStr}`.trim(),             // exact DB name: "Lake Ray Roberts TX"
+        `${coreName} Lake ${stateStr}`.trim(),        // flipped: "Ray Roberts Lake TX"
+        `${coreName} Reservoir ${stateStr}`.trim(),   // "O.H. Ivie Reservoir TX"
+        `${coreName} ${stateStr}`.trim(),             // bare: "O.H. Ivie TX"
       ]
 
       for (const query of queries) {
