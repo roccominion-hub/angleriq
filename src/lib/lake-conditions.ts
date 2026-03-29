@@ -185,18 +185,30 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
   let waterbodies = null
   if (lakeName) {
     try {
-      // Try exact name first, fall back to "Reservoir" suffix (e.g. OSM calls it "Lake Fork Reservoir")
+      // Generate query variants to handle OSM naming differences:
+      // "Lake Ray Roberts" → OSM: "Ray Roberts Lake"
+      // "O.H. Ivie Reservoir" → OSM: "O. H. Ivie Lake"
+      // "Lake Fork" → OSM: "Lake Fork Reservoir"
+      const core = lakeName
+        .replace(/^Lake\s+/i, '')
+        .replace(/\s+(Lake|Reservoir)$/i, '')
+        .trim()
+      const s = state ?? ''
       const queries = [
-        state ? `${lakeName} ${state}` : lakeName,
-        state ? `${lakeName.replace(/^Lake\s+/i,'').replace(/\s+(Lake|Reservoir)$/i,'')} Reservoir ${state}` : `${lakeName} Reservoir`,
-      ]
+        `${lakeName} ${s}`.trim(),          // "Lake Ray Roberts TX"
+        `${core} Lake ${s}`.trim(),         // "Ray Roberts Lake TX" ✓
+        `${core} Reservoir ${s}`.trim(),    // "Lake Fork Reservoir TX" ✓
+        `${core} ${s}`.trim(),              // "O.H. Ivie TX" ✓
+      ].filter((q, i, arr) => arr.indexOf(q) === i) // dedupe
+
       for (const query of queries) {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5&featuretype=water`
-        const res = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
+        // No featuretype filter — too restrictive (blocks O.H. Ivie, Ray Roberts)
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5`
+        const res = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 86400 } })
         if (!res.ok) continue
         const results = (await res.json() as any[])
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-          .filter(r => r.type !== 'administrative') // exclude city/admin boundaries
+          .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type)) // exclude non-water features
         // Filter out tiny ponds by bbox area
         const MIN_AREA = 0.001
         const MAX_DIST_DEG = 0.5 // ~35 miles — must be near our known coords
