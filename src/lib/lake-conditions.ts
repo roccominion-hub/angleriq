@@ -168,19 +168,53 @@ export async function getLakeConditions(
   return { waterLevel, inflows, wind, waterTempF: null }
 }
 
-// NHD structural features — flowlines only (layer 6 = streams/rivers feeding the lake)
-// NOTE: Waterbody polygon overlay was removed — it caused consistent wrong-lake regressions
-// across TX reservoirs due to OSM/NHD naming mismatches. The map centers on DB lat/lng coords.
-export async function getLakeFeatures(lat: number, lng: number, _lakeName?: string, _state?: string, radiusDeg = 0.18) {
+// NHD structural features (flowlines) + Nominatim waterbody polygon
+export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.18) {
   const xmin = lng - radiusDeg, ymin = lat - radiusDeg
   const xmax = lng + radiusDeg, ymax = lat + radiusDeg
   const bbox = `${xmin},${ymin},${xmax},${ymax}`
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
 
+  // Flowlines from NHD (streams/rivers feeding the lake)
   const flowlinesResult = await fetch(
     `${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
     { next: { revalidate: 3600 } }
   ).then(r => r.ok ? r.json() : null).catch(() => null)
 
-  return { flowlines: flowlinesResult, waterbodies: null }
+  // Waterbody polygon from Nominatim (OSM) — more complete than NHD for TX reservoirs
+  let waterbodies = null
+  if (lakeName) {
+    try {
+      // Try exact name first, fall back to "Reservoir" suffix (e.g. OSM calls it "Lake Fork Reservoir")
+      const queries = [
+        state ? `${lakeName} ${state}` : lakeName,
+        state ? `${lakeName.replace(/^Lake\s+/i,'').replace(/\s+(Lake|Reservoir)$/i,'')} Reservoir ${state}` : `${lakeName} Reservoir`,
+      ]
+      for (const query of queries) {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5&featuretype=water`
+        const res = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
+        if (!res.ok) continue
+        const results = (await res.json() as any[]).filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+        // Filter out tiny ponds, then pick closest to our known coords
+        const MIN_AREA = 0.001
+        const valid = results.filter(r => {
+          const bb = r.boundingbox
+          return bb && (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2])) >= MIN_AREA
+        })
+        if (!valid.length) continue
+        const best = valid.sort((a,b) => {
+          const dA = (parseFloat(a.lat)-lat)**2 + (parseFloat(a.lon)-lng)**2
+          const dB = (parseFloat(b.lat)-lat)**2 + (parseFloat(b.lon)-lng)**2
+          return dA - dB
+        })[0]
+        if (best?.geojson) {
+          waterbodies = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: best.geojson, properties: { name: best.display_name, osm_id: best.osm_id } }] }
+          break
+        }
+        await new Promise(r => setTimeout(r, 300))
+      }
+    } catch { /* Nominatim unavailable — proceed without polygon */ }
+  }
+
+  return { flowlines: flowlinesResult, waterbodies }
 }
