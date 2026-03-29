@@ -9,7 +9,7 @@ const supabase = createClient(
 export async function GET() {
   const { data } = await supabase
     .from('body_of_water')
-    .select('id, name, state, type, species')
+    .select('id, name, state, type, species, lat, lng')
     .order('name')
 
   return NextResponse.json(data || [])
