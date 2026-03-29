@@ -278,7 +278,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
 
   // Flowlines from NHD covering the full lake extent
   const flowlinesResult = await fetch(
-    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
+    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=5000&f=geojson`,
     { next: { revalidate: 3600 } }
   ).then(r => r.ok ? r.json() : null).catch(() => null)
 

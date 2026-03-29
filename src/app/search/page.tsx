@@ -23,6 +23,17 @@ import { NavUserMenu } from '@/components/NavUserMenu'
 import { createClient } from '@/lib/supabase/client'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
+
+// Lakes that should appear as a single search entry — secondary is hidden, primary is used for data
+const MERGED_LAKE_PAIRS: Record<string, string> = {
+  'Lake Eddleman': 'Lake Graham',   // hide Eddleman, show under Graham
+  'Lake Tyler East': 'Lake Tyler',  // hide Tyler East, show under Tyler
+}
+// Display labels for merged primaries
+const MERGED_LAKE_LABELS: Record<string, string> = {
+  'Lake Graham': 'Lake Graham / Lake Eddleman',
+  'Lake Tyler':  'Lake Tyler / Lake Tyler East',
+}
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
 interface Weather { tempF?: number; feelsLikeF?: number; tempLowF?: number; cloudCoverPct?: number; windMph?: number; precipitation?: number; skyCondition?: string; timeOfDay?: string; season?: string; weatherDesc?: string; moon?: MoonData; forecastDate?: string; weatherConditions?: string }
 interface SearchResult {
@@ -449,8 +460,14 @@ function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; 
 
   const recentLakes = recentNames.map(n => lakes.find(l => l.name === n)).filter(Boolean) as Lake[]
 
+  // Remove secondary merged lakes (e.g. Lake Eddleman hidden behind Lake Graham)
+  const visibleLakes = lakes.filter(l => !MERGED_LAKE_PAIRS[l.name])
+
+  // Display label — show merged name for primaries
+  function lakeLabel(l: Lake) { return MERGED_LAKE_LABELS[l.name] ?? l.name }
+
   const filtered = query.length > 0
-    ? lakes.filter(l => `${l.name} ${l.state}`.toLowerCase().includes(query.toLowerCase())).slice(0, 12)
+    ? visibleLakes.filter(l => lakeLabel(l).toLowerCase().includes(query.toLowerCase())).slice(0, 12)
     : null
 
   const selectedLake = lakes.find(l => l.name === value)
@@ -485,7 +502,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; 
         onMouseDown={() => selectLake(lake)}
         className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 ${isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'}`}
       >
-        <span>{lake.name}</span>
+        <span>{lakeLabel(lake)}</span>
         <span className="text-slate-400 text-xs shrink-0">{lake.state}</span>
       </button>
     )
@@ -501,8 +518,8 @@ function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; 
         <input
           ref={inputRef}
           type="text"
-          placeholder={selectedLake ? `${selectedLake.name} — ${selectedLake.state}` : 'Search lakes, rivers, reservoirs...'}
-          value={open ? query : (selectedLake ? `${selectedLake.name} — ${selectedLake.state}` : query)}
+          placeholder={selectedLake ? `${lakeLabel(selectedLake)} — ${selectedLake.state}` : 'Search lakes, rivers, reservoirs...'}
+          value={open ? query : (selectedLake ? `${lakeLabel(selectedLake)} — ${selectedLake.state}` : query)}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); if (selectedLake) setQuery('') }}
           className="w-full bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md pl-8 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
