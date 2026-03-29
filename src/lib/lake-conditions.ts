@@ -194,24 +194,27 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
         const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5&featuretype=water`
         const res = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
         if (!res.ok) continue
-        const results = (await res.json() as any[]).filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-        // Filter out tiny ponds, then pick closest to our known coords
+        const results = (await res.json() as any[])
+          .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+          .filter(r => r.type !== 'administrative') // exclude city/admin boundaries
+        // Filter out tiny ponds by bbox area
         const MIN_AREA = 0.001
+        const MAX_DIST_DEG = 0.5 // ~35 miles — must be near our known coords
         const valid = results.filter(r => {
           const bb = r.boundingbox
-          return bb && (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2])) >= MIN_AREA
+          if (!bb) return false
+          const area = (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2]))
+          if (area < MIN_AREA) return false
+          const dist = Math.sqrt((parseFloat(r.lat)-lat)**2 + (parseFloat(r.lon)-lng)**2)
+          return dist <= MAX_DIST_DEG
         })
         if (!valid.length) continue
-        const best = valid.sort((a,b) => {
-          const dA = (parseFloat(a.lat)-lat)**2 + (parseFloat(a.lon)-lng)**2
-          const dB = (parseFloat(b.lat)-lat)**2 + (parseFloat(b.lon)-lng)**2
-          return dA - dB
-        })[0]
-        if (best?.geojson) {
-          waterbodies = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: best.geojson, properties: { name: best.display_name, osm_id: best.osm_id } }] }
-          break
+        // Return ALL valid nearby polygons so paired lakes (e.g. Lake Tyler + Lake Tyler East) both render
+        waterbodies = {
+          type: 'FeatureCollection',
+          features: valid.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name, osm_id: r.osm_id } }))
         }
-        await new Promise(r => setTimeout(r, 300))
+        break
       }
     } catch { /* Nominatim unavailable — proceed without polygon */ }
   }
