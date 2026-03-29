@@ -168,77 +168,53 @@ export async function getLakeConditions(
   return { waterLevel, inflows, wind, waterTempF: null }
 }
 
-// NHD structural features (flowlines) + Nominatim waterbody polygon
-export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.18) {
+// NHD structural features (flowlines + waterbody polygon) — USGS is source of truth
+export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, _state?: string, radiusDeg = 0.25) {
   const xmin = lng - radiusDeg, ymin = lat - radiusDeg
   const xmax = lng + radiusDeg, ymax = lat + radiusDeg
   const bbox = `${xmin},${ymin},${xmax},${ymax}`
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
 
-  // Flowlines from NHD (streams/rivers feeding the lake)
-  const flowlinesResult = await Promise.resolve(
-    fetch(`${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`, { next: { revalidate: 3600 } })
-      .then(r => r.ok ? r.json() : null)
-      .catch(() => null)
-  )
+  // Fetch flowlines (layer 6) and waterbodies (layer 8) in parallel
+  const [flowlinesResult, wbResult] = await Promise.all([
+    fetch(
+      `${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
+      { next: { revalidate: 3600 } }
+    ).then(r => r.ok ? r.json() : null).catch(() => null),
 
-  // Waterbody polygon from Nominatim (OSM) — far more reliable than NHD for TX reservoirs
+    fetch(
+      `${BASE}/8/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&f=geojson`,
+      { next: { revalidate: 3600 } }
+    ).then(r => r.ok ? r.json() : null).catch(() => null),
+  ])
+
+  // Pick the best waterbody feature from NHD results:
+  // 1. Name match on GNIS_NAME (case-insensitive, partial ok)
+  // 2. Fallback: largest area polygon closest to our known coords
   let waterbodies = null
-  if (lakeName) {
-    try {
-      // Try query variants sequentially — stop at first that yields a valid sized polygon
-      // This prevents pooling results across queries which causes wrong-lake matches
-      const baseQueries = [
-        state ? `${lakeName} ${state}` : lakeName,
-        state ? `${lakeName} Reservoir ${state}` : `${lakeName} Reservoir`,
-      ]
+  const features: any[] = wbResult?.features ?? []
 
-      function bboxArea(r: any): number {
-        const bb = r.boundingbox
-        if (!bb) return 0
-        return (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
-      }
-      const MIN_BBOX_AREA = 0.001 // ~6 km² — filters out ponds
+  if (features.length > 0) {
+    const nameClean = (lakeName ?? '').toLowerCase().replace(/^lake\s+/i, '').replace(/\s+(lake|reservoir)$/i, '').trim()
 
-      let waterResult: any = null
-      for (const query of baseQueries) {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5`
-        try {
-          const r = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
-          if (!r.ok) continue
-          const results = (await r.json() as any[])
-            .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-            .filter(r => bboxArea(r) >= MIN_BBOX_AREA)
-          if (results.length > 0) {
-            // Among valid sized results, pick closest to our known coordinates
-            waterResult = results.sort((a: any, b: any) => {
-              const dA = (parseFloat(a.lat) - lat) ** 2 + (parseFloat(a.lon) - lng) ** 2
-              const dB = (parseFloat(b.lat) - lat) ** 2 + (parseFloat(b.lon) - lng) ** 2
-              return dA - dB
-            })[0]
-            break // Stop — found a valid result
-          }
-        } catch { /* ignore */ }
-        await new Promise(resolve => setTimeout(resolve, 300))
-      }
+    // Score each feature: name match = big bonus, then proximity, then area
+    const scored = features.map((f: any) => {
+      const gnisName: string = (f.properties?.GNIS_NAME ?? '').toLowerCase()
+      const nameSim = gnisName.includes(nameClean) || nameClean.split(' ').every((w: string) => gnisName.includes(w)) ? 1000 : 0
+      const area: number = f.properties?.AREASQKM ?? 0
+      // centroid approx from flattened coordinate pairs
+      const coords: number[] = (f.geometry?.coordinates?.flat(Infinity) as number[]) ?? []
+      const lngs = coords.filter((_: number, i: number) => i % 2 === 0)
+      const lats = coords.filter((_: number, i: number) => i % 2 === 1)
+      const clat = lats.length ? lats.reduce((a: number, b: number) => a + b, 0) / lats.length : lat
+      const clng = lngs.length ? lngs.reduce((a: number, b: number) => a + b, 0) / lngs.length : lng
+      const dist = Math.sqrt((clat - lat) ** 2 + (clng - lng) ** 2)
+      return { f, score: nameSim + area - dist * 10 }
+    })
 
-      if (waterResult?.geojson) {
-        waterbodies = {
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              geometry: waterResult.geojson,
-              properties: {
-                name: waterResult.display_name,
-                osm_id: waterResult.osm_id,
-                centroidLat: parseFloat(waterResult.lat),
-                centroidLng: parseFloat(waterResult.lon),
-              },
-            }],
-          }
-      }
-    } catch {
-      // Nominatim unavailable — proceed without polygon
+    const best = scored.sort((a: any, b: any) => b.score - a.score)[0]?.f
+    if (best) {
+      waterbodies = { type: 'FeatureCollection', features: [best] }
     }
   }
 
