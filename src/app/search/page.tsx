@@ -429,8 +429,18 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
-  const [nearbyLakes, setNearbyLakes] = useState<Lake[]>([])
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'done' | 'denied' | 'unavailable'>('idle')
+
+  // Derive nearby lakes reactively — safe against stale closure on lakes prop
+  const nearbyLakes = userCoords
+    ? lakes
+        .filter(l => l.lat != null && l.lng != null)
+        .map(l => ({ lake: l, dist: distanceMiles(userCoords.lat, userCoords.lng, l.lat!, l.lng!) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 5)
+        .map(x => x.lake)
+    : []
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -450,14 +460,7 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(fallbackTimer)
-        const { latitude, longitude } = pos.coords
-        const withCoords = lakes.filter(l => l.lat != null && l.lng != null)
-        const sorted = withCoords
-          .map(l => ({ lake: l, dist: distanceMiles(latitude, longitude, l.lat!, l.lng!) }))
-          .sort((a, b) => a.dist - b.dist)
-          .slice(0, 5)
-          .map(x => x.lake)
-        setNearbyLakes(sorted)
+        setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
         setLocationStatus('done')
       },
       (err) => {
