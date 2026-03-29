@@ -425,15 +425,15 @@ function addRecentLake(lakeName: string) {
 }
 
 // Hot search combobox for lake selection
-function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: string; onChange: (v: string) => void }) {
+function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; value: string; onChange: (v: string) => void; userCoords: { lat: number; lng: number } | null }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'done' | 'denied' | 'unavailable'>('idle')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Derive nearby lakes reactively — safe against stale closure on lakes prop
-  const nearbyLakes = userCoords
+  // Derive nearby lakes reactively from parent-owned coords + lakes list
+  const nearbyLakes = userCoords && lakes.length > 0
     ? lakes
         .filter(l => l.lat != null && l.lng != null)
         .map(l => ({ lake: l, dist: distanceMiles(userCoords.lat, userCoords.lng, l.lat!, l.lng!) }))
@@ -441,40 +441,11 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
         .slice(0, 5)
         .map(x => x.lake)
     : []
-  const containerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   // Load recent searches from localStorage on mount
   useEffect(() => {
     setRecentNames(getRecentLakes())
   }, [])
-
-  // Request geolocation when dropdown opens for the first time (or on retry)
-  function requestLocation() {
-    if (!('geolocation' in navigator)) { setLocationStatus('denied'); return }
-    setLocationStatus('loading')
-
-    // Safety net: if the browser hangs and never calls back, flip to unavailable after 8s
-    const fallbackTimer = setTimeout(() => setLocationStatus('unavailable'), 8000)
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        clearTimeout(fallbackTimer)
-        setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-        setLocationStatus('done')
-      },
-      (err) => {
-        clearTimeout(fallbackTimer)
-        // code 1 = permission denied, code 2 = unavailable, code 3 = timeout
-        setLocationStatus(err.code === 1 ? 'denied' : 'unavailable')
-      },
-      { timeout: 8000, enableHighAccuracy: false }
-    )
-  }
-
-  useEffect(() => {
-    if (open && locationStatus === 'idle') requestLocation()
-  }, [open, locationStatus])
 
   const recentLakes = recentNames.map(n => lakes.find(l => l.name === n)).filter(Boolean) as Lake[]
 
@@ -566,26 +537,10 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
               <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 <Navigation size={11} /> Near You
               </div>
-              {locationStatus === 'loading' && (
-                <div className="px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
-                  <span>Locating...</span>
-                  <button onMouseDown={(e) => { e.preventDefault(); requestLocation() }} className="text-blue-500 hover:text-blue-700 text-xs underline">Can&apos;t locate?</button>
-                </div>
-              )}
-              {locationStatus === 'denied' && (
-                <div className="px-3 py-2 text-sm text-slate-400">Location permission denied — type to search</div>
-              )}
-              {locationStatus === 'unavailable' && (
-                <button onMouseDown={requestLocation} className="w-full text-left px-3 py-2 text-sm text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors">
-                  Couldn&apos;t get location — tap to retry
-                </button>
-              )}
-              {(locationStatus === 'done') && nearbyLakes.length > 0 && (
-                nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
-              )}
-              {locationStatus === 'idle' && (
-                <div className="px-3 py-2 text-sm text-slate-400">Type to search all lakes</div>
-              )}
+              {nearbyLakes.length > 0
+                ? nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
+                : <div className="px-3 py-2 text-sm text-slate-400">{userCoords ? 'No nearby lakes found' : 'Allow location for nearby suggestions'}</div>
+              }
             </>
           )}
         </div>
@@ -708,6 +663,17 @@ export default function SearchPage() {
   const router = useRouter()
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+
+  // Request geolocation once on page mount
+  useEffect(() => {
+    if (!('geolocation' in navigator)) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* permission denied or unavailable — silent fail */ },
+      { timeout: 10000, enableHighAccuracy: false }
+    )
+  }, [])
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -1129,7 +1095,7 @@ export default function SearchPage() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
           {/* Top row: lake search + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
-            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} />
+            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} userCoords={userCoords} />
             <div className="flex items-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
                 className="text-slate-500 hover:text-slate-700 text-xs h-9 gap-1">
