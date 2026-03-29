@@ -430,7 +430,7 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
   const [nearbyLakes, setNearbyLakes] = useState<Lake[]>([])
-  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'done' | 'denied'>('idle')
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'done' | 'denied' | 'unavailable'>('idle')
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -439,27 +439,33 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
     setRecentNames(getRecentLakes())
   }, [])
 
-  // Request geolocation when dropdown opens for the first time
+  // Request geolocation when dropdown opens for the first time (or on retry)
+  function requestLocation() {
+    if (!('geolocation' in navigator)) { setLocationStatus('denied'); return }
+    setLocationStatus('loading')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        const withCoords = lakes.filter(l => l.lat != null && l.lng != null)
+        const sorted = withCoords
+          .map(l => ({ lake: l, dist: distanceMiles(latitude, longitude, l.lat!, l.lng!) }))
+          .sort((a, b) => a.dist - b.dist)
+          .slice(0, 5)
+          .map(x => x.lake)
+        setNearbyLakes(sorted)
+        setLocationStatus('done')
+      },
+      (err) => {
+        // code 1 = permission denied, code 2 = unavailable, code 3 = timeout
+        setLocationStatus(err.code === 1 ? 'denied' : 'unavailable')
+      },
+      { timeout: 10000, enableHighAccuracy: false }
+    )
+  }
+
   useEffect(() => {
-    if (open && locationStatus === 'idle' && 'geolocation' in navigator) {
-      setLocationStatus('loading')
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords
-          const withCoords = lakes.filter(l => l.lat != null && l.lng != null)
-          const sorted = withCoords
-            .map(l => ({ lake: l, dist: distanceMiles(latitude, longitude, l.lat!, l.lng!) }))
-            .sort((a, b) => a.dist - b.dist)
-            .slice(0, 5)
-            .map(x => x.lake)
-          setNearbyLakes(sorted)
-          setLocationStatus('done')
-        },
-        () => setLocationStatus('denied'),
-        { timeout: 6000 }
-      )
-    }
-  }, [open, locationStatus, lakes])
+    if (open && locationStatus === 'idle') requestLocation()
+  }, [open, locationStatus])
 
   const recentLakes = recentNames.map(n => lakes.find(l => l.name === n)).filter(Boolean) as Lake[]
 
@@ -555,7 +561,12 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
                 <div className="px-3 py-2 text-sm text-slate-400">Locating...</div>
               )}
               {locationStatus === 'denied' && (
-                <div className="px-3 py-2 text-sm text-slate-400">Location unavailable — type to search</div>
+                <div className="px-3 py-2 text-sm text-slate-400">Location permission denied — type to search</div>
+              )}
+              {locationStatus === 'unavailable' && (
+                <button onMouseDown={requestLocation} className="w-full text-left px-3 py-2 text-sm text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                  Couldn&apos;t get location — tap to retry
+                </button>
               )}
               {(locationStatus === 'done') && nearbyLakes.length > 0 && (
                 nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
