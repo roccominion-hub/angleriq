@@ -88,8 +88,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         shadowUrl: '/leaflet/marker-shadow.png',
       })
 
-      // Start at fallback lat/lng; will immediately fitBounds if polygon available
-      const map = L.map(mapDivRef.current!, { center: [lat, lng], zoom: 13, zoomControl: true })
+      // Center on known DB coordinates at zoom 12 — reliable for all TX lakes
+      const map = L.map(mapDivRef.current!, { center: [lat, lng], zoom: 12, zoomControl: true })
       tileLayerRef.current = L.tileLayer(TILE_LAYERS.satellite.url, {
         attribution: TILE_LAYERS.satellite.attribution, maxZoom: 19,
       }).addTo(map)
@@ -97,28 +97,6 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       map.on('zoomend', () => setZoom(map.getZoom()))
       mapRef.current = map
       setMapReady(true)
-
-      // Render waterbody fill + fit bounds in the same tick — no visible flash
-      const wb = features?.waterbodies
-      const featureCount = wb?.features?.length ?? 0
-      if (featureCount) {
-        waterbodyLayerRef.current = L.geoJSON(wb, {
-          style: {
-            fillColor: '#7dd3fc',
-            fillOpacity: 0.35,
-            color: '#38bdf8',
-            weight: 2,
-            opacity: 0.9,
-          },
-          interactive: false,
-        }).addTo(map)
-
-        const bounds = waterbodyLayerRef.current.getBounds()
-        if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 })
-          setZoom(map.getZoom())
-        }
-      }
     })
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])

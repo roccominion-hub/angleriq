@@ -168,84 +168,19 @@ export async function getLakeConditions(
   return { waterLevel, inflows, wind, waterTempF: null }
 }
 
-// Lake features: flowlines from NHD (authoritative stream data) + polygon from Nominatim/OSM
-// NOTE: NHD large-scale waterbody data (layer 12) is incomplete for TX reservoirs — many are
-// placeholder points only. Nominatim/OSM has full polygon coverage for named TX lakes.
-export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.18) {
+// NHD structural features — flowlines only (layer 6 = streams/rivers feeding the lake)
+// NOTE: Waterbody polygon overlay was removed — it caused consistent wrong-lake regressions
+// across TX reservoirs due to OSM/NHD naming mismatches. The map centers on DB lat/lng coords.
+export async function getLakeFeatures(lat: number, lng: number, _lakeName?: string, _state?: string, radiusDeg = 0.18) {
   const xmin = lng - radiusDeg, ymin = lat - radiusDeg
   const xmax = lng + radiusDeg, ymax = lat + radiusDeg
   const bbox = `${xmin},${ymin},${xmax},${ymax}`
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
 
-  // Flowlines from NHD layer 6 (streams/rivers feeding the lake) — reliable for all states
   const flowlinesResult = await fetch(
     `${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
     { next: { revalidate: 3600 } }
   ).then(r => r.ok ? r.json() : null).catch(() => null)
 
-  // Waterbody polygon from Nominatim/OSM — best coverage for TX reservoirs
-  // Strategy: try exact name first; if only tiny results (<0.001 deg² bbox), try "Reservoir" suffix
-  let waterbodies = null
-  if (lakeName) {
-    try {
-      // Build query variants to handle OSM name differences:
-      // DB "Lake Ray Roberts" → OSM "Ray Roberts Lake"
-      // DB "O.H. Ivie Reservoir" → OSM "O. H. Ivie Lake"
-      const coreName = lakeName
-        .replace(/^Lake\s+/i, '')      // "Lake Ray Roberts" → "Ray Roberts"
-        .replace(/\s+Lake$/i, '')      // "Somerville Lake" → "Somerville"
-        .replace(/\s+Reservoir$/i, '') // "O.H. Ivie Reservoir" → "O.H. Ivie"
-        .trim()
-      const stateStr = state ?? ''
-      const queries = [
-        `${lakeName} ${stateStr}`.trim(),             // exact DB name: "Lake Ray Roberts TX"
-        `${coreName} Lake ${stateStr}`.trim(),        // flipped: "Ray Roberts Lake TX"
-        `${coreName} Reservoir ${stateStr}`.trim(),   // "O.H. Ivie Reservoir TX"
-        `${coreName} ${stateStr}`.trim(),             // bare: "O.H. Ivie TX"
-      ]
-
-      for (const query of queries) {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5`
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' },
-          next: { revalidate: 3600 },
-        })
-        if (!res.ok) continue
-
-        const results = (await res.json() as any[])
-          .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-
-        // Minimum bbox area to exclude ponds (~0.001 deg² ≈ a few km²)
-        function bboxArea(r: any): number {
-          const bb = r.boundingbox
-          if (!bb || bb.length < 4) return 0
-          return (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
-        }
-
-        const valid = results.filter(r => bboxArea(r) >= 0.001)
-        if (valid.length === 0) continue // Nothing useful — try next query
-
-        // Among valid results, pick closest centroid to our known coordinates
-        const best = valid.sort((a, b) => {
-          const dA = (parseFloat(a.lat) - lat) ** 2 + (parseFloat(a.lon) - lng) ** 2
-          const dB = (parseFloat(b.lat) - lat) ** 2 + (parseFloat(b.lon) - lng) ** 2
-          return dA - dB
-        })[0]
-
-        if (best?.geojson) {
-          waterbodies = {
-            type: 'FeatureCollection',
-            features: [{ type: 'Feature', geometry: best.geojson, properties: { name: best.display_name, osm_id: best.osm_id } }],
-          }
-          break // Found a good polygon — stop
-        }
-
-        await new Promise(r => setTimeout(r, 300)) // Nominatim rate limit
-      }
-    } catch {
-      // Nominatim unavailable — map shows without polygon overlay
-    }
-  }
-
-  return { flowlines: flowlinesResult, waterbodies }
+  return { flowlines: flowlinesResult, waterbodies: null }
 }
