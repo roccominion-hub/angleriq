@@ -168,68 +168,86 @@ export async function getLakeConditions(
   return { waterLevel, inflows, wind, waterTempF: null }
 }
 
+// OSM name aliases for lakes whose common name differs significantly from OSM
+const OSM_ALIASES: Record<string, string> = {
+  'Lake LBJ':           'Lake Lyndon B. Johnson',
+  'Lake B.A. Steinhagen': 'B.A. Steinhagen Lake',
+  'E.V. Spence Reservoir': 'E.V. Spence Reservoir',
+}
+
 // NHD structural features (flowlines) + Nominatim waterbody polygon
-export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.18) {
-  const xmin = lng - radiusDeg, ymin = lat - radiusDeg
-  const xmax = lng + radiusDeg, ymax = lat + radiusDeg
-  const bbox = `${xmin},${ymin},${xmax},${ymax}`
+export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.35) {
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
 
-  // Flowlines from NHD (streams/rivers feeding the lake)
-  const flowlinesResult = await fetch(
-    `${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
-    { next: { revalidate: 3600 } }
-  ).then(r => r.ok ? r.json() : null).catch(() => null)
-
-  // Waterbody polygon from Nominatim (OSM) — more complete than NHD for TX reservoirs
+  // Waterbody polygon first — use its bounds for the flowlines bbox when available
   let waterbodies = null
   if (lakeName) {
     try {
-      // Generate query variants to handle OSM naming differences:
-      // "Lake Ray Roberts" → OSM: "Ray Roberts Lake"
-      // "O.H. Ivie Reservoir" → OSM: "O. H. Ivie Lake"
-      // "Lake Fork" → OSM: "Lake Fork Reservoir"
-      const core = lakeName
-        .replace(/^Lake\s+/i, '')
-        .replace(/\s+(Lake|Reservoir)$/i, '')
-        .trim()
+      const alias = OSM_ALIASES[lakeName]
+      const core = lakeName.replace(/^Lake\s+/i, '').replace(/\s+(Lake|Reservoir)$/i, '').trim()
       const s = state ?? ''
-      const queries = [
-        `${lakeName} ${s}`.trim(),          // "Lake Ray Roberts TX"
-        `${core} Lake ${s}`.trim(),         // "Ray Roberts Lake TX" ✓
-        `${core} Reservoir ${s}`.trim(),    // "Lake Fork Reservoir TX" ✓
-        `${core} ${s}`.trim(),              // "O.H. Ivie TX" ✓
-      ].filter((q, i, arr) => arr.indexOf(q) === i) // dedupe
+      const queries = alias
+        ? [`${alias} ${s}`.trim(), `${lakeName} ${s}`.trim()]
+        : [
+            `${lakeName} ${s}`.trim(),
+            `${core} Lake ${s}`.trim(),
+            `${core} Reservoir ${s}`.trim(),
+            `${core} ${s}`.trim(),
+          ].filter((q, i, arr) => arr.indexOf(q) === i)
 
       for (const query of queries) {
-        // No featuretype filter — too restrictive (blocks O.H. Ivie, Ray Roberts)
         const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5`
         const res = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 86400 } })
         if (!res.ok) continue
         const results = (await res.json() as any[])
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-          .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type)) // exclude non-water features
-        // Filter out tiny ponds by bbox area
+          .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type))
         const MIN_AREA = 0.001
-        const MAX_DIST_DEG = 0.5 // ~35 miles — must be near our known coords
+        const MAX_DIST_DEG = 0.5
         const valid = results.filter(r => {
           const bb = r.boundingbox
           if (!bb) return false
-          const area = (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2]))
+          const area = (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
           if (area < MIN_AREA) return false
-          const dist = Math.sqrt((parseFloat(r.lat)-lat)**2 + (parseFloat(r.lon)-lng)**2)
+          const dist = Math.sqrt((parseFloat(r.lat) - lat) ** 2 + (parseFloat(r.lon) - lng) ** 2)
           return dist <= MAX_DIST_DEG
         })
         if (!valid.length) continue
-        // Return ALL valid nearby polygons so paired lakes (e.g. Lake Tyler + Lake Tyler East) both render
         waterbodies = {
           type: 'FeatureCollection',
           features: valid.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name, osm_id: r.osm_id } }))
         }
         break
       }
-    } catch { /* Nominatim unavailable — proceed without polygon */ }
+    } catch { /* Nominatim unavailable */ }
   }
+
+  // Use polygon bounds for flowlines bbox — covers the whole lake on large reservoirs
+  // Fall back to fixed radiusDeg around center coords
+  let flowBbox: string
+  if (waterbodies?.features?.length) {
+    try {
+      const allCoords: number[][] = waterbodies.features.flatMap((f: any) => {
+        const coords: number[] = f.geometry?.coordinates?.flat(Infinity) ?? []
+        const pairs: number[][] = []
+        for (let i = 0; i < coords.length; i += 2) pairs.push([coords[i], coords[i + 1]])
+        return pairs
+      })
+      const lngs = allCoords.map(c => c[0]), lats = allCoords.map(c => c[1])
+      const pad = 0.05
+      flowBbox = `${Math.min(...lngs)-pad},${Math.min(...lats)-pad},${Math.max(...lngs)+pad},${Math.max(...lats)+pad}`
+    } catch {
+      flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
+    }
+  } else {
+    flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
+  }
+
+  // Flowlines from NHD covering the full lake extent
+  const flowlinesResult = await fetch(
+    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`,
+    { next: { revalidate: 3600 } }
+  ).then(r => r.ok ? r.json() : null).catch(() => null)
 
   return { flowlines: flowlinesResult, waterbodies }
 }
