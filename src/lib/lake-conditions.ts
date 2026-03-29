@@ -177,7 +177,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
 
   // Flowlines from NHD (streams/rivers feeding the lake)
   const flowlinesResult = await Promise.resolve(
-    fetch(`${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`, { next: { revalidate: 86400 } })
+    fetch(`${BASE}/6/query?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&f=geojson`, { next: { revalidate: 3600 } })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null)
   )
@@ -186,14 +186,23 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
   let waterbodies = null
   if (lakeName) {
     try {
-      const query = state ? `${lakeName} ${state}` : lakeName
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=3&featuretype=water`
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' },
-        next: { revalidate: 86400 },
-      })
-      if (res.ok) {
-        const results = await res.json() as any[]
+      // Try multiple query variants to handle OSM name mismatches (e.g. "Lake Fork" vs "Lake Fork Reservoir")
+      const baseQueries = [
+        state ? `${lakeName} ${state}` : lakeName,
+        state ? `${lakeName} Reservoir ${state}` : `${lakeName} Reservoir`,
+        state ? `${lakeName} Lake ${state}` : `${lakeName} Lake`,
+      ]
+      const allResults: any[] = []
+      for (const query of baseQueries) {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=3`
+        try {
+          const r = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
+          if (r.ok) { const data = await r.json() as any[]; allResults.push(...data) }
+          await new Promise(resolve => setTimeout(resolve, 300)) // Nominatim rate limit: 1 req/sec
+        } catch { /* ignore */ }
+      }
+      if (allResults.length > 0) {
+        const results = allResults
         // Pick the result with the largest polygon (most likely the right lake)
         // Filter to polygon results only, then pick by score:
         //   - Exclude tiny features (bbox area < 0.001 deg² ≈ small ponds)
