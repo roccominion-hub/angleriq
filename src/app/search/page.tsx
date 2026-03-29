@@ -443,8 +443,13 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
   function requestLocation() {
     if (!('geolocation' in navigator)) { setLocationStatus('denied'); return }
     setLocationStatus('loading')
+
+    // Safety net: if the browser hangs and never calls back, flip to unavailable after 8s
+    const fallbackTimer = setTimeout(() => setLocationStatus('unavailable'), 8000)
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        clearTimeout(fallbackTimer)
         const { latitude, longitude } = pos.coords
         const withCoords = lakes.filter(l => l.lat != null && l.lng != null)
         const sorted = withCoords
@@ -456,10 +461,11 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
         setLocationStatus('done')
       },
       (err) => {
+        clearTimeout(fallbackTimer)
         // code 1 = permission denied, code 2 = unavailable, code 3 = timeout
         setLocationStatus(err.code === 1 ? 'denied' : 'unavailable')
       },
-      { timeout: 10000, enableHighAccuracy: false }
+      { timeout: 8000, enableHighAccuracy: false }
     )
   }
 
