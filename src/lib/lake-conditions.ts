@@ -170,9 +170,16 @@ export async function getLakeConditions(
 
 // OSM name aliases for lakes whose common name differs significantly from OSM
 const OSM_ALIASES: Record<string, string> = {
-  'Lake LBJ':           'Lake Lyndon B. Johnson',
+  'Lake LBJ':             'Lake Lyndon B. Johnson',
   'Lake B.A. Steinhagen': 'B.A. Steinhagen Lake',
-  'E.V. Spence Reservoir': 'E.V. Spence Reservoir',
+}
+
+// Paired lakes — when one is searched, also show the other's polygon on the map
+const LAKE_PAIRS: Record<string, string[]> = {
+  'Lake Graham':    ['Lake Eddleman'],
+  'Lake Eddleman':  ['Lake Graham'],
+  'Lake Tyler':     ['Lake Tyler East'],
+  'Lake Tyler East':['Lake Tyler'],
 }
 
 // NHD structural features (flowlines) + Nominatim waterbody polygon
@@ -203,7 +210,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
           .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type))
         const MIN_AREA = 0.001
-        const MAX_DIST_DEG = 0.5
+        const MAX_DIST_DEG = 1.5
         const valid = results.filter(r => {
           const bb = r.boundingbox
           if (!bb) return false
@@ -220,6 +227,32 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
         break
       }
     } catch { /* Nominatim unavailable */ }
+
+    // Fetch paired lake polygons (e.g. Lake Graham + Lake Eddleman, Lake Tyler + Lake Tyler East)
+    const pairs = lakeName ? (LAKE_PAIRS[lakeName] ?? []) : []
+    for (const pairName of pairs) {
+      try {
+        const pCore = pairName.replace(/^Lake\s+/i,'').replace(/\s+(Lake|Reservoir)$/i,'').trim()
+        const pS = state ?? ''
+        const pQueries = [`${pairName} ${pS}`.trim(), `${pCore} Lake ${pS}`.trim(), `${pCore} ${pS}`.trim()]
+        for (const pq of pQueries) {
+          const pRes = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pq)}&format=json&polygon_geojson=1&limit=3`,
+            { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 86400 } }
+          )
+          if (!pRes.ok) continue
+          const pResults = (await pRes.json() as any[])
+            .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+            .filter(r => !['administrative','park','hamlet','village','town','city'].includes(r.type))
+            .filter(r => { const bb = r.boundingbox; return bb && (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2])) >= 0.001 })
+          if (!pResults.length) continue
+          const pFeatures = pResults.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name } }))
+          if (waterbodies) waterbodies.features.push(...pFeatures)
+          else waterbodies = { type: 'FeatureCollection', features: pFeatures }
+          break
+        }
+      } catch { /* ignore pair fetch failure */ }
+    }
   }
 
   // Use polygon bounds for flowlines bbox — covers the whole lake on large reservoirs
@@ -234,7 +267,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
         return pairs
       })
       const lngs = allCoords.map(c => c[0]), lats = allCoords.map(c => c[1])
-      const pad = 0.05
+      const pad = 0.1
       flowBbox = `${Math.min(...lngs)-pad},${Math.min(...lats)-pad},${Math.max(...lngs)+pad},${Math.max(...lats)+pad}`
     } catch {
       flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
