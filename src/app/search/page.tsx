@@ -15,7 +15,7 @@ import { LakeLevel } from '@/components/LakeLevel'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
-  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar
+  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
@@ -401,16 +401,71 @@ function WeatherBar({ weather, lakeId }: { weather: Weather; lakeId?: string }) 
   )
 }
 
+// Haversine distance in miles between two lat/lng points
+function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3958.8
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+const RECENT_LAKES_KEY = 'angleriq_recent_lakes'
+const MAX_RECENT = 5
+
+function getRecentLakes(): string[] {
+  try { return JSON.parse(localStorage.getItem(RECENT_LAKES_KEY) || '[]') } catch { return [] }
+}
+
+function addRecentLake(lakeName: string) {
+  try {
+    const prev = getRecentLakes().filter(n => n !== lakeName)
+    localStorage.setItem(RECENT_LAKES_KEY, JSON.stringify([lakeName, ...prev].slice(0, MAX_RECENT)))
+  } catch { /* ignore */ }
+}
+
 // Hot search combobox for lake selection
 function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: string; onChange: (v: string) => void }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [recentNames, setRecentNames] = useState<string[]>([])
+  const [nearbyLakes, setNearbyLakes] = useState<Lake[]>([])
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'done' | 'denied'>('idle')
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Load recent searches from localStorage on mount
+  useEffect(() => {
+    setRecentNames(getRecentLakes())
+  }, [])
+
+  // Request geolocation when dropdown opens for the first time
+  useEffect(() => {
+    if (open && locationStatus === 'idle' && 'geolocation' in navigator) {
+      setLocationStatus('loading')
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          const withCoords = lakes.filter(l => l.lat != null && l.lng != null)
+          const sorted = withCoords
+            .map(l => ({ lake: l, dist: distanceMiles(latitude, longitude, l.lat!, l.lng!) }))
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 5)
+            .map(x => x.lake)
+          setNearbyLakes(sorted)
+          setLocationStatus('done')
+        },
+        () => setLocationStatus('denied'),
+        { timeout: 6000 }
+      )
+    }
+  }, [open, locationStatus, lakes])
+
+  const recentLakes = recentNames.map(n => lakes.find(l => l.name === n)).filter(Boolean) as Lake[]
+
   const filtered = query.length > 0
     ? lakes.filter(l => `${l.name} ${l.state}`.toLowerCase().includes(query.toLowerCase())).slice(0, 12)
-    : lakes.slice(0, 12)
+    : null
 
   const selectedLake = lakes.find(l => l.name === value)
 
@@ -425,6 +480,8 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
   }, [])
 
   function selectLake(lake: Lake) {
+    addRecentLake(lake.name)
+    setRecentNames(getRecentLakes())
     onChange(lake.name)
     setQuery('')
     setOpen(false)
@@ -434,6 +491,18 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
     onChange('')
     setQuery('')
     inputRef.current?.focus()
+  }
+
+  function LakeRow({ lake, isSelected }: { lake: Lake; isSelected: boolean }) {
+    return (
+      <button
+        onMouseDown={() => selectLake(lake)}
+        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 ${isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'}`}
+      >
+        <span>{lake.name}</span>
+        <span className="text-slate-400 text-xs shrink-0">{lake.state}</span>
+      </button>
+    )
   }
 
   return (
@@ -459,20 +528,42 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
         )}
       </div>
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-400">No lakes found</div>
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+          {filtered ? (
+            // Typing mode — show filtered results
+            filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-400">No lakes found</div>
+            ) : (
+              filtered.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
+            )
           ) : (
-            filtered.map(l => (
-              <button
-                key={l.id}
-                onMouseDown={() => selectLake(l)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 ${value === l.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'}`}
-              >
-                <span>{l.name}</span>
-                <span className="text-slate-400 text-xs shrink-0">{l.state}</span>
-              </button>
-            ))
+            // Empty state — show recent + nearby sections
+            <>
+              {recentLakes.length > 0 && (
+                <>
+                  <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <History size={11} /> Recently Searched
+                  </div>
+                  {recentLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)}
+                  <div className="border-t border-slate-100 my-1" />
+                </>
+              )}
+              <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <Navigation size={11} /> Near You
+              </div>
+              {locationStatus === 'loading' && (
+                <div className="px-3 py-2 text-sm text-slate-400">Locating...</div>
+              )}
+              {locationStatus === 'denied' && (
+                <div className="px-3 py-2 text-sm text-slate-400">Location unavailable — type to search</div>
+              )}
+              {(locationStatus === 'done') && nearbyLakes.length > 0 && (
+                nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
+              )}
+              {locationStatus === 'idle' && (
+                <div className="px-3 py-2 text-sm text-slate-400">Type to search all lakes</div>
+              )}
+            </>
           )}
         </div>
       )}
