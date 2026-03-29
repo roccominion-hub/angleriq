@@ -186,9 +186,12 @@ const LAKE_PAIRS: Record<string, string[]> = {
 export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.35) {
   const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
 
+  // Rivers are linear features — no polygon expected, just center map on coords
+  const isRiver = /\briver\b/i.test(lakeName ?? '')
+
   // Waterbody polygon first — use its bounds for the flowlines bbox when available
   let waterbodies = null
-  if (lakeName) {
+  if (lakeName && !isRiver) {
     try {
       const alias = OSM_ALIASES[lakeName]
       const core = lakeName.replace(/^Lake\s+/i, '').replace(/\s+(Lake|Reservoir)$/i, '').trim()
@@ -209,7 +212,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
         const results = (await res.json() as any[])
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
           .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type))
-        const MIN_AREA = 0.001
+        const MIN_AREA = 0.0005
         const MAX_DIST_DEG = 1.5
         const valid = results.filter(r => {
           const bb = r.boundingbox
