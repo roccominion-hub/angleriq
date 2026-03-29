@@ -564,7 +564,10 @@ function LakeSearchBox({ lakes, value, onChange }: { lakes: Lake[]; value: strin
                 <Navigation size={11} /> Near You
               </div>
               {locationStatus === 'loading' && (
-                <div className="px-3 py-2 text-sm text-slate-400">Locating...</div>
+                <div className="px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
+                  <span>Locating...</span>
+                  <button onMouseDown={(e) => { e.preventDefault(); requestLocation() }} className="text-blue-500 hover:text-blue-700 text-xs underline">Can&apos;t locate?</button>
+                </div>
               )}
               {locationStatus === 'denied' && (
                 <div className="px-3 py-2 text-sm text-slate-400">Location permission denied — type to search</div>
@@ -1671,10 +1674,40 @@ export default function SearchPage() {
         )}
 
         {!result && !loading && (
-          <div className="text-center text-slate-400 py-20">
-            <Fish size={48} className="mx-auto mb-4 text-slate-200" strokeWidth={1} />
-            <p className="text-base font-semibold text-slate-500">Select a lake to see what&apos;s working.</p>
-            <p className="text-sm mt-1">Currently covering Texas bass fisheries · More lakes coming soon.</p>
+          <div className="py-12 px-4 max-w-2xl mx-auto">
+            <p className="text-base font-semibold text-slate-500 mb-1">Search for a lake to see what&apos;s working.</p>
+            <p className="text-sm text-slate-400 mb-8">Currently covering Texas bass fisheries · More lakes coming soon.</p>
+            {/* Content skeleton preview */}
+            <div className="space-y-5 opacity-40 pointer-events-none select-none">
+              {/* Map skeleton */}
+              <div className="h-36 rounded-xl bg-slate-100 flex items-center justify-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-slate-200" />
+                <div className="space-y-2">
+                  <div className="h-2.5 w-28 rounded bg-slate-200" />
+                  <div className="h-2 w-20 rounded bg-slate-200" />
+                </div>
+              </div>
+              {/* Summary text skeleton */}
+              <div className="space-y-2">
+                <div className="h-3 w-3/4 rounded bg-slate-100" />
+                <div className="h-3 w-full rounded bg-slate-100" />
+                <div className="h-3 w-5/6 rounded bg-slate-100" />
+                <div className="h-3 w-2/3 rounded bg-slate-100" />
+              </div>
+              {/* Technique card skeletons */}
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="rounded-lg border border-slate-100 p-3 flex gap-3 items-start">
+                    <div className="w-10 h-10 rounded-md bg-slate-100 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-1/2 rounded bg-slate-100" />
+                      <div className="h-2.5 w-full rounded bg-slate-100" />
+                      <div className="h-2.5 w-3/4 rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
