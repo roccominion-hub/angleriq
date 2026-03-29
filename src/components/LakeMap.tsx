@@ -115,7 +115,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
         const bounds = waterbodyLayerRef.current.getBounds()
         if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 })
           setZoom(map.getZoom())
         }
       }
