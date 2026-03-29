@@ -87,6 +87,11 @@ async function searchForLake(lakeName: string, state: string): Promise<{ url: st
     `"${lakeName}" bass fishing technique pattern`,
     `"${lakeName}" ${state} bass fishing tournament`,
     `"${lakeName}" largemouth bass fishing tips`,
+    `"${lakeName}" bass fishing report ${state}`,
+    `"${lakeName}" bass angler tips lure`,
+    `site:tpwd.texas.gov "${lakeName}" bass`,
+    `"${lakeName}" bass fishing crankbait jig soft plastic`,
+    `"${lakeName}" bass fishing wired2fish OR bassmaster OR bassresource`,
   ]
 
   const seen = new Set<string>()
@@ -111,7 +116,7 @@ async function searchForLake(lakeName: string, state: string): Promise<{ url: st
   // Sort: known quality domains first, then others
   return results
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10) // cap at 10 URLs per lake
+    .slice(0, 15) // cap at 15 URLs per lake
     .map(({ url, title }) => ({ url, title }))
 }
 

@@ -82,6 +82,37 @@ async function callGemini(text: string, apiKey: string, attempt = 1): Promise<an
   }
 }
 
+// Hard post-extraction filter — catches anything the AI missed
+const BAD_SPECIES = ['carp', 'catfish', 'channel cat', 'flathead', 'blue cat', 'crappie', 'white bass', 'striper', 'striped bass', 'perch', 'walleye', 'trout', 'drum', 'gar', 'buffalo']
+const BAD_BAITS = ['nightcrawler', 'worm' /* live */, 'cut bait', 'cutbait', 'stink bait', 'stinkbait', 'cricket', 'minnow', 'shiner', 'chicken liver', 'dough bait', 'doughbait', 'punch bait', 'blood bait', 'soap bait', 'liver']
+
+// "worm" is valid as a lure (e.g. "trick worm", "plastic worm") — only flag if it's clearly live/natural
+const LIVE_BAIT_CONTEXT = /\b(live|fresh|dead|natural|real)\s+(worm|bait|shad|minnow|crawler)/i
+const SHAD_LIVE = /\blive\s+shad\b|\bshad\s+(as|for)\s+(bait|live)/i
+
+function isBadRecord(record: any): boolean {
+  const fields = [
+    record.pattern, record.presentation, record.notes, record.structure,
+    ...(record.baits || []).map((b: any) => `${b.bait_name || ''} ${b.bait_type || ''} ${b.color || ''}`)
+  ].join(' ').toLowerCase()
+
+  // Check bad species
+  if (BAD_SPECIES.some(s => fields.includes(s))) return true
+
+  // Check bad baits
+  if (BAD_BAITS.some(b => b !== 'worm' && fields.includes(b))) return true
+
+  // Live worm / live bait context check
+  const rawText = JSON.stringify(record)
+  if (LIVE_BAIT_CONTEXT.test(rawText) || SHAD_LIVE.test(rawText)) return true
+
+  return false
+}
+
 export async function extractFishingData(text: string, apiKey: string): Promise<any[]> {
-  return callGemini(text, apiKey)
+  const raw = await callGemini(text, apiKey)
+  const filtered = raw.filter(r => !isBadRecord(r))
+  const removed = raw.length - filtered.length
+  if (removed > 0) console.log(`     🚫 Hard filter removed ${removed} non-bass/non-artificial record(s)`)
+  return filtered
 }

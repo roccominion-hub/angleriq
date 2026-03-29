@@ -195,12 +195,14 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
       if (res.ok) {
         const results = await res.json() as any[]
         // Pick the result with the largest polygon (most likely the right lake)
+        // Pick the result closest to our known coordinates — prevents wrong lake disambiguation
+        function distSq(a: number, b: number, x: number, y: number) { return (a - x) ** 2 + (b - y) ** 2 }
         const waterResult = results
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
           .sort((a, b) => {
-            const sizeA = a.geojson?.coordinates?.flat(3).length ?? 0
-            const sizeB = b.geojson?.coordinates?.flat(3).length ?? 0
-            return sizeB - sizeA
+            const dA = distSq(parseFloat(a.lat), parseFloat(a.lon), lat, lng)
+            const dB = distSq(parseFloat(b.lat), parseFloat(b.lon), lat, lng)
+            return dA - dB
           })[0]
         if (waterResult?.geojson) {
           waterbodies = {
