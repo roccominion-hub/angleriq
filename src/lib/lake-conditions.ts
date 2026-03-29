@@ -186,45 +186,44 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
   let waterbodies = null
   if (lakeName) {
     try {
-      // Try multiple query variants to handle OSM name mismatches (e.g. "Lake Fork" vs "Lake Fork Reservoir")
+      // Try query variants sequentially — stop at first that yields a valid sized polygon
+      // This prevents pooling results across queries which causes wrong-lake matches
       const baseQueries = [
         state ? `${lakeName} ${state}` : lakeName,
         state ? `${lakeName} Reservoir ${state}` : `${lakeName} Reservoir`,
-        state ? `${lakeName} Lake ${state}` : `${lakeName} Lake`,
       ]
-      const allResults: any[] = []
+
+      function bboxArea(r: any): number {
+        const bb = r.boundingbox
+        if (!bb) return 0
+        return (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
+      }
+      const MIN_BBOX_AREA = 0.001 // ~6 km² — filters out ponds
+
+      let waterResult: any = null
       for (const query of baseQueries) {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=3`
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=5`
         try {
           const r = await fetch(url, { headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq.app)' }, next: { revalidate: 3600 } })
-          if (r.ok) { const data = await r.json() as any[]; allResults.push(...data) }
-          await new Promise(resolve => setTimeout(resolve, 300)) // Nominatim rate limit: 1 req/sec
+          if (!r.ok) continue
+          const results = (await r.json() as any[])
+            .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+            .filter(r => bboxArea(r) >= MIN_BBOX_AREA)
+          if (results.length > 0) {
+            // Among valid sized results, pick closest to our known coordinates
+            waterResult = results.sort((a: any, b: any) => {
+              const dA = (parseFloat(a.lat) - lat) ** 2 + (parseFloat(a.lon) - lng) ** 2
+              const dB = (parseFloat(b.lat) - lat) ** 2 + (parseFloat(b.lon) - lng) ** 2
+              return dA - dB
+            })[0]
+            break // Stop — found a valid result
+          }
         } catch { /* ignore */ }
+        await new Promise(resolve => setTimeout(resolve, 300))
       }
-      if (allResults.length > 0) {
-        const results = allResults
-        // Pick the result with the largest polygon (most likely the right lake)
-        // Filter to polygon results only, then pick by score:
-        //   - Exclude tiny features (bbox area < 0.001 deg² ≈ small ponds)
-        //   - Among remaining, pick closest centroid to our known coordinates
-        //   - Fall back to largest if nothing passes size threshold
-        function distSq(a: number, b: number, x: number, y: number) { return (a - x) ** 2 + (b - y) ** 2 }
-        function bboxArea(r: any): number {
-          const bb = r.boundingbox // [minlat, maxlat, minlng, maxlng]
-          if (!bb) return 0
-          return (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
-        }
-        const polygonResults = results.filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-        const MIN_BBOX_AREA = 0.001 // ~6km² — filters out ponds and small features
-        const sizedResults = polygonResults.filter(r => bboxArea(r) >= MIN_BBOX_AREA)
-        const candidates = sizedResults.length > 0 ? sizedResults : polygonResults
-        const waterResult = candidates.sort((a, b) => {
-          const dA = distSq(parseFloat(a.lat), parseFloat(a.lon), lat, lng)
-          const dB = distSq(parseFloat(b.lat), parseFloat(b.lon), lat, lng)
-          return dA - dB
-        })[0]
-        if (waterResult?.geojson) {
-          waterbodies = {
+
+      if (waterResult?.geojson) {
+        waterbodies = {
             type: 'FeatureCollection',
             features: [{
               type: 'Feature',
@@ -237,7 +236,6 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
               },
             }],
           }
-        }
       }
     } catch {
       // Nominatim unavailable — proceed without polygon
