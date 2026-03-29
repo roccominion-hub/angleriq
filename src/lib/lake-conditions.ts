@@ -195,15 +195,25 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
       if (res.ok) {
         const results = await res.json() as any[]
         // Pick the result with the largest polygon (most likely the right lake)
-        // Pick the result closest to our known coordinates — prevents wrong lake disambiguation
+        // Filter to polygon results only, then pick by score:
+        //   - Exclude tiny features (bbox area < 0.001 deg² ≈ small ponds)
+        //   - Among remaining, pick closest centroid to our known coordinates
+        //   - Fall back to largest if nothing passes size threshold
         function distSq(a: number, b: number, x: number, y: number) { return (a - x) ** 2 + (b - y) ** 2 }
-        const waterResult = results
-          .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
-          .sort((a, b) => {
-            const dA = distSq(parseFloat(a.lat), parseFloat(a.lon), lat, lng)
-            const dB = distSq(parseFloat(b.lat), parseFloat(b.lon), lat, lng)
-            return dA - dB
-          })[0]
+        function bboxArea(r: any): number {
+          const bb = r.boundingbox // [minlat, maxlat, minlng, maxlng]
+          if (!bb) return 0
+          return (parseFloat(bb[1]) - parseFloat(bb[0])) * (parseFloat(bb[3]) - parseFloat(bb[2]))
+        }
+        const polygonResults = results.filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
+        const MIN_BBOX_AREA = 0.001 // ~6km² — filters out ponds and small features
+        const sizedResults = polygonResults.filter(r => bboxArea(r) >= MIN_BBOX_AREA)
+        const candidates = sizedResults.length > 0 ? sizedResults : polygonResults
+        const waterResult = candidates.sort((a, b) => {
+          const dA = distSq(parseFloat(a.lat), parseFloat(a.lon), lat, lng)
+          const dB = distSq(parseFloat(b.lat), parseFloat(b.lon), lat, lng)
+          return dA - dB
+        })[0]
         if (waterResult?.geojson) {
           waterbodies = {
             type: 'FeatureCollection',
