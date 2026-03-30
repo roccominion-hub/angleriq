@@ -280,12 +280,10 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
   }
 
   // Flowlines from NHD covering the full lake extent.
-  // Filter to StreamRiver(460), ArtificialPath(558=river channel through lake), Canal(336) —
-  // avoids record-limit exhaustion from minor connector/ditch features on large lakes.
-  // Use OR conditions (not IN) to avoid URL encoding issues with parentheses on ArcGIS REST.
-  const whereClause = encodeURIComponent('FTYPE=460 OR FTYPE=558 OR FTYPE=336')
+  // No where-clause filter — NHD layer 6 field filtering is unreliable on this endpoint.
+  // 10k record limit with polygon-derived bbox gives full coverage on large lakes.
   const flowlinesResult = await fetch(
-    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&where=${whereClause}&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=10000&f=geojson`,
+    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&where=1%3D1&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=10000&f=geojson`,
     { next: { revalidate: 3600 } }
   ).then(r => r.ok ? r.json() : null).catch(() => null)
 
