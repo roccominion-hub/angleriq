@@ -131,16 +131,21 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       flowlinesLayerRef.current = null
       if (!overlays.has('flowlines')) return
       flowlinesLayerRef.current = L.geoJSON(features.flowlines, {
-        style: f => ({
-          color: '#a855f7',
-          weight: f?.properties?.FTYPE === 460 ? 2.5 : 1.5,
-          opacity: 0.85,
-          dashArray: f?.properties?.FLOWDIR === 1 ? undefined : '4 3',
-        }),
+        style: f => {
+          const ftype = f?.properties?.FTYPE
+          // 558 = ArtificialPath (river channel running through the lake body)
+          // 460 = StreamRiver (main tributaries)
+          // 336 = Canal/Ditch (minor)
+          if (ftype === 558) return { color: '#7c3aed', weight: 3.5, opacity: 0.95, dashArray: undefined }
+          if (ftype === 460) return { color: '#a855f7', weight: 2.5, opacity: 0.85, dashArray: undefined }
+          return { color: '#c084fc', weight: 1.5, opacity: 0.75, dashArray: '4 3' }
+        },
         onEachFeature: (f, layer) => {
           const name = f.properties?.GNIS_NAME
+          const ftype = f.properties?.FTYPE
+          const label = ftype === 558 ? 'River channel' : ftype === 460 ? 'Stream' : 'Canal/Ditch'
           const cfs  = f.properties?.flowCfs
-          layer.bindPopup(name ? `<b>${name}</b>${cfs ? `<br>${cfs} cfs` : ''}` : 'Stream')
+          layer.bindPopup(name ? `<b>${name}</b><br><span style="color:#999">${label}</span>${cfs ? `<br>${cfs} cfs` : ''}` : label)
         },
       }).addTo(mapRef.current)
     })

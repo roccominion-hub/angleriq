@@ -212,7 +212,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
         const results = (await res.json() as any[])
           .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
           .filter(r => !['administrative', 'park', 'hamlet', 'village', 'town', 'city'].includes(r.type))
-        const MIN_AREA = 0.0005
+        const MIN_AREA = 0.0001   // ~1 km² minimum — catches smaller reservoirs like Eddleman
         const MAX_DIST_DEG = 1.5
         const valid = results.filter(r => {
           const bb = r.boundingbox
@@ -247,7 +247,7 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
           const pResults = (await pRes.json() as any[])
             .filter(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon')
             .filter(r => !['administrative','park','hamlet','village','town','city'].includes(r.type))
-            .filter(r => { const bb = r.boundingbox; return bb && (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2])) >= 0.001 })
+            .filter(r => { const bb = r.boundingbox; return bb && (parseFloat(bb[1])-parseFloat(bb[0]))*(parseFloat(bb[3])-parseFloat(bb[2])) >= 0.0005 })
           if (!pResults.length) continue
           const pFeatures = pResults.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name } }))
           if (waterbodies) waterbodies.features.push(...pFeatures)
@@ -279,9 +279,11 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
     flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
   }
 
-  // Flowlines from NHD covering the full lake extent
+  // Flowlines from NHD covering the full lake extent.
+  // Filter to FTYPE IN (460=StreamRiver, 558=ArtificialPath, 336=Canal/Ditch) only —
+  // avoids record-limit exhaustion from minor ditches on large lakes like Toledo Bend.
   const flowlinesResult = await fetch(
-    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=5000&f=geojson`,
+    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&where=FTYPE+IN+(460,558,336)&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=10000&f=geojson`,
     { next: { revalidate: 3600 } }
   ).then(r => r.ok ? r.json() : null).catch(() => null)
 
