@@ -132,20 +132,26 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       if (!overlays.has('flowlines')) return
       flowlinesLayerRef.current = L.geoJSON(features.flowlines, {
         style: f => {
-          const ftype = f?.properties?.FTYPE
-          // 558 = ArtificialPath (river channel running through the lake body)
-          // 460 = StreamRiver (main tributaries)
-          // 336 = Canal/Ditch (minor)
-          if (ftype === 558) return { color: '#7c3aed', weight: 3.5, opacity: 0.95, dashArray: undefined }
-          if (ftype === 460) return { color: '#a855f7', weight: 2.5, opacity: 0.85, dashArray: undefined }
-          return { color: '#c084fc', weight: 1.5, opacity: 0.75, dashArray: '4 3' }
+          const waterway: string = f?.properties?.waterway ?? ''
+          const intermittent: boolean = !!f?.properties?.intermittent
+          if (waterway === 'river')
+            return { color: '#38bdf8', weight: 3.5, opacity: 0.95 }
+          if (waterway === 'stream' && !intermittent)
+            return { color: '#7dd3fc', weight: 2, opacity: 0.85 }
+          if (waterway === 'stream' && intermittent)
+            return { color: '#7dd3fc', weight: 1.5, opacity: 0.7, dashArray: '6 4' }
+          // canal / drain / ditch
+          return { color: '#a5b4fc', weight: 1.2, opacity: 0.6, dashArray: '4 4' }
         },
         onEachFeature: (f, layer) => {
           const name = f.properties?.GNIS_NAME
-          const ftype = f.properties?.FTYPE
-          const label = ftype === 558 ? 'River channel' : ftype === 460 ? 'Stream' : 'Canal/Ditch'
-          const cfs  = f.properties?.flowCfs
-          layer.bindPopup(name ? `<b>${name}</b><br><span style="color:#999">${label}</span>${cfs ? `<br>${cfs} cfs` : ''}` : label)
+          const waterway: string = f.properties?.waterway ?? ''
+          const intermittent: boolean = !!f.properties?.intermittent
+          const labels: Record<string, string> = {
+            river: 'River', stream: 'Stream', canal: 'Canal', drain: 'Drain', ditch: 'Ditch',
+          }
+          const typeLabel = (labels[waterway] ?? 'Waterway') + (intermittent ? ' (intermittent)' : '')
+          layer.bindPopup(name ? `<b>${name}</b><br><span style="color:#aaa">${typeLabel}</span>` : typeLabel)
         },
       }).addTo(mapRef.current)
     })

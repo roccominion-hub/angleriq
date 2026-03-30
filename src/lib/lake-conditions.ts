@@ -95,15 +95,19 @@ async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
   } catch { return null }
 }
 
-// Fetch inflow gauges from USGS (stream gages near lake)
+// Fetch inflow gauges from USGS (stream gages near lake) — hard 10s timeout so it never
+// delays or starves the waterway/map data which is higher priority.
 async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   try {
     const pad = 0.4
     const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`
+    const ac1 = new AbortController()
+    const t1 = setTimeout(() => ac1.abort(), 10000)
     const siteRes = await fetch(
       `https://waterservices.usgs.gov/nwis/site/?bBox=${bbox}&siteType=ST&format=rdb&siteStatus=active&hasDataTypeCd=iv`,
-      { next: { revalidate: 3600 } }
+      { next: { revalidate: 3600 }, signal: ac1.signal } as RequestInit
     )
+    clearTimeout(t1)
     if (!siteRes.ok) return []
     const txt = await siteRes.text()
     const siteNos = txt.split('\n')
@@ -114,10 +118,13 @@ async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
 
     if (!siteNos.length) return []
 
+    const ac2 = new AbortController()
+    const t2 = setTimeout(() => ac2.abort(), 8000)
     const flowRes = await fetch(
       `${USGS_IV}/?sites=${siteNos.join(',')}&parameterCd=00060&format=json`,
-      { next: { revalidate: 900 } }
+      { next: { revalidate: 900 }, signal: ac2.signal } as RequestInit
     )
+    clearTimeout(t2)
     if (!flowRes.ok) return []
     const data = await flowRes.json()
 
@@ -172,7 +179,7 @@ export async function getLakeConditions(
 const OSM_ALIASES: Record<string, string> = {
   'Lake LBJ':             'Lake Lyndon B. Johnson',
   'Lake B.A. Steinhagen': 'B.A. Steinhagen Lake',
-  'Moss Lake':            'Hubert H. Moss Lake',
+  'Moss Lake':            'Hubert M. Moss Lake',
 }
 
 // Paired lakes — when one is searched, also show the other's polygon on the map
@@ -183,10 +190,8 @@ const LAKE_PAIRS: Record<string, string[]> = {
   'Lake Tyler East':['Lake Tyler'],
 }
 
-// NHD structural features (flowlines) + Nominatim waterbody polygon
+// OSM waterways (flowlines) + Nominatim waterbody polygon
 export async function getLakeFeatures(lat: number, lng: number, lakeName?: string, state?: string, radiusDeg = 0.35) {
-  const BASE = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer'
-
   // Rivers are linear features — no polygon expected, just center map on coords
   const isRiver = /\briver\b/i.test(lakeName ?? '')
 
@@ -280,13 +285,46 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
     flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
   }
 
-  // Flowlines from NHD covering the full lake extent.
-  // No where-clause filter — NHD layer 6 field filtering is unreliable on this endpoint.
-  // 10k record limit with polygon-derived bbox gives full coverage on large lakes.
-  const flowlinesResult = await fetch(
-    `${BASE}/6/query?geometry=${flowBbox}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&where=1%3D1&outFields=GNIS_NAME,FTYPE,FLOWDIR,LENGTHKM&returnGeometry=true&resultRecordCount=10000&f=geojson`,
-    { next: { revalidate: 3600 } }
-  ).then(r => r.ok ? r.json() : null).catch(() => null)
+  // Waterways from OSM Overpass — rivers, streams (including intermittent), canals, drains.
+  // Overpass is more reliable than NHD ArcGIS and has better named feature coverage.
+  // Overpass bbox order: minLat,minLng,maxLat,maxLng
+  const [fMinLng, fMinLat, fMaxLng, fMaxLat] = flowBbox.split(',').map(Number)
+  const overpassBbox = `${fMinLat},${fMinLng},${fMaxLat},${fMaxLng}`
+  const overpassQuery = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
+
+  let flowlinesResult: any = null
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 28000)
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(overpassQuery)}`,
+      signal: controller.signal,
+      next: { revalidate: 3600 },
+    } as RequestInit)
+    clearTimeout(timer)
+    if (res.ok) {
+      const data = await res.json()
+      const features = (data.elements ?? []).flatMap((el: any) => {
+        if (el.type !== 'way' || !el.geometry?.length) return []
+        const waterway: string = el.tags?.waterway ?? 'stream'
+        const intermittent: boolean = el.tags?.intermittent === 'yes'
+        return [{
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]) },
+          properties: {
+            GNIS_NAME: el.tags?.name ?? null,
+            waterway,
+            intermittent,
+            // Keep FTYPE compatible shim for existing map styling
+            FTYPE: waterway === 'river' ? 460 : waterway === 'stream' ? 460 : 336,
+          },
+        }]
+      })
+      flowlinesResult = { type: 'FeatureCollection', features }
+    }
+  } catch { /* Overpass unavailable — map renders without waterways */ }
 
   return { flowlines: flowlinesResult, waterbodies }
 }
