@@ -285,46 +285,10 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
     flowBbox = `${lng-radiusDeg},${lat-radiusDeg},${lng+radiusDeg},${lat+radiusDeg}`
   }
 
-  // Waterways from OSM Overpass — rivers, streams (including intermittent), canals, drains.
-  // Overpass is more reliable than NHD ArcGIS and has better named feature coverage.
-  // Overpass bbox order: minLat,minLng,maxLat,maxLng
+  // Waterways are fetched client-side in LakeMap.tsx via Overpass to avoid
+  // Vercel server-IP blocks. Return the flowBbox so the client knows where to query.
   const [fMinLng, fMinLat, fMaxLng, fMaxLat] = flowBbox.split(',').map(Number)
-  const overpassBbox = `${fMinLat},${fMinLng},${fMaxLat},${fMaxLng}`
-  const overpassQuery = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
+  const waterwayBbox = { minLat: fMinLat, minLng: fMinLng, maxLat: fMaxLat, maxLng: fMaxLng }
 
-  let flowlinesResult: any = null
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 28000)
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(overpassQuery)}`,
-      signal: controller.signal,
-      next: { revalidate: 3600 },
-    } as RequestInit)
-    clearTimeout(timer)
-    if (res.ok) {
-      const data = await res.json()
-      const features = (data.elements ?? []).flatMap((el: any) => {
-        if (el.type !== 'way' || !el.geometry?.length) return []
-        const waterway: string = el.tags?.waterway ?? 'stream'
-        const intermittent: boolean = el.tags?.intermittent === 'yes'
-        return [{
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]) },
-          properties: {
-            GNIS_NAME: el.tags?.name ?? null,
-            waterway,
-            intermittent,
-            // Keep FTYPE compatible shim for existing map styling
-            FTYPE: waterway === 'river' ? 460 : waterway === 'stream' ? 460 : 336,
-          },
-        }]
-      })
-      flowlinesResult = { type: 'FeatureCollection', features }
-    }
-  } catch { /* Overpass unavailable — map renders without waterways */ }
-
-  return { flowlines: flowlinesResult, waterbodies }
+  return { flowlines: null, waterbodies, waterwayBbox }
 }

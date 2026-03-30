@@ -55,6 +55,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null)
   const [conditions, setConditions] = useState<any>(null)
   const [features, setFeatures] = useState<any>(null)
+  const [waterways, setWaterways] = useState<any>(null)
   const [baseLayer, setBaseLayer] = useState<BaseLayer>('satellite')
   const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set(['flowlines']))
   const [loading, setLoading] = useState(true)
@@ -65,7 +66,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const tileLayerRef = useRef<any>(null)
   const waterbodyLayerRef = useRef<any>(null)
 
-  // Fetch conditions + features
+  // Fetch conditions + features (server-side: polygon, wind, inflows)
   useEffect(() => {
     Promise.all([
       fetch(`/api/lake-conditions?lakeId=${lakeId}`).then(r => r.json()),
@@ -76,6 +77,45 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [lakeId])
+
+  // Fetch waterways client-side via Overpass (browser IP avoids server-IP blocks)
+  useEffect(() => {
+    if (!features?.waterwayBbox) return
+    const { minLat, minLng, maxLat, maxLng } = features.waterwayBbox
+    const overpassBbox = `${minLat},${minLng},${maxLat},${maxLng}`
+    const query = `[out:json][timeout:30];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
+    const MIRRORS = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+    ]
+    async function fetchWaterways() {
+      for (const mirror of MIRRORS) {
+        try {
+          const res = await fetch(mirror, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `data=${encodeURIComponent(query)}`,
+            signal: AbortSignal.timeout(30000),
+          })
+          if (!res.ok) continue
+          const data = await res.json()
+          const feats = (data.elements ?? []).flatMap((el: any) => {
+            if (el.type !== 'way' || !el.geometry?.length) return []
+            const waterway: string = el.tags?.waterway ?? 'stream'
+            const intermittent: boolean = el.tags?.intermittent === 'yes'
+            return [{
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]) },
+              properties: { GNIS_NAME: el.tags?.name ?? null, waterway, intermittent },
+            }]
+          })
+          setWaterways({ type: 'FeatureCollection', features: feats })
+          return
+        } catch { /* try next mirror */ }
+      }
+    }
+    fetchWaterways()
+  }, [features])
 
   // Init map + waterbody fill together once features are loaded — avoids re-center flash
   useEffect(() => {
@@ -123,14 +163,14 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])
 
-  // Flowlines overlay
+  // Waterways overlay — rendered from client-side Overpass fetch
   useEffect(() => {
-    if (!mapRef.current || !features?.flowlines) return
+    if (!mapRef.current || !waterways) return
     import('leaflet').then(L => {
       flowlinesLayerRef.current?.remove()
       flowlinesLayerRef.current = null
       if (!overlays.has('flowlines')) return
-      flowlinesLayerRef.current = L.geoJSON(features.flowlines, {
+      flowlinesLayerRef.current = L.geoJSON(waterways, {
         style: f => {
           const waterway: string = f?.properties?.waterway ?? ''
           const intermittent: boolean = !!f?.properties?.intermittent
@@ -155,7 +195,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         },
       }).addTo(mapRef.current)
     })
-  }, [features, overlays, mapReady])
+  }, [waterways, overlays, mapReady])
 
   // Wind arrows — dense grid confined to lake polygon, step tied to zoom
   useEffect(() => {
