@@ -172,6 +172,7 @@ export async function getLakeConditions(
 const OSM_ALIASES: Record<string, string> = {
   'Lake LBJ':             'Lake Lyndon B. Johnson',
   'Lake B.A. Steinhagen': 'B.A. Steinhagen Lake',
+  'Moss Lake':            'Hubert H. Moss Lake',
 }
 
 // Paired lakes — when one is searched, also show the other's polygon on the map
