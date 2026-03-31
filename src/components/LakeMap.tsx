@@ -45,9 +45,10 @@ function degreesPerPixel(zoom: number): number {
   return 360 / (256 * Math.pow(2, zoom))
 }
 
-// Target ~64px of screen spacing between wind arrows.
+// Target ~52px of screen spacing between wind arrows, capped so zoomed-out
+// views stay dense (max step ≈ what zoom-11 at 40px would produce).
 function windStepForZoom(zoom: number): number {
-  return degreesPerPixel(zoom) * 64
+  return Math.min(degreesPerPixel(zoom) * 52, 0.028)
 }
 
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
@@ -198,8 +199,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       const swLat = bounds.getSouth(), neLat = bounds.getNorth()
       const swLng = bounds.getWest(),  neLng = bounds.getEast()
 
-      // Arrow color: dark on topo, light blue on satellite
-      const arrowColor = baseLayer === 'topo' ? '#1e3a5f' : '#93c5fd'
+      // Arrow color: purple on both layers — visible against blue water/NHD tiles
+      const arrowColor = baseLayer === 'topo' ? '#7e22ce' : '#c084fc'
 
       const arrowHtml = `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="${arrowColor}" opacity="0.9">
