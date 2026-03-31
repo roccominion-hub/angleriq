@@ -83,11 +83,14 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     if (!features?.waterwayBbox) return
     const { minLat, minLng, maxLat, maxLng } = features.waterwayBbox
     const overpassBbox = `${minLat},${minLng},${maxLat},${maxLng}`
-    const query = `[out:json][timeout:30];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
+    const query = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
+    // Shuffle mirrors so we don't always hammer the same one first
     const MIRRORS = [
-      'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
-    ]
+      'https://overpass.nchc.org.tw/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+      'https://overpass-api.de/api/interpreter',
+    ].sort(() => Math.random() - 0.5)
     async function fetchWaterways() {
       for (const mirror of MIRRORS) {
         try {
@@ -95,7 +98,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `data=${encodeURIComponent(query)}`,
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(28000),
           })
           if (!res.ok) continue
           const data = await res.json()
