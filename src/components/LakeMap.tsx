@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Navigation, Droplets, Waves } from 'lucide-react'
+import { Navigation, Droplets } from 'lucide-react'
 
 interface LakeMapProps {
   lakeId: string
@@ -55,13 +55,11 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null)
   const [conditions, setConditions] = useState<any>(null)
   const [features, setFeatures] = useState<any>(null)
-  const [waterways, setWaterways] = useState<any>(null)
   const [baseLayer, setBaseLayer] = useState<BaseLayer>('satellite')
   const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set(['flowlines']))
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(13)
   const [mapReady, setMapReady] = useState(false)
-  const flowlinesLayerRef = useRef<any>(null)
   const windLayerRef = useRef<any>(null)
   const tileLayerRef = useRef<any>(null)
   const waterbodyLayerRef = useRef<any>(null)
@@ -78,47 +76,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     }).catch(() => setLoading(false))
   }, [lakeId])
 
-  // Fetch waterways client-side via Overpass (browser IP avoids server-IP blocks)
-  useEffect(() => {
-    if (!features?.waterwayBbox) return
-    const { minLat, minLng, maxLat, maxLng } = features.waterwayBbox
-    const overpassBbox = `${minLat},${minLng},${maxLat},${maxLng}`
-    const query = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain|ditch)$"](${overpassBbox}););out geom;`
-    // Shuffle mirrors so we don't always hammer the same one first
-    const MIRRORS = [
-      'https://overpass.kumi.systems/api/interpreter',
-      'https://overpass.nchc.org.tw/api/interpreter',
-      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-      'https://overpass-api.de/api/interpreter',
-    ].sort(() => Math.random() - 0.5)
-    async function fetchWaterways() {
-      for (const mirror of MIRRORS) {
-        try {
-          const res = await fetch(mirror, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `data=${encodeURIComponent(query)}`,
-            signal: AbortSignal.timeout(28000),
-          })
-          if (!res.ok) continue
-          const data = await res.json()
-          const feats = (data.elements ?? []).flatMap((el: any) => {
-            if (el.type !== 'way' || !el.geometry?.length) return []
-            const waterway: string = el.tags?.waterway ?? 'stream'
-            const intermittent: boolean = el.tags?.intermittent === 'yes'
-            return [{
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]) },
-              properties: { GNIS_NAME: el.tags?.name ?? null, waterway, intermittent },
-            }]
-          })
-          setWaterways({ type: 'FeatureCollection', features: feats })
-          return
-        } catch { /* try next mirror */ }
-      }
-    }
-    fetchWaterways()
-  }, [features])
+  // USGS NHD tile layer ref — no client-side queries needed
+  const nhdLayerRef = useRef<any>(null)
 
   // Init map + waterbody fill together once features are loaded — avoids re-center flash
   useEffect(() => {
@@ -166,39 +125,28 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])
 
-  // Waterways overlay — rendered from client-side Overpass fetch
+  // USGS NHD hydrography tile overlay — add/remove based on flowlines toggle
   useEffect(() => {
-    if (!mapRef.current || !waterways) return
+    if (!mapReady || !mapRef.current) return
     import('leaflet').then(L => {
-      flowlinesLayerRef.current?.remove()
-      flowlinesLayerRef.current = null
-      if (!overlays.has('flowlines')) return
-      flowlinesLayerRef.current = L.geoJSON(waterways, {
-        style: f => {
-          const waterway: string = f?.properties?.waterway ?? ''
-          const intermittent: boolean = !!f?.properties?.intermittent
-          if (waterway === 'river')
-            return { color: '#38bdf8', weight: 3.5, opacity: 0.95 }
-          if (waterway === 'stream' && !intermittent)
-            return { color: '#7dd3fc', weight: 2, opacity: 0.85 }
-          if (waterway === 'stream' && intermittent)
-            return { color: '#7dd3fc', weight: 1.5, opacity: 0.7, dashArray: '6 4' }
-          // canal / drain / ditch
-          return { color: '#a5b4fc', weight: 1.2, opacity: 0.6, dashArray: '4 4' }
-        },
-        onEachFeature: (f, layer) => {
-          const name = f.properties?.GNIS_NAME
-          const waterway: string = f.properties?.waterway ?? ''
-          const intermittent: boolean = !!f.properties?.intermittent
-          const labels: Record<string, string> = {
-            river: 'River', stream: 'Stream', canal: 'Canal', drain: 'Drain', ditch: 'Ditch',
-          }
-          const typeLabel = (labels[waterway] ?? 'Waterway') + (intermittent ? ' (intermittent)' : '')
-          layer.bindPopup(name ? `<b>${name}</b><br><span style="color:#aaa">${typeLabel}</span>` : typeLabel)
-        },
-      }).addTo(mapRef.current)
+      if (overlays.has('flowlines')) {
+        if (!nhdLayerRef.current) {
+          nhdLayerRef.current = L.tileLayer(
+            'https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution: 'Hydrography: <a href="https://www.usgs.gov/national-hydrography">USGS NHD</a>',
+              opacity: 0.85,
+              maxZoom: 19,
+              minZoom: 8,
+            }
+          ).addTo(mapRef.current)
+        }
+      } else {
+        nhdLayerRef.current?.remove()
+        nhdLayerRef.current = null
+      }
     })
-  }, [waterways, overlays, mapReady])
+  }, [overlays, mapReady])
 
   // Wind arrows — dense grid confined to lake polygon, step tied to zoom
   useEffect(() => {
