@@ -43,6 +43,18 @@ function buildFilterString(filters: Record<string, string> = {}) {
     .join('&')
 }
 
+async function trackUsage(req: NextRequest) {
+  try {
+    const { createClient: createServerClient } = await import('@/lib/supabase/server')
+    const userSupabase = await createServerClient()
+    const { data: { user } } = await userSupabase.auth.getUser()
+    if (!user) return
+    await supabase.rpc('increment_user_reports', { uid: user.id })
+  } catch {
+    // Non-critical — never block the response
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters, lakeId, _secondary } = await req.json()
 
@@ -123,10 +135,13 @@ Be direct, specific, and confident. No filler.`
 
   if (todayCache) cachedToday = todayCache.today
 
-  // If both cached, return immediately
+  // If both cached, return immediately (no usage charge)
   if (cachedIntel && cachedToday) {
     return NextResponse.json({ intel: cachedIntel, today: cachedToday, cached: true })
   }
+
+  // Track usage — only on real AI calls (cache miss)
+  trackUsage(req)
 
   // Extract all colors from real data
   const colorsFromData: string[] = []

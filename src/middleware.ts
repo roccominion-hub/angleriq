@@ -31,9 +31,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Protect /admin — must be logged-in admin email
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    const adminEmail = process.env.ADMIN_EMAIL
+    if (!user || !adminEmail || user.email !== adminEmail) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/account/:path*'],
+  matcher: ['/account/:path*', '/admin', '/admin/:path*'],
 }

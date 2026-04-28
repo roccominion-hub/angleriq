@@ -7,7 +7,7 @@ AnglerIQ is a bass fishing intelligence platform. Anglers search by body of wate
 
 **Live URL:** https://angleriq-app.vercel.app (custom domain: getangleriq.com, SSL pending)
 **Repo:** github.com/roccominion-hub/angleriq
-**Local workspace:** /Users/rocco/.openclaw/workspace/angleriq-app/
+**Local workspace:** /Users/rocco/Documents/angleriq
 
 ---
 
@@ -438,7 +438,7 @@ Both are retrieved using cosine similarity search via `match_technique_embedding
 **Branch:** main → auto-deploys to production
 **Manual deploy:**
 ```bash
-cd /Users/rocco/.openclaw/workspace/angleriq-app
+cd /Users/rocco/Documents/angleriq
 npm run build && git add -A && git commit -m "message" && git push && vercel --prod --token <VERCEL_TOKEN>
 ```
 
