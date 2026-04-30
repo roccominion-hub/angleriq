@@ -278,7 +278,7 @@ function WeatherBar({ weather, lakeId }: { weather: Weather; lakeId?: string }) 
   return (
     <div className="space-y-2">
       {/* Conditions row */}
-      <div className={`flex flex-wrap items-center gap-3 text-sm text-slate-600 rounded-lg px-4 py-2.5 border ${isForecast ? 'bg-purple-50 border-purple-200' : 'bg-slate-50 border-slate-200'}`}>
+      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 rounded-lg px-4 py-2.5 border bg-slate-50 border-slate-200">
         {/* Forecast badge + date */}
         {isForecast && (
           <>
@@ -1124,11 +1124,7 @@ export default function SearchPage() {
                   value={tripDate}
                   onChange={e => handleTripDateChange(e.target.value)}
                   min={TODAY}
-                  className={`h-9 text-sm rounded-md px-2.5 border focus:outline-none focus:ring-2 focus:border-transparent ${
-                    isScenario
-                      ? 'bg-purple-50 border-purple-300 text-purple-800 focus:ring-purple-500'
-                      : 'bg-white border-slate-200 text-slate-800 focus:ring-blue-500'
-                  }`}
+                  className="h-9 text-sm rounded-md px-2.5 border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
