@@ -14,6 +14,7 @@ function AccountPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const justUpgraded = searchParams.get('upgraded') === 'true'
+  const trialJustExpired = searchParams.get('expired') === 'true'
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [reports, setReports] = useState<any[]>([])
@@ -157,6 +158,17 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
             <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm">New Report</Button>
           </Link>
         </div>
+
+        {/* Trial expired banner */}
+        {trialJustExpired && !justUpgraded && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+            <span className="text-amber-500 text-xl">⏰</span>
+            <div>
+              <p className="font-bold text-amber-800 text-sm">Your free trial has ended</p>
+              <p className="text-amber-700 text-xs mt-0.5">Upgrade to Pro to continue accessing fishing intel reports.</p>
+            </div>
+          </div>
+        )}
 
         {/* Upgrade success banner */}
         {justUpgraded && (

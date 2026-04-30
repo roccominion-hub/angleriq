@@ -1,6 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const TRIAL_DAYS = 7
+
+function isTrialExpired(trialStartedAt: string | null): boolean {
+  if (!trialStartedAt) return false
+  const elapsed = Date.now() - new Date(trialStartedAt).getTime()
+  return elapsed > TRIAL_DAYS * 24 * 60 * 60 * 1000
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -22,17 +30,18 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
+  const path = request.nextUrl.pathname
 
-  // Protect /account
-  if (!user && request.nextUrl.pathname.startsWith('/account')) {
+  // Protect /account and /search — must be logged in
+  if (!user && (path.startsWith('/account') || path.startsWith('/search'))) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
-    url.searchParams.set('next', request.nextUrl.pathname)
+    url.searchParams.set('next', path)
     return NextResponse.redirect(url)
   }
 
   // Protect /admin — must be logged-in admin email
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  if (path.startsWith('/admin')) {
     const adminEmail = process.env.ADMIN_EMAIL
     if (!user || !adminEmail || user.email !== adminEmail) {
       const url = request.nextUrl.clone()
@@ -41,9 +50,29 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Gate /search — block expired trial users
+  if (user && path.startsWith('/search')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_status, trial_started_at')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const status = profile?.subscription_status
+    const expired = status === 'trial' && isTrialExpired(profile?.trial_started_at ?? null)
+    const blocked = expired || status === 'cancelled' || status === 'expired'
+
+    if (blocked) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/account'
+      url.searchParams.set('expired', 'true')
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/account/:path*', '/admin', '/admin/:path*'],
+  matcher: ['/account/:path*', '/admin', '/admin/:path*', '/search/:path*', '/search'],
 }
