@@ -47,6 +47,7 @@ interface SearchResult {
 interface MilkRunPattern { number: number; name: string; why: string; how: string; where: string }
 
 const CURRENT_YEAR = new Date().getFullYear()
+const TODAY = new Date().toISOString().split('T')[0]
 
 // Map bait names/types to their canonical technique
 function inferTechnique(baitName: string, baitType: string, storedPresentation: string): string {
@@ -632,7 +633,7 @@ function FilterBreadcrumbs({
     })
   })
 
-  if (tripDate) {
+  if (tripDate && tripDate !== TODAY) {
     chips.push({ label: `📅 ${tripDate}`, onRemove: () => onRemoveScenario('_tripDate') })
   }
 
@@ -710,12 +711,12 @@ export default function SearchPage() {
   })
 
   // Future Trip state
-  const [tripDate, setTripDate] = useState('')
+  const [tripDate, setTripDate] = useState(TODAY)
   const [futureWeatherLoading, setFutureWeatherLoading] = useState(false)
   const [autoFilled, setAutoFilled] = useState<Set<string>>(new Set())
 
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filterTab, setFilterTab] = useState<'now' | 'scenario'>('now')
+  const isScenario = tripDate > TODAY
   const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
@@ -768,8 +769,8 @@ export default function SearchPage() {
   }
 
   function handleTripDateChange(date: string) {
-    setTripDate(date)
-    if (!date) {
+    setTripDate(date || TODAY)
+    if (!date || date <= TODAY) {
       setAutoFilled(new Set())
       return
     }
@@ -868,7 +869,7 @@ export default function SearchPage() {
     setNowFilters({ baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', waterClarity: 'all', style: 'all' })
     setScenarioFilters({ season: 'all', timeOfDay: 'all', weatherConditions: 'all', waterTemp: 'all', waterClarity: 'all', baitType: 'all', fishDepth: 'all', locationType: 'all', structure: 'all', airTemp: 'all', wind: 'all' })
     setYearRange([2019, CURRENT_YEAR])
-    setTripDate('')
+    setTripDate(TODAY)
     setAutoFilled(new Set())
   }
 
@@ -930,15 +931,15 @@ export default function SearchPage() {
       let currentWeather: Weather | null = null
       if (data.coords?.lat && data.coords?.lng) {
         try {
-          // If a trip date is set, fetch forecast for that date; otherwise fetch current conditions
-          const weatherUrl = tripDate
+          // If a future trip date is set, fetch forecast; otherwise fetch current conditions
+          const weatherUrl = isScenario
             ? `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}&date=${tripDate}`
             : `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`
           const wRes = await fetch(weatherUrl)
           currentWeather = await wRes.json()
 
           // For future trips, use user-selected timeOfDay (or omit if not set)
-          if (tripDate) {
+          if (isScenario) {
             const selectedTime = scenarioFilters.timeOfDay !== 'all' ? scenarioFilters.timeOfDay : undefined
             currentWeather = { ...currentWeather, timeOfDay: selectedTime }
           }
@@ -947,8 +948,7 @@ export default function SearchPage() {
         } catch { /* weather is optional */ }
       }
 
-      // Build filters: use scenario filters when trip date is set, now filters otherwise
-      const isScenario = !!tripDate
+      // Build filters: use scenario filters for future trips, now filters for today
       fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1110,10 +1110,27 @@ export default function SearchPage() {
 
         {/* Search + Filters */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
-          {/* Top row: lake search + actions */}
+          {/* Top row: lake search + date + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
             <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} userCoords={userCoords} />
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 shrink-0">
+              {/* Date input — always visible, defaults to today */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar size={12} /> Date
+                </label>
+                <input
+                  type="date"
+                  value={tripDate}
+                  onChange={e => handleTripDateChange(e.target.value)}
+                  min={TODAY}
+                  className={`h-9 text-sm rounded-md px-2.5 border focus:outline-none focus:ring-2 focus:border-transparent ${
+                    isScenario
+                      ? 'bg-purple-50 border-purple-300 text-purple-800 focus:ring-purple-500'
+                      : 'bg-white border-slate-200 text-slate-800 focus:ring-blue-500'
+                  }`}
+                />
+              </div>
               <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
                 className="text-slate-500 hover:text-slate-700 text-xs h-9 gap-1">
                 Filters {filtersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -1138,26 +1155,8 @@ export default function SearchPage() {
 
           {filtersOpen && (
             <div>
-              {/* Tab bar */}
-              <div className="flex border-b border-slate-100">
-                <button
-                  onClick={() => setFilterTab('now')}
-                  className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${filterTab === 'now' ? 'border-green-500 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
-                >
-                  <Zap size={14} className={filterTab === 'now' ? 'text-green-600' : 'text-slate-400'} />
-                  Right Now
-                </button>
-                <button
-                  onClick={() => setFilterTab('scenario')}
-                  className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${filterTab === 'scenario' ? 'border-purple-500 text-purple-700 bg-purple-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
-                >
-                  <Calendar size={14} className={filterTab === 'scenario' ? 'text-purple-600' : 'text-slate-400'} />
-                  Future Trip
-                </button>
-              </div>
-
-              {/* Right Now tab */}
-              {filterTab === 'now' && (
+              {/* Right Now filters — today's date selected */}
+              {!isScenario && (
                 <div className="p-4 space-y-4">
                   <p className="text-xs text-slate-400">Refine the intel and recommendation for your current conditions.</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -1186,44 +1185,27 @@ export default function SearchPage() {
                 </div>
               )}
 
-              {/* Future Trip tab */}
-              {filterTab === 'scenario' && (
+              {/* Future Trip filters — future date selected */}
+              {isScenario && (
                 <div className="p-4 space-y-4">
-                  <p className="text-xs text-slate-400">
-                    Plan intel for a future trip. Select a date and we&apos;ll auto-fill season, moon phase, and — if your trip is within 16 days — forecast weather conditions.
-                    Fields marked <span className="text-red-400 font-bold">*</span> are required for the best intel.
-                  </p>
-
-                  {/* Date Picker */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <Calendar size={12} /> Trip Date
-                    </label>
-                    <div className="flex items-center flex-wrap gap-3">
-                      <input
-                        type="date"
-                        value={tripDate}
-                        onChange={e => handleTripDateChange(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                        className="bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
-                      {futureWeatherLoading && (
-                        <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <RefreshCw size={11} className="animate-spin" /> Fetching forecast…
-                        </span>
-                      )}
-                      {tripDate && !futureWeatherLoading && autoFilled.size > 0 && (
-                        <span className="text-xs text-green-700 font-semibold flex items-center gap-1 bg-green-50 border border-green-200 px-2 py-1 rounded-md">
-                          ✓ Conditions auto-filled from {autoFilled.has('weatherConditions') ? 'forecast' : 'date'}
-                        </span>
-                      )}
-                      {tripDate && !result?.coords && (
-                        <span className="text-xs text-slate-400 italic">Select a lake and search to auto-fill weather</span>
-                      )}
-                    </div>
+                  <div className="flex items-center flex-wrap gap-3">
+                    <p className="text-xs text-slate-400">
+                      Conditions auto-filled from your trip date. Adjust any field to override.
+                    </p>
+                    {futureWeatherLoading && (
+                      <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                        <RefreshCw size={11} className="animate-spin" /> Fetching forecast…
+                      </span>
+                    )}
+                    {!futureWeatherLoading && autoFilled.size > 0 && (
+                      <span className="text-xs text-green-700 font-semibold flex items-center gap-1 bg-green-50 border border-green-200 px-2 py-1 rounded-md">
+                        ✓ Auto-filled from {autoFilled.has('weatherConditions') ? 'forecast' : 'date'}
+                      </span>
+                    )}
+                    {!result?.coords && (
+                      <span className="text-xs text-slate-400 italic">Search a lake to auto-fill forecast weather</span>
+                    )}
                   </div>
-
-                  {/* Condition Filters */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     <FilterSelect label="Season" icon={<Sun size={12} />} required
                       autoFilled={autoFilled.has('season')}
