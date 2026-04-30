@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
@@ -9,13 +9,16 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Fish, Bookmark, BookmarkCheck, Trash2, Download, LogOut, Crown } from 'lucide-react'
 
-export default function AccountPage() {
+function AccountPageInner() {
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const justUpgraded = searchParams.get('upgraded') === 'true'
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [reports, setReports] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [upgrading, setUpgrading] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -95,6 +98,19 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
     setTimeout(() => win.print(), 500)
   }
 
+  async function handleUpgrade() {
+    setUpgrading(true)
+    try {
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' })
+      const { url } = await res.json()
+      if (url) window.location.href = url
+    } catch {
+      alert('Something went wrong. Please try again.')
+    } finally {
+      setUpgrading(false)
+    }
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut()
     router.push('/')
@@ -142,6 +158,17 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
           </Link>
         </div>
 
+        {/* Upgrade success banner */}
+        {justUpgraded && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+            <span className="text-green-600 text-xl">🎉</span>
+            <div>
+              <p className="font-bold text-green-800 text-sm">You&apos;re now a Pro member!</p>
+              <p className="text-green-700 text-xs mt-0.5">Full access to all AnglerIQ features is now unlocked.</p>
+            </div>
+          </div>
+        )}
+
         {/* Subscription status */}
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -174,10 +201,11 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
             </div>
             {profile?.subscription_status !== 'active' && (
               <Button
-                onClick={() => alert('Payment coming soon! Your trial access continues for now.')}
+                onClick={handleUpgrade}
+                disabled={upgrading}
                 className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm"
               >
-                Upgrade to Pro — $9.99/mo
+                {upgrading ? 'Redirecting...' : 'Upgrade to Pro — $2.99/mo'}
               </Button>
             )}
           </div>
@@ -254,5 +282,13 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccountPageInner />
+    </Suspense>
   )
 }
