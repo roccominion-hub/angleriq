@@ -1,7 +1,7 @@
 import Image from 'next/image'
 
 const BAIT_MAP: { file: string; matches: string[] }[] = [
-  { file: 'crankbait-lipless',  matches: ['lipless', 'rat-l-trap', 'rattle trap', 'red eye shad', 'lv', 'level vibe'] },
+  { file: 'crankbait-lipless',  matches: ['lipless', 'rat-l-trap', 'rattle trap', 'red eye shad', 'lv', 'level vibe', 'blade bait', 'bladebait', 'silver buddy', 'heddon sonar', 'cicada', 'reef runner'] },
   { file: 'crankbait-squarebill', matches: ['squarebill', 'square bill', 'square-bill', '1.5', '2.5', 'rc 1.5', 'rc 2.5', 'rc2.5', 'rc1.5', 'magnum squarebill'] },
   { file: 'crankbait-deep',     matches: ['10xd', '6xd', '8xd', 'deep crank', 'deep diving', 'deep-diving', 'deep diver', '10 xd', '6 xd', 'dxd', 'deep crankbait'] },
   { file: 'crankbait-shallow',  matches: ['crankbait', 'crank bait', 'crank', 'shallow crank', 'medium crank', 'flat-sided', 'flat sided'] },
