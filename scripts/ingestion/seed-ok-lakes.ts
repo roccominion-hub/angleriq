@@ -31,6 +31,7 @@ const OK_LAKES = [
   { name: 'Skiatook Lake',                   state: 'OK', type: 'reservoir', lat: 36.37, lng: -96.07, species: ['largemouth', 'smallmouth'] },
   { name: 'Kaw Lake',                        state: 'OK', type: 'reservoir', lat: 36.77, lng: -97.01, species: ['largemouth', 'smallmouth'] },
   { name: 'Sardis Lake',                     state: 'OK', type: 'reservoir', lat: 34.72, lng: -95.47, species: ['largemouth', 'smallmouth'] },
+  { name: 'McGee Creek Reservoir',           state: 'OK', type: 'reservoir', lat: 34.36, lng: -95.89, species: ['largemouth', 'smallmouth'] },
 ]
 
 async function main() {

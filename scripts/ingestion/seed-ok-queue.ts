@@ -309,6 +309,34 @@ NOTES: Under-pressured lake. Good shore fishing access. Upper lake has more timb
     notes: 'Curated Skiatook Lake OK knowledge base',
   },
 
+  // ─── McGee Creek Reservoir ───────────────────────────────────────────────
+  {
+    lake_name: 'McGee Creek Reservoir', state: 'OK', source_type: 'article',
+    url: 'https://www.wildlifedepartment.com/fishing/where-to-fish/mcgee-creek',
+    organization: 'ODWC', reported_date: '2024-01-01',
+    notes: 'ODWC McGee Creek Reservoir fishing guide',
+  },
+  {
+    lake_name: 'McGee Creek Reservoir', state: 'OK', source_type: 'article',
+    raw_text: `McGee Creek Reservoir — Oklahoma Bass Fishing Guide
+
+McGee Creek Reservoir is a 3,100-acre reservoir in Atoka County in southeastern Oklahoma. One of Oklahoma's most remote and least-pressured lakes. Exceptionally clear water — visibility often 10-20+ feet. Excellent largemouth and smallmouth bass fishery. Steep rocky terrain, cedar-lined banks, points, and coves.
+
+KEY PATTERNS:
+- Spring: Largemouth spawn in gravel and rocky coves in 3-10 feet. Smallmouth on chunk rock points and bluff ends. Clear water demands finesse — jerkbaits (natural shad/ghost colors), Ned rigs on rocky points, drop shots near deeper rocky structure. Squarebills along shallow rocky transitions.
+- Summer: Fish go deep due to clear water — 20-40 feet on main lake structure. Drop shot dominant for both largemouth and smallmouth. Alabama rig effective on main lake points. Spotted/smallmouth schooling on deep points early morning — topwater over schools before they go down.
+- Fall: Schooling bass on main lake points and channel edges as water cools. Jerkbaits, swimbaits, and topwater walking baits on schooling fish. One of Oklahoma's best fall finesse bites.
+- Winter: Blade baits and jigging spoons vertically on deep structure. Drop shot on main lake bluff ends. Jerkbaits in 8-15 feet on cold, clear water.
+
+KEY STRUCTURES: Rocky bluffs and chunk rock banks, main lake points, McGee Creek channel, spawning gravel coves, cedar brush, deep main lake humps.
+
+TOP BAITS: Drop shot Roboworm (Aaron's Magic, green pumpkin, morning dawn — 3/16oz), jerkbait Megabass Vision 110 or Lucky Craft Pointer 78 (ghost, natural shad, glimmer), Ned rig Z-Man TRD (green pumpkin, oxblood), small swimbait on round jighead (natural shad 3/8oz), squarebill (sexy shad, natural), blade bait (chrome, 1/2oz), topwater walking bait (chrome/black).
+
+NOTES: Remote location means extremely light pressure — one of Oklahoma's best-kept secrets for quality bass. Clear water is the defining characteristic — fluorocarbon essential, light line 6-10lb. Limited facilities; primitive camping nearby. Wildlife management area surrounds the lake — check ODWC regulations. Smallmouth and largemouth both present; main lake structure holds smallmouth, shallower coves hold largemouth. Worth the drive for anglers seeking quality over quantity.`,
+    organization: 'AnglerIQ Curated', reported_date: '2024-01-01',
+    notes: 'Curated McGee Creek Reservoir OK knowledge base',
+  },
+
   // ─── Kaw Lake ────────────────────────────────────────────────────────────
   {
     lake_name: 'Kaw Lake', state: 'OK', source_type: 'article',
