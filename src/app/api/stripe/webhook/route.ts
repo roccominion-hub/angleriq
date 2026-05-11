@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { sendUpgradeEmail } from '@/lib/email'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -35,11 +36,20 @@ export async function POST(request: Request) {
       const userId = session.client_reference_id
       const customerId = session.customer as string
       if (userId) {
-        await supabase.from('profiles').update({
-          subscription_status: 'active',
-          subscription_tier: 'pro',
-          stripe_customer_id: customerId,
-        }).eq('id', userId)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .update({
+            subscription_status: 'active',
+            subscription_tier: 'pro',
+            stripe_customer_id: customerId,
+          })
+          .eq('id', userId)
+          .select('email, full_name')
+          .maybeSingle()
+
+        if (profile?.email) {
+          sendUpgradeEmail(profile.email, profile.full_name || '').catch(() => {})
+        }
       }
       break
     }
