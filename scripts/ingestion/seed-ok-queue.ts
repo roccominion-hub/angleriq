@@ -337,6 +337,118 @@ NOTES: Remote location means extremely light pressure — one of Oklahoma's best
     notes: 'Curated McGee Creek Reservoir OK knowledge base',
   },
 
+  // ─── Lake Thunderbird ────────────────────────────────────────────────────
+  {
+    lake_name: 'Lake Thunderbird', state: 'OK', source_type: 'article',
+    url: 'https://www.wildlifedepartment.com/fishing/where-to-fish/thunderbird',
+    organization: 'ODWC', reported_date: '2024-01-01',
+    notes: 'ODWC Lake Thunderbird fishing guide',
+  },
+  {
+    lake_name: 'Lake Thunderbird', state: 'OK', source_type: 'article',
+    raw_text: `Lake Thunderbird — Oklahoma Bass Fishing Guide
+
+Lake Thunderbird is a 6,140-acre reservoir east of Norman in central Oklahoma on the Little River. Primary water supply for Norman, Midwest City, and Del City. Stained to slightly muddy water typical. Good largemouth bass fishery with moderate pressure. Features creek arms, timber flats in upper lake, rocky banks, riprap, and boat docks.
+
+KEY PATTERNS:
+- Spring: Largemouth spawn in 2-8 feet in creek arm coves and on timber flats. Spinnerbaits (chartreuse/white double willow), swim jigs (white shad), Texas-rigged lizards and creature baits (watermelon/red, june bug) on timber and wood. Squarebills along riprap banks and rocky points.
+- Summer: Bass move to main lake structure and shaded dock areas. Swim jigs and drop shots on dock pilings, Texas rigs punched into brush, night fishing with dark worms and swim jigs on main lake. Football jig on deeper main lake humps in 15-20 feet.
+- Fall: Shad migration triggers schooling largemouth on main lake and creek arm mouths — lipless crankbaits (Red Eye Shad chrome/blue), swimbaits, topwater walking baits. One of the more productive fall periods on the lake.
+- Winter: Deep timber and channel edges — drop shot, shakey head, blade bait on main lake points.
+
+KEY STRUCTURES: Upper lake timber flats, creek arm coves, main lake riprap, boat docks, Little River channel, main lake humps and points.
+
+TOP BAITS: Spinnerbait (chartreuse/white), swim jig (white shad, black/blue — 3/8oz), Texas rig lizard (watermelon/red, june bug — 4/0 EWG), squarebill (sexy shad, chartreuse), drop shot Roboworm (green pumpkin, morning dawn), lipless crankbait (Red Eye Shad chrome/blue), shakey head (green pumpkin).
+
+NOTES: Urban lake — heavily pressured on weekends. Best fishing is early morning and weekdays. Bank fishing accessible at state park. Largemouth only; no significant spotted or smallmouth population. Water levels managed for municipal water supply — can fluctuate. State park access with camping, ramps, and boat rentals.`,
+    organization: 'AnglerIQ Curated', reported_date: '2024-01-01',
+    notes: 'Curated Lake Thunderbird OK knowledge base',
+  },
+
+  // ─── Lake Hefner ─────────────────────────────────────────────────────────
+  {
+    lake_name: 'Lake Hefner', state: 'OK', source_type: 'article',
+    url: 'https://www.wildlifedepartment.com/fishing/where-to-fish/hefner',
+    organization: 'ODWC', reported_date: '2024-01-01',
+    notes: 'ODWC Lake Hefner fishing guide',
+  },
+  {
+    lake_name: 'Lake Hefner', state: 'OK', source_type: 'article',
+    raw_text: `Lake Hefner — Oklahoma Bass Fishing Guide
+
+Lake Hefner is a 2,500-acre reservoir in northwest Oklahoma City, serving as a municipal water supply. Stained to slightly muddy water. Primarily largemouth bass. Urban lake with heavy recreational traffic (sailing, running trail). Features riprap shorelines, some brush, points, and dock areas. Produces quality largemouth despite urban setting.
+
+KEY PATTERNS:
+- Spring: Largemouth spawn along rocky riprap banks and in any available coves. Squarebills and spinnerbaits along riprap (chartreuse/white, sexy shad), Texas-rigged creature baits near any wood or dock structure. Swim jigs along points and transitions.
+- Summer: Docks, deeper riprap, and any submerged brush. Drop shot and finesse jigs in the heat. Night fishing effective in summer — swim jigs and dark Texas-rigged worms along riprap after dark.
+- Fall: Schooling activity on main lake as shad migrate — lipless crankbaits and topwater walking baits on schooling fish near points and open water. Very productive fall bite for its size.
+- Winter: Main lake structure — blade bait, drop shot, jigging spoon on deeper riprap and point ends.
+
+KEY STRUCTURES: Riprap shoreline (dominant structure), main lake points, dock areas, channel transitions, brush piles (limited).
+
+TOP BAITS: Squarebill (sexy shad, chartreuse/white), spinnerbait (chartreuse/white), swim jig (white shad), Texas rig (watermelon/red, black/blue), drop shot Roboworm, lipless crankbait (chrome/blue), topwater walking bait (chrome/black).
+
+NOTES: Oklahoma City's most accessible bass lake — excellent for evening and early morning trips. Heavy boat traffic limits midday fishing in summer; dawn/dusk best. Largemouth only. Consistent quality bass produced from riprap year-round. Easy access from OKC metro. Solid option for urban bass fishing especially during weekday morning hours.`,
+    organization: 'AnglerIQ Curated', reported_date: '2024-01-01',
+    notes: 'Curated Lake Hefner OK knowledge base',
+  },
+
+  // ─── Lake Hudson ─────────────────────────────────────────────────────────
+  {
+    lake_name: 'Lake Hudson', state: 'OK', source_type: 'article',
+    url: 'https://www.wildlifedepartment.com/fishing/where-to-fish/hudson',
+    organization: 'ODWC', reported_date: '2024-01-01',
+    notes: 'ODWC Lake Hudson fishing guide',
+  },
+  {
+    lake_name: 'Lake Hudson', state: 'OK', source_type: 'article',
+    raw_text: `Lake Hudson — Oklahoma Bass Fishing Guide
+
+Lake Hudson (Markham Ferry Reservoir) is a 5,900-acre reservoir on the Grand (Neosho) River near Pryor in northeastern Oklahoma. Connected to Grand Lake downstream. Clear to slightly stained water. Excellent spotted bass and largemouth fishery — similar character to Grand Lake but smaller and less pressured. Features rocky banks, points, boat docks, and brush.
+
+KEY PATTERNS:
+- Spring: Spotted bass on rocky chunk rock points and chunk rock banks; largemouth in coves and on flats near docks. Ned rigs and jerkbaits for spotted bass, spinnerbaits and swim jigs for largemouth. Both species spawn in 4-10 feet.
+- Summer: Spotted bass go deep on main lake points and channel structure — drop shot, finesse jig, football jig in 15-25 feet. Largemouth relate to docks and shaded areas. Alabama rig on deep points effective in summer.
+- Fall: Schooling spotted bass on main lake points as shad push. Topwater walking baits, jerkbaits, and swimbaits on visible schools. Very active fall bite.
+- Winter: Drop shot and blade baits on main lake bluff ends and points. Jerkbaits in 8-15 feet on cold water.
+
+KEY STRUCTURES: Rocky points and chunk rock banks, boat docks, main lake channel, Grand River upstream channel, spawning gravel banks, brush (some coves).
+
+TOP BAITS: Ned rig Z-Man TRD (green pumpkin, oxblood), drop shot Roboworm (Aaron's Magic, margarita mutilator), jerkbait (Megabass Vision 110, Lucky Craft Pointer — ghost, natural shad), football jig (green pumpkin 3/4oz), swim jig (white shad), topwater walking bait (chrome/black), spinnerbait (chartreuse/white).
+
+NOTES: Underrated and under-pressured compared to Grand Lake directly downstream. Strong spotted bass fishery with quality largemouth mixed in. Clear water rewards finesse presentations. Worth the trip for anglers looking for Grand Lake-style fishing with less competition.`,
+    organization: 'AnglerIQ Curated', reported_date: '2024-01-01',
+    notes: 'Curated Lake Hudson OK knowledge base',
+  },
+
+  // ─── Sardis Lake ─────────────────────────────────────────────────────────
+  {
+    lake_name: 'Sardis Lake', state: 'OK', source_type: 'article',
+    url: 'https://www.wildlifedepartment.com/fishing/where-to-fish/sardis',
+    organization: 'ODWC', reported_date: '2024-01-01',
+    notes: 'ODWC Sardis Lake fishing guide',
+  },
+  {
+    lake_name: 'Sardis Lake', state: 'OK', source_type: 'article',
+    raw_text: `Sardis Lake — Oklahoma Bass Fishing Guide
+
+Sardis Lake is a 14,360-acre reservoir in Pushmataha County in southeastern Oklahoma near Clayton. Remote, lightly pressured lake in the Ouachita Mountains foothills. Moderately stained to clear water. Good largemouth and spotted bass fishery. Features timbered coves, rocky banks, points, and extensive creek arms.
+
+KEY PATTERNS:
+- Spring: Largemouth spawn in timber coves and on flats throughout creek arms in 2-8 feet. Texas-rigged lizards and creature baits (watermelon/red, june bug), spinnerbaits (chartreuse/white) on timber edges, hollow frogs over shallow timber and any emerging pads. Spotted bass on rocky points — Ned rigs and jerkbaits.
+- Summer: Bass retreat to timber and deeper structure. Swim jigs through timber, drop shots on main lake points, punch rigs on matted vegetation where available. Early topwater around timber before sunrise.
+- Fall: Schooling activity on main lake as shad migrate. Lipless crankbaits, swimbaits, and topwater on schooling fish. Creek arm mouths and main lake points most productive.
+- Winter: Drop shot and blade baits on main lake structure. Shakey heads and finesse worms near timber in 12-20 feet.
+
+KEY STRUCTURES: Submerged timber throughout (dominant), creek arms (Jack Fork, Potato Hills), main lake rocky points, spawning flats, roadbed structure, main lake channel.
+
+TOP BAITS: Texas rig lizard (watermelon/red, june bug — 4/0 EWG), spinnerbait (chartreuse/white double willow), hollow body frog (black/blue), swim jig (white shad, green pumpkin), drop shot Roboworm (green pumpkin, morning dawn), lipless crankbait (Red Eye Shad), Ned rig (green pumpkin).
+
+NOTES: Remote location means light pressure — quality fish available. Timber is the dominant structure like Eufaula but smaller scale. Beautiful Ouachita Mountain setting. Limited facilities; primitive Corps of Engineers camping. Good deer hunting area in fall. One of southeastern Oklahoma's hidden gems for bass fishing.`,
+    organization: 'AnglerIQ Curated', reported_date: '2024-01-01',
+    notes: 'Curated Sardis Lake OK knowledge base',
+  },
+
   // ─── Kaw Lake ────────────────────────────────────────────────────────────
   {
     lake_name: 'Kaw Lake', state: 'OK', source_type: 'article',

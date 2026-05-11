@@ -17,7 +17,7 @@ import { resolve } from 'path'
 dotenv.config({ path: resolve(process.cwd(), '.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
-import { fetchArticleText } from './fetch-article'
+import { fetchArticleText, isBlockedDomain } from './fetch-article'
 import { extractFishingData } from './extract-fishing-data'
 import { insertTechniqueReport } from './insert-to-supabase'
 
@@ -68,6 +68,11 @@ async function processItem(item: any): Promise<void> {
   console.log(`\n📍 ${item.lake_name}, ${item.state}`)
   console.log(`   Source: ${label}`)
   if (item.notes) console.log(`   Notes:  ${item.notes}`)
+
+  // Auto-skip domains known to block scrapers — use YouTube or curated rawText instead
+  if (item.url && isBlockedDomain(item.url)) {
+    throw new Error(`Blocked domain — use YouTube or rawText source instead: ${new URL(item.url).hostname}`)
+  }
 
   const text = item.raw_text ?? await fetchArticleText(item.url!)
   if (!text || text.length < 100) throw new Error('Content too short — skipped')
@@ -125,7 +130,7 @@ async function main() {
       succeeded++
     } catch (e: any) {
       const msg = e.message?.slice(0, 300) || 'Unknown error'
-      const isSkip = msg.includes('too short') || msg.includes('No qualifying')
+      const isSkip = msg.includes('too short') || msg.includes('No qualifying') || msg.includes('Blocked domain')
       console.error(`   ❌ ${msg}`)
       await supabase.from('ingest_queue').update({
         status: isSkip ? 'skipped' : (item.attempts >= 2 ? 'failed' : 'pending'),
