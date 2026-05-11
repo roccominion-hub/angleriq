@@ -83,12 +83,36 @@ async function callGemini(text: string, apiKey: string, attempt = 1): Promise<an
 }
 
 // Hard post-extraction filter — catches anything the AI missed
-const BAD_SPECIES = ['carp', 'catfish', 'channel cat', 'flathead', 'blue cat', 'crappie', 'white bass', 'striper', 'striped bass', 'perch', 'walleye', 'trout', 'drum', 'gar', 'buffalo']
-const BAD_BAITS = ['nightcrawler', 'worm' /* live */, 'cut bait', 'cutbait', 'stink bait', 'stinkbait', 'cricket', 'minnow', 'shiner', 'chicken liver', 'dough bait', 'doughbait', 'punch bait', 'blood bait', 'soap bait', 'liver']
-
-// "worm" is valid as a lure (e.g. "trick worm", "plastic worm") — only flag if it's clearly live/natural
-const LIVE_BAIT_CONTEXT = /\b(live|fresh|dead|natural|real)\s+(worm|bait|shad|minnow|crawler)/i
-const SHAD_LIVE = /\blive\s+shad\b|\bshad\s+(as|for)\s+(bait|live)/i
+const BAD_SPECIES = [
+  'carp', 'catfish', 'channel cat', 'flathead', 'blue cat',
+  'crappie', 'white bass', 'striper', 'striped bass',
+  'perch', 'walleye', 'trout', 'rainbow', 'brown trout', 'brook trout',
+  'drum', 'gar', 'buffalo', 'salmon', 'panfish', 'sunfish', 'bluegill',
+]
+const BAD_BAITS = [
+  'corn', 'kernel corn', 'sweet corn',           // never a bass lure
+  'nightcrawler', 'night crawler', 'crawler',
+  'cut bait', 'cutbait',
+  'stink bait', 'stinkbait',
+  'cricket',
+  'shiner', 'live shiner',
+  'chicken liver', 'liver',
+  'dough bait', 'doughbait',
+  'blood bait',
+  'soap bait',
+  'wax worm', 'waxworm',
+  'spawn sac', 'fish eggs', 'roe',
+]
+const BAD_CONTEXTS = [
+  /below\s+the\s+dam/i,          // tailwater trout articles
+  /tailwater/i,
+  /\btrout\s+fish/i,
+  /\bfly\s+fish/i,               // fly fishing content
+  /\blive\s+bait\b/i,
+  /\b(live|fresh|dead|natural|real)\s+(worm|bait|shad|minnow|crawler)/i,
+  /\blive\s+shad\b/i,
+  /\bshad\s+(as|for)\s+(bait|live)/i,
+]
 
 function isBadRecord(record: any): boolean {
   const fields = [
@@ -100,11 +124,11 @@ function isBadRecord(record: any): boolean {
   if (BAD_SPECIES.some(s => fields.includes(s))) return true
 
   // Check bad baits
-  if (BAD_BAITS.some(b => b !== 'worm' && fields.includes(b))) return true
+  if (BAD_BAITS.some(b => fields.includes(b))) return true
 
-  // Live worm / live bait context check
+  // Check bad context patterns against raw JSON
   const rawText = JSON.stringify(record)
-  if (LIVE_BAIT_CONTEXT.test(rawText) || SHAD_LIVE.test(rawText)) return true
+  if (BAD_CONTEXTS.some(rx => rx.test(rawText))) return true
 
   return false
 }
