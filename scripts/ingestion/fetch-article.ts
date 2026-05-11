@@ -8,8 +8,9 @@ import * as cheerio from 'cheerio'
 import { YoutubeTranscript } from 'youtube-transcript'
 
 // Domains known to block scrapers — callers should skip these or use an alternate source
+// NOTE: bassmaster.com news/slideshow pages work fine — only old tournament results URLs 404.
+// Keep MLF blocked; use Bassmaster.com slideshow/news URLs directly.
 export const BLOCKED_DOMAINS = [
-  'bassmaster.com',
   'majorleaguefishing.com',
   'mlf.fish',
 ]

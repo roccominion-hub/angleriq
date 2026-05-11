@@ -51,7 +51,7 @@ async function callGemini(text: string, apiKey: string, attempt = 1): Promise<an
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: 'user', parts: [{ text: `Extract fishing technique data from this text:\n\n${text.slice(0, 8000)}` }] }],
-        generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' }
+        generationConfig: { maxOutputTokens: 32768, responseMimeType: 'application/json' }
       })
     }
   )
@@ -77,7 +77,20 @@ async function callGemini(text: string, apiKey: string, attempt = 1): Promise<an
   try {
     return JSON.parse(content)
   } catch {
-    console.error('Failed to parse AI response:', content)
+    // Truncation recovery — Gemini sometimes cuts off JSON mid-object.
+    // Find the last complete object by trimming to the last '}'  followed by a comma or end of array.
+    const lastComplete = content.lastIndexOf('},')
+    if (lastComplete > 0) {
+      try {
+        const recovered = content.slice(0, lastComplete + 1) + ']'
+        const parsed = JSON.parse(recovered)
+        if (parsed.length) {
+          console.log(`     ⚠️  JSON truncated — recovered ${parsed.length} of (unknown) total records`)
+          return parsed
+        }
+      } catch { /* fall through */ }
+    }
+    console.error('Failed to parse AI response:', content.slice(0, 200))
     return []
   }
 }
