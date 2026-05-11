@@ -1,0 +1,33 @@
+name: Embed New Techniques
+
+on:
+  schedule:
+    - cron: '30 */6 * * *'  # 30 min after ingest runs — gives ingest time to finish
+  workflow_dispatch:          # Manual trigger from GitHub Actions UI
+
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Embed new technique reports
+        run: npx tsx scripts/rag/embed-reports.ts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VOYAGE_API_KEY:            ${{ secrets.VOYAGE_API_KEY }}
+          ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}

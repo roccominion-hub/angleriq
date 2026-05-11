@@ -1,0 +1,57 @@
+name: Ingest Queue Runner
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Every 6 hours: midnight, 6am, noon, 6pm UTC
+  workflow_dispatch:          # Manual trigger from GitHub Actions UI
+    inputs:
+      batch:
+        description: 'Number of items to process'
+        default: '10'
+        required: false
+      state:
+        description: 'Filter by state (e.g. OK, TX) — leave blank for all'
+        default: ''
+        required: false
+      retry:
+        description: 'Retry failed items? (true/false)'
+        default: 'false'
+        required: false
+
+jobs:
+  run-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ingest queue
+        run: |
+          BATCH="${{ github.event.inputs.batch || '10' }}"
+          STATE="${{ github.event.inputs.state || '' }}"
+          RETRY="${{ github.event.inputs.retry || 'false' }}"
+
+          ARGS="--batch $BATCH"
+          if [ -n "$STATE" ]; then ARGS="$ARGS --state $STATE"; fi
+          if [ "$RETRY" = "true" ]; then ARGS="$ARGS --retry"; fi
+
+          echo "Running: npx tsx scripts/ingestion/run-queue.ts $ARGS"
+          npx tsx scripts/ingestion/run-queue.ts $ARGS
+        env:
+          NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY:            ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY:            ${{ secrets.VOYAGE_API_KEY }}
