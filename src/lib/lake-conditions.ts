@@ -46,7 +46,13 @@ function toCompass(deg: number) { return COMPASS[Math.round(deg / 22.5) % 16] }
 // Parse WDFT 30-day CSV for water level + trend
 async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
   try {
-    const res = await fetch(`${WDFT_BASE}/${slug}-30day.csv`, { next: { revalidate: 3600 } })
+    const ac = new AbortController()
+    const t = setTimeout(() => ac.abort(), 8000)
+    const res = await fetch(`${WDFT_BASE}/${slug}-30day.csv`, {
+      next: { revalidate: 3600 },
+      signal: ac.signal,
+    } as RequestInit)
+    clearTimeout(t)
     if (!res.ok) return null
     const text = await res.text()
     const lines = text.split('\n').filter(l => !l.startsWith('#') && l.trim())
@@ -63,10 +69,13 @@ async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
     const prev   = rows[rows.length - 2]
 
     // Get conservation pool from the statewide instantaneous API
+    const ac2 = new AbortController()
+    const t2 = setTimeout(() => ac2.abort(), 6000)
     const instRes = await fetch(
       'https://www.waterdatafortexas.org/reservoirs/api/instantaneous?output_format=csv',
-      { next: { revalidate: 900 } }
+      { next: { revalidate: 900 }, signal: ac2.signal } as RequestInit
     )
+    clearTimeout(t2)
     let conservPool = 0
     let abovePool = 0
     if (instRes.ok) {
@@ -91,6 +100,43 @@ async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
       deltaFt: Math.round(delta * 100) / 100,
       trend: delta > 0.02 ? 'rising' : delta < -0.02 ? 'falling' : 'stable',
       date: latest.date,
+    }
+  } catch { return null }
+}
+
+// Fetch lake stage (water level) from USGS for lakes with a known gauge site (parameter 00065 = gauge height ft)
+async function fetchUsgsLakeLevel(siteNo: string): Promise<WaterLevel | null> {
+  try {
+    // Get last 2 days of data so we can compute a trend
+    const url = `${USGS_IV}/?sites=${siteNo}&parameterCd=00065&period=P2D&format=json`
+    const ac = new AbortController()
+    const t = setTimeout(() => ac.abort(), 8000)
+    const res = await fetch(url, { next: { revalidate: 900 }, signal: ac.signal } as RequestInit)
+    clearTimeout(t)
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const ts = data?.value?.timeSeries?.[0]
+    if (!ts) return null
+
+    const values = (ts.values?.[0]?.value ?? [])
+      .map((v: any) => ({ val: parseFloat(v.value), dt: v.dateTime }))
+      .filter((v: any) => !isNaN(v.val) && v.val > 0)
+
+    if (values.length < 2) return null
+
+    const latest = values[values.length - 1]
+    const dayAgo = values[0]
+    const delta  = latest.val - dayAgo.val
+
+    return {
+      valueFt:           Math.round(latest.val * 100) / 100,
+      percentFull:       0,     // USGS gauge height doesn't give % full
+      abovePoolFt:       0,
+      conservationPoolFt: 0,
+      deltaFt:           Math.round(delta * 100) / 100,
+      trend:             delta > 0.02 ? 'rising' : delta < -0.02 ? 'falling' : 'stable',
+      date:              latest.dt.split('T')[0],
     }
   } catch { return null }
 }
@@ -166,9 +212,11 @@ export async function getLakeConditions(
   wdftSlug: string | null,
   lat: number,
   lng: number,
+  usgsLakeSiteNo?: string | null,
 ): Promise<LakeConditions> {
   const [waterLevel, inflows, wind] = await Promise.all([
-    wdftSlug ? fetchWdftLevel(wdftSlug) : null,
+    wdftSlug        ? fetchWdftLevel(wdftSlug)         :
+    usgsLakeSiteNo  ? fetchUsgsLakeLevel(usgsLakeSiteNo) : null,
     fetchInflows(lat, lng),
     fetchWind(lat, lng),
   ])
