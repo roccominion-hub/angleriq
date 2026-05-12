@@ -56,7 +56,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null)
   const [conditions, setConditions] = useState<any>(null)
   const [features, setFeatures] = useState<any>(null)
-  const [baseLayer, setBaseLayer] = useState<BaseLayer>('satellite')
+  const [baseLayer, setBaseLayer] = useState<BaseLayer>('topo')
   const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set(['flowlines']))
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(13)
@@ -95,8 +95,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       // Start at fallback lat/lng; will immediately fitBounds if polygon available
       const map = L.map(mapDivRef.current!, { center: [lat, lng], zoom: 13, zoomControl: true })
-      tileLayerRef.current = L.tileLayer(TILE_LAYERS.satellite.url, {
-        attribution: TILE_LAYERS.satellite.attribution, maxZoom: 19,
+      tileLayerRef.current = L.tileLayer(TILE_LAYERS.topo.url, {
+        attribution: TILE_LAYERS.topo.attribution, maxZoom: 19,
       }).addTo(map)
 
       map.on('zoomend', () => setZoom(map.getZoom()))
@@ -128,28 +128,32 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])
 
-  // USGS NHD hydrography tile overlay — add/remove based on flowlines toggle
+  // USGS NHD hydrography tile overlay — opacity varies by base layer so streams
+  // remain readable: darker on topo (lighter base), lighter on satellite (dark base)
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
     import('leaflet').then(L => {
+      const opacity = baseLayer === 'topo' ? 0.95 : 0.75
       if (overlays.has('flowlines')) {
         if (!nhdLayerRef.current) {
           nhdLayerRef.current = L.tileLayer(
             'https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}',
             {
               attribution: 'Hydrography: <a href="https://www.usgs.gov/national-hydrography">USGS NHD</a>',
-              opacity: 0.85,
+              opacity,
               maxZoom: 19,
               minZoom: 8,
             }
           ).addTo(mapRef.current)
+        } else {
+          nhdLayerRef.current.setOpacity(opacity)
         }
       } else {
         nhdLayerRef.current?.remove()
         nhdLayerRef.current = null
       }
     })
-  }, [overlays, mapReady])
+  }, [overlays, mapReady, baseLayer])
 
   // Wind arrows — dense grid confined to lake polygon, step tied to zoom
   useEffect(() => {
@@ -284,6 +288,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         const feeStr    = el.tags?.fee === 'yes' ? ' · Fee required' : el.tags?.fee === 'no' ? ' · Free' : ''
         const operator  = el.tags?.operator ? `<br><span style="color:#6b7280;font-size:11px">${el.tags.operator}</span>` : ''
         const surface   = el.tags?.surface  ? `<br><span style="color:#6b7280;font-size:11px">Surface: ${el.tags.surface}</span>` : ''
+        const mapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${rlat},${rlng}&travelmode=driving`
+        const directions = `<br><a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">↗ Directions</a>`
 
         const icon = L.divIcon({
           className: '',
@@ -293,7 +299,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         })
 
         L.marker([rlat, rlng], { icon })
-          .bindPopup(`<b>${name}</b>${feeStr}${operator}${surface}`)
+          .bindPopup(`<b>${name}</b>${feeStr}${operator}${surface}${directions}`)
           .addTo(group)
       }
 
@@ -350,20 +356,21 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       {/* Map layer controls */}
       <div className="bg-slate-800 px-4 py-2 flex items-center gap-2 border-b border-slate-700/40">
-        <div className="flex rounded-md overflow-hidden border border-slate-600 text-xs font-semibold">
+        {(['topo', 'satellite'] as BaseLayer[]).map(layer => (
           <button
-            onClick={() => setBaseLayer('satellite')}
-            className={`px-3 py-1 transition-colors ${baseLayer === 'satellite' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+            key={layer}
+            onClick={() => setBaseLayer(layer)}
+            className={`text-xs px-3 py-1 rounded border font-semibold transition-colors capitalize ${
+              baseLayer === layer
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+            }`}
           >
-            Satellite
+            {layer === 'topo' ? 'Topo' : 'Satellite'}
           </button>
-          <button
-            onClick={() => setBaseLayer('topo')}
-            className={`px-3 py-1 border-l border-slate-600 transition-colors ${baseLayer === 'topo' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-          >
-            Topo
-          </button>
-        </div>
+        ))}
+
+        <div className="w-px h-4 bg-slate-600 mx-1" />
 
         {(['flowlines', 'wind', 'ramps'] as OverlayKey[]).map(key => (
           <button
