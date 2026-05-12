@@ -15,11 +15,11 @@ type OverlayKey = 'flowlines' | 'wind' | 'ramps'
 const TILE_LAYERS = {
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Esri, Maxar, GeoEye, Earthstar Geographics',
+    attribution: '&copy; Esri',
   },
   topo: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS',
+    attribution: '&copy; Esri',
   },
 }
 
@@ -95,6 +95,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       // Start at fallback lat/lng; will immediately fitBounds if polygon available
       const map = L.map(mapDivRef.current!, { center: [lat, lng], zoom: 13, zoomControl: true })
+      map.attributionControl.setPrefix('')
       tileLayerRef.current = L.tileLayer(TILE_LAYERS.topo.url, {
         attribution: TILE_LAYERS.topo.attribution, maxZoom: 19,
       }).addTo(map)
@@ -139,7 +140,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           nhdLayerRef.current = L.tileLayer(
             'https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}',
             {
-              attribution: 'Hydrography: <a href="https://www.usgs.gov/national-hydrography">USGS NHD</a>',
+              attribution: 'USGS NHD',
               opacity,
               maxZoom: 19,
               minZoom: 8,
