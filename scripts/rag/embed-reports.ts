@@ -9,6 +9,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Voyage AI free tier: 3 RPM. Batching 50 texts per call means ~16 calls
+// for 781 reports — at 3 RPM that's ~5 min vs the old 4.5 hours (1 call/report).
+const BATCH_SIZE = 50
+const BATCH_DELAY_MS = 21_000   // 21s between batches keeps us under 3 RPM
+
 function buildChunkText(report: any): string {
   const lines: string[] = []
 
@@ -75,7 +80,9 @@ function buildChunkText(report: any): string {
   return lines.join('\n')
 }
 
-async function embedText(text: string): Promise<number[] | null> {
+// Send up to BATCH_SIZE texts in a single Voyage API call.
+// Returns embeddings in the same order as the input array; null for any failure.
+async function embedBatch(texts: string[]): Promise<(number[] | null)[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -84,7 +91,7 @@ async function embedText(text: string): Promise<number[] | null> {
     },
     body: JSON.stringify({
       model: 'voyage-3-lite',
-      input: [text],
+      input: texts,
       input_type: 'document',
     }),
   })
@@ -92,11 +99,13 @@ async function embedText(text: string): Promise<number[] | null> {
   if (!res.ok) {
     const err = await res.text()
     console.error('Voyage API error:', err)
-    return null
+    return texts.map(() => null)
   }
 
   const data: any = await res.json()
-  return data.data?.[0]?.embedding ?? null
+  // data.data is sorted by index so order matches input
+  const results: any[] = data.data ?? []
+  return results.map((r: any) => r.embedding ?? null)
 }
 
 async function sleep(ms: number) {
@@ -139,51 +148,71 @@ async function main() {
 
   console.log(`${embeddedIds.size} already embedded. Processing ${toEmbed.length} new reports...`)
 
+  if (toEmbed.length === 0) {
+    console.log('Nothing to do.')
+    return
+  }
+
+  const totalBatches = Math.ceil(toEmbed.length / BATCH_SIZE)
   let successCount = 0
   let errorCount = 0
 
-  for (let i = 0; i < toEmbed.length; i++) {
-    const report = toEmbed[i]
-    const chunkText = buildChunkText(report)
+  for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+    const start = batchIdx * BATCH_SIZE
+    const batch = toEmbed.slice(start, start + BATCH_SIZE)
+    const texts = batch.map(buildChunkText)
 
-    if (!chunkText.trim()) {
-      console.warn(`Report ${report.id} produced empty chunk, skipping.`)
+    // Skip reports with no content
+    const validIndices = texts.map((t, i) => t.trim() ? i : -1).filter(i => i >= 0)
+    const validTexts = validIndices.map(i => texts[i])
+
+    if (validTexts.length === 0) {
+      console.warn(`Batch ${batchIdx + 1}: all reports empty, skipping.`)
       continue
     }
 
-    const embedding = await embedText(chunkText)
+    const embeddings = await embedBatch(validTexts)
 
-    if (!embedding) {
-      console.error(`Failed to embed report ${report.id}`)
-      errorCount++
-      continue
-    }
-
-    const { error: upsertError } = await supabase
-      .from('technique_embeddings')
-      .upsert({
+    // Build upsert rows for successful embeddings
+    const rows = validIndices
+      .map((reportIdx, embIdx) => ({
+        report: batch[reportIdx],
+        text: texts[reportIdx],
+        embedding: embeddings[embIdx],
+      }))
+      .filter(({ embedding }) => embedding !== null)
+      .map(({ report, text, embedding }) => ({
         technique_report_id: report.id,
         body_of_water_id: report.body_of_water_id,
-        content: chunkText,
+        content: text,
         embedding: JSON.stringify(embedding),
-      }, { onConflict: 'technique_report_id' })
+      }))
 
-    if (upsertError) {
-      console.error(`Upsert error for report ${report.id}:`, upsertError)
-      errorCount++
-    } else {
-      successCount++
+    errorCount += validTexts.length - rows.length
+
+    if (rows.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('technique_embeddings')
+        .upsert(rows, { onConflict: 'technique_report_id' })
+
+      if (upsertError) {
+        console.error(`Batch ${batchIdx + 1} upsert error:`, upsertError.message)
+        errorCount += rows.length
+      } else {
+        successCount += rows.length
+      }
     }
 
-    if ((i + 1) % 10 === 0) {
-      console.log(`Progress: ${i + 1}/${toEmbed.length} processed (${successCount} success, ${errorCount} errors)`)
-    }
+    const processed = Math.min(start + BATCH_SIZE, toEmbed.length)
+    console.log(`Batch ${batchIdx + 1}/${totalBatches} — ${processed}/${toEmbed.length} processed (${successCount} success, ${errorCount} errors)`)
 
-    // Rate limit: free tier = 3 RPM, wait 21s between calls
-    await sleep(21000)
+    // Rate-limit sleep between batches (not after the last one)
+    if (batchIdx < totalBatches - 1) {
+      await sleep(BATCH_DELAY_MS)
+    }
   }
 
-  console.log(`\nDone! Embedded ${successCount} reports successfully. ${errorCount} errors.`)
+  console.log(`\nDone! Embedded ${successCount} reports. ${errorCount} errors.`)
 }
 
 main().catch(console.error)
