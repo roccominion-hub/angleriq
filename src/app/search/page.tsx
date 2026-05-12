@@ -1096,7 +1096,7 @@ export default function SearchPage() {
   ]
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+    <main className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
         <NavUserMenu />

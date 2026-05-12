@@ -326,7 +326,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const temp = cond?.waterTemp
 
   return (
-    <div className="rounded-xl overflow-hidden border border-slate-200 shadow-md bg-slate-900">
+    <div className="w-full rounded-xl overflow-hidden border border-slate-200 shadow-md bg-slate-900">
 
       {/* Conditions header */}
       <div className="bg-slate-900 px-4 py-2.5 flex flex-wrap items-center gap-5 border-b border-slate-700/50">
@@ -355,7 +355,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       </div>
 
       {/* Map layer controls */}
-      <div className="bg-slate-800 px-4 py-2 flex items-center gap-2 border-b border-slate-700/40">
+      <div className="bg-slate-800 px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-slate-700/40">
         {(['topo', 'satellite'] as BaseLayer[]).map(layer => (
           <button
             key={layer}
@@ -370,7 +370,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           </button>
         ))}
 
-        <div className="w-px h-4 bg-slate-600 mx-1" />
+        <div className="w-px h-4 bg-slate-600 mx-0.5" />
 
         {(['flowlines', 'wind', 'ramps'] as OverlayKey[]).map(key => (
           <button
