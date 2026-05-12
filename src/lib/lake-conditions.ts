@@ -46,13 +46,10 @@ function toCompass(deg: number) { return COMPASS[Math.round(deg / 22.5) % 16] }
 // Parse WDFT 30-day CSV for water level + trend
 async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
   try {
-    const ac = new AbortController()
-    const t = setTimeout(() => ac.abort(), 8000)
     const res = await fetch(`${WDFT_BASE}/${slug}-30day.csv`, {
       next: { revalidate: 3600 },
-      signal: ac.signal,
+      signal: AbortSignal.timeout(25000),
     } as RequestInit)
-    clearTimeout(t)
     if (!res.ok) return null
     const text = await res.text()
     const lines = text.split('\n').filter(l => !l.startsWith('#') && l.trim())
@@ -69,13 +66,10 @@ async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
     const prev   = rows[rows.length - 2]
 
     // Get conservation pool from the statewide instantaneous API
-    const ac2 = new AbortController()
-    const t2 = setTimeout(() => ac2.abort(), 6000)
     const instRes = await fetch(
       'https://www.waterdatafortexas.org/reservoirs/api/instantaneous?output_format=csv',
-      { next: { revalidate: 900 }, signal: ac2.signal } as RequestInit
+      { next: { revalidate: 900 }, signal: AbortSignal.timeout(15000) } as RequestInit
     )
-    clearTimeout(t2)
     let conservPool = 0
     let abovePool = 0
     if (instRes.ok) {
@@ -109,10 +103,7 @@ async function fetchUsgsLakeLevel(siteNo: string): Promise<WaterLevel | null> {
   try {
     // Get last 2 days of data so we can compute a trend
     const url = `${USGS_IV}/?sites=${siteNo}&parameterCd=00065&period=P2D&format=json`
-    const ac = new AbortController()
-    const t = setTimeout(() => ac.abort(), 8000)
-    const res = await fetch(url, { next: { revalidate: 900 }, signal: ac.signal } as RequestInit)
-    clearTimeout(t)
+    const res = await fetch(url, { next: { revalidate: 900 }, signal: AbortSignal.timeout(10000) } as RequestInit)
     if (!res.ok) return null
 
     const data = await res.json()
