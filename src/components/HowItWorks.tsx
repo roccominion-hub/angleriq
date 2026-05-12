@@ -39,8 +39,8 @@ function LakeSearchMockup() {
 
 function DataCrunchMockup() {
   const sources = [
-    { label: 'B.A.S.S. Tournaments', active: true },
-    { label: 'MLF Results', active: true },
+    { label: 'Pro Tournament Results', active: true },
+    { label: 'Elite Series Data', active: true },
     { label: 'Local Circuit Data', active: true },
     { label: 'Forum Reports', active: true },
     { label: 'Weather Conditions', active: false },
@@ -136,7 +136,7 @@ const STEPS = [
     num: '02',
     icon: <BarChart3 size={16} className="text-blue-600" />,
     title: 'We Crunch the Data',
-    desc: 'Tournament results from B.A.S.S., MLF, and local circuits are cross-referenced against real conditions — temp, sky, season, and moon phase.',
+    desc: 'Pro tournament results and local circuit data are cross-referenced against real conditions — temp, sky, season, and moon phase.',
     mockup: <DataCrunchMockup />,
   },
   {
