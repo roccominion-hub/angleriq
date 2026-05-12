@@ -18,13 +18,20 @@ export async function GET(req: NextRequest) {
 
   const { data: lake, error } = await supabase
     .from('body_of_water')
-    .select('id, name, lat, lng, usgs_site_no, usgs_lake_site_no, wdft_slug')
+    .select('id, name, lat, lng, usgs_site_no, usgs_lake_site_no, wdft_slug, cwms_location_code, cwms_office')
     .eq('id', lakeId)
     .single()
 
   if (error || !lake) return NextResponse.json({ error: 'Lake not found' }, { status: 404 })
 
-  const conditions = await getLakeConditions(lake.wdft_slug, lake.lat, lake.lng, lake.usgs_lake_site_no)
+  const conditions = await getLakeConditions(
+    lake.wdft_slug,
+    lake.lat,
+    lake.lng,
+    lake.usgs_lake_site_no,
+    lake.cwms_location_code,
+    lake.cwms_office,
+  )
 
   return NextResponse.json({
     lake: { id: lake.id, name: lake.name, lat: lake.lat, lng: lake.lng },

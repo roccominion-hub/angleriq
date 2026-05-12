@@ -39,6 +39,7 @@ export interface LakeConditions {
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast'
 const WDFT_BASE  = 'https://www.waterdatafortexas.org/reservoirs/individual'
 const USGS_IV    = 'https://waterservices.usgs.gov/nwis/iv'
+const CWMS_BASE  = 'https://cwms-data.usace.army.mil/cwms-data'
 
 const COMPASS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
 function toCompass(deg: number) { return COMPASS[Math.round(deg / 22.5) % 16] }
@@ -94,6 +95,42 @@ async function fetchWdftLevel(slug: string): Promise<WaterLevel | null> {
       deltaFt: Math.round(delta * 100) / 100,
       trend: delta > 0.02 ? 'rising' : delta < -0.02 ? 'falling' : 'stable',
       date: latest.date,
+    }
+  } catch { return null }
+}
+
+// Fetch pool elevation from Army Corps CWMS API (Corps-managed reservoirs)
+// Elevation is in feet above NGVD29. Office codes: SWT = Tulsa District (OK), SWF = Fort Worth (TX)
+async function fetchCwmsLevel(locationCode: string, office = 'SWT'): Promise<WaterLevel | null> {
+  try {
+    const now  = new Date()
+    const past = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
+    const begin = past.toISOString().replace(/\.\d+Z$/, 'Z')
+    const end   = now.toISOString().replace(/\.\d+Z$/, 'Z')
+
+    const url = `${CWMS_BASE}/timeseries?office=${office}&name=${encodeURIComponent(`${locationCode}.Elev.Inst.1Hour.0.Ccp-Rev`)}&begin=${begin}&end=${end}&format=json&unit=ft`
+    const res = await fetch(url, { next: { revalidate: 900 }, signal: AbortSignal.timeout(10000) } as RequestInit)
+    if (!res.ok) return null
+
+    const data = await res.json()
+    // values: [[timestamp_ms, elevation_ft | null, quality_code], ...]
+    const values: [number, number | null, number][] = data.values ?? []
+    const good = values.filter(v => v[1] !== null && v[1]! > 0)
+    if (good.length < 2) return null
+
+    const latest = good[good.length - 1]
+    const first  = good[0]
+    const elev   = latest[1]!
+    const delta  = elev - first[1]!
+
+    return {
+      valueFt:            Math.round(elev  * 100) / 100,
+      percentFull:        0,    // not available from CWMS elevation timeseries
+      abovePoolFt:        0,
+      conservationPoolFt: 0,
+      deltaFt:            Math.round(delta * 100) / 100,
+      trend:              delta > 0.02 ? 'rising' : delta < -0.02 ? 'falling' : 'stable',
+      date:               new Date(latest[0]).toISOString().split('T')[0],
     }
   } catch { return null }
 }
@@ -204,10 +241,13 @@ export async function getLakeConditions(
   lat: number,
   lng: number,
   usgsLakeSiteNo?: string | null,
+  cwmsLocationCode?: string | null,
+  cwmsOffice?: string | null,
 ): Promise<LakeConditions> {
   const [waterLevel, inflows, wind] = await Promise.all([
-    wdftSlug        ? fetchWdftLevel(wdftSlug)         :
-    usgsLakeSiteNo  ? fetchUsgsLakeLevel(usgsLakeSiteNo) : null,
+    wdftSlug          ? fetchWdftLevel(wdftSlug)                                       :
+    cwmsLocationCode  ? fetchCwmsLevel(cwmsLocationCode, cwmsOffice ?? 'SWT')          :
+    usgsLakeSiteNo    ? fetchUsgsLakeLevel(usgsLakeSiteNo)                             : null,
     fetchInflows(lat, lng),
     fetchWind(lat, lng),
   ])
