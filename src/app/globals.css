@@ -136,8 +136,8 @@ body {
   }
 
   /* Prevent iOS Safari from zooming on input focus.
-     font-size below 16px triggers auto-zoom; max() keeps the visual
-     size unchanged on desktop while clamping to 16px on mobile. */
+     iOS zooms when font-size < 16px. !important beats Tailwind utilities
+     which live in a higher cascade layer and would otherwise override this. */
   input[type="text"],
   input[type="search"],
   input[type="email"],
@@ -149,7 +149,7 @@ body {
   input[type="password"],
   select,
   textarea {
-    font-size: max(16px, 1em);
+    font-size: 16px !important;
   }
 }
 

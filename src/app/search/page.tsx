@@ -523,7 +523,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; 
           value={open ? query : (selectedLake ? `${lakeLabel(selectedLake)} — ${selectedLake.state}` : query)}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); if (selectedLake) setQuery('') }}
-          className="w-full bg-white border border-slate-200 text-slate-800 h-9 text-sm rounded-md pl-8 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
+          className="w-full bg-white border border-slate-200 text-slate-800 h-9 text-base rounded-md pl-8 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
         />
         {(value || query) && (
           <button onClick={clearSelection} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -1124,7 +1124,7 @@ export default function SearchPage() {
                   value={tripDate}
                   onChange={e => handleTripDateChange(e.target.value)}
                   min={TODAY}
-                  className="h-9 text-sm rounded-md px-2.5 border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="h-9 text-base rounded-md px-2.5 border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(o => !o)}
