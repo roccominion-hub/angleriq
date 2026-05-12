@@ -10,7 +10,7 @@ interface LakeMapProps {
 }
 
 type BaseLayer = 'satellite' | 'topo'
-type OverlayKey = 'flowlines' | 'wind'
+type OverlayKey = 'flowlines' | 'wind' | 'ramps'
 
 const TILE_LAYERS = {
   satellite: {
@@ -18,8 +18,8 @@ const TILE_LAYERS = {
     attribution: 'Tiles &copy; Esri &mdash; Esri, Maxar, GeoEye, Earthstar Geographics',
   },
   topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenTopoMap contributors',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS',
   },
 }
 
@@ -64,6 +64,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const windLayerRef = useRef<any>(null)
   const tileLayerRef = useRef<any>(null)
   const waterbodyLayerRef = useRef<any>(null)
+  const rampsLayerRef = useRef<any>(null)
+  const rampsDataRef = useRef<any[] | null>(null)   // cached so toggling doesn't re-fetch
 
   // Fetch conditions + features (server-side: polygon, wind, inflows)
   useEffect(() => {
@@ -240,6 +242,65 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions])
 
+  // Boat ramps — fetched from Overpass API (leisure=slipway), cached per lake
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    import('leaflet').then(async L => {
+      if (!overlays.has('ramps')) {
+        rampsLayerRef.current?.remove()
+        rampsLayerRef.current = null
+        return
+      }
+
+      // Fetch once and cache; toggling off/on re-uses the cached data
+      if (!rampsDataRef.current) {
+        try {
+          const wb = features?.waterwayBbox
+          const bbox = wb
+            ? `${wb.minLat},${wb.minLng},${wb.maxLat},${wb.maxLng}`
+            : `${lat - 0.3},${lng - 0.3},${lat + 0.3},${lng + 0.3}`
+
+          const query = `[out:json][timeout:15];(node["leisure"="slipway"](${bbox});way["leisure"="slipway"](${bbox}););out center tags;`
+          const res = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: query,
+            signal: AbortSignal.timeout(15000),
+          })
+          const data = await res.json()
+          rampsDataRef.current = (data.elements ?? [])
+            .filter((el: any) => el.tags?.access !== 'private')
+        } catch {
+          rampsDataRef.current = []
+        }
+      }
+
+      const group = L.layerGroup()
+      for (const el of rampsDataRef.current!) {
+        const rlat = el.lat ?? el.center?.lat
+        const rlng = el.lon ?? el.center?.lon
+        if (!rlat || !rlng) continue
+
+        const name      = el.tags?.name ?? 'Boat Ramp'
+        const feeStr    = el.tags?.fee === 'yes' ? ' · Fee required' : el.tags?.fee === 'no' ? ' · Free' : ''
+        const operator  = el.tags?.operator ? `<br><span style="color:#6b7280;font-size:11px">${el.tags.operator}</span>` : ''
+        const surface   = el.tags?.surface  ? `<br><span style="color:#6b7280;font-size:11px">Surface: ${el.tags.surface}</span>` : ''
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:26px;height:26px;background:#0d9488;border:2.5px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.5);font-size:14px;line-height:1">⚓</div>`,
+          iconSize:   [26, 26],
+          iconAnchor: [13, 13],
+        })
+
+        L.marker([rlat, rlng], { icon })
+          .bindPopup(`<b>${name}</b>${feeStr}${operator}${surface}`)
+          .addTo(group)
+      }
+
+      rampsLayerRef.current = group.addTo(mapRef.current!)
+    })
+  }, [overlays, mapReady, features, lat, lng])
+
   // Swap base tile
   useEffect(() => {
     if (!tileLayerRef.current) return
@@ -304,17 +365,17 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           </button>
         </div>
 
-        {(['flowlines', 'wind'] as OverlayKey[]).map(key => (
+        {(['flowlines', 'wind', 'ramps'] as OverlayKey[]).map(key => (
           <button
             key={key}
             onClick={() => toggleOverlay(key)}
-            className={`text-xs px-3 py-1 rounded border font-semibold transition-colors capitalize ${
+            className={`text-xs px-3 py-1 rounded border font-semibold transition-colors ${
               overlays.has(key)
                 ? 'bg-blue-600 border-blue-500 text-white'
                 : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
             }`}
           >
-            {key === 'flowlines' ? 'Streams' : 'Wind'}
+            {key === 'flowlines' ? 'Streams' : key === 'wind' ? 'Wind' : 'Ramps'}
           </button>
         ))}
       </div>
