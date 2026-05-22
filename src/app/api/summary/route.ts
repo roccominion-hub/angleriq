@@ -55,13 +55,30 @@ async function trackUsage(req: NextRequest) {
   }
 }
 
+// Derive the bass spawn stage from actual water temperature + state.
+// This is the single most important context item for spring fishing advice.
+function inferSpawnStage(waterTempF: number | null, state: string): string {
+  if (waterTempF === null) return ''
+  const t = waterTempF
+  // South TX lakes (Falcon, Amistad, Choke Canyon) run 2-4 weeks ahead of north TX/OK
+  // but the temp-based thresholds hold regardless of calendar date or region.
+  if (t < 50) return `WINTER PATTERN — ${t}°F water. Bass are lethargic, holding tight to deep main-lake structure: channel swings, submerged points, humps. Slow, subtle presentations essential. Do NOT suggest pre-spawn, spawning, or shallow patterns.`
+  if (t < 55) return `LATE WINTER / EARLY PRE-SPAWN — ${t}°F water. Bass beginning first movements toward secondary points and channel edges adjacent to spawning flats, but NOT staging yet. Feeding windows opening on warm afternoons. Slow presentations near transition structure.`
+  if (t < 62) return `PRE-SPAWN — ${t}°F water. Bass are actively staging on points, secondary channel swings, bluff ends, and structure leading into spawning flats. They are feeding aggressively before the spawn — this is a prime feeding window. Bass are NOT on beds yet. Do NOT recommend bed fishing or spawning patterns. Recommend staging-area techniques.`
+  if (t < 68) return `SPAWN TRANSITION — ${t}°F water. Bass are actively moving onto spawning flats and beds in protected shallow pockets, coves, and chunk rock banks. Sight fishing opportunities for bedding fish. Some fish still staging in transition zones. Males actively guarding; larger females may have already vacated beds and moved to post-spawn recovery areas.`
+  if (t < 75) return `POST-SPAWN — ${t}°F water. Spawn is complete or wrapping up. Females have vacated beds and are recovering in nearby deeper cover — docks, laydowns, first break lines off spawning flats. Males still guarding fry shallow. Target recovering females near the first deep structure adjacent to spawning areas. Do NOT recommend spawning or pre-spawn patterns.`
+  if (t < 83) return `EARLY SUMMER — ${t}°F water. Bass fully transitioned to summer patterns. Fish are following shad schools to main lake points, channel ledges, and offshore humps. Morning and evening topwater bite developing. Deeper presentations more productive midday.`
+  return `SUMMER — ${t}°F water. Bass in full summer mode. Deep on offshore structure and channel ledges during midday. Pushed to shade and cover early and late. Bite concentrated in low-light windows. Target ledges, offshore humps, and deep points.`
+}
+
 export async function POST(req: NextRequest) {
-  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, filters, lakeId, _secondary } = await req.json()
+  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, waterTempF, filters, lakeId, _secondary } = await req.json()
 
   // Secondary / alternative recommendation — separate prompt, no cache
   if (_secondary) {
+    const spawnStageAlt = inferSpawnStage(waterTempF ?? null, state)
     const conditionSummary = weather
-      ? `${weather.tempF}°F, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}`
+      ? `Air: ${weather.tempF}°F, Water: ${waterTempF != null ? waterTempF + '°F' : 'unknown'}, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}${spawnStageAlt ? ' — ' + spawnStageAlt.split('—')[0].trim() : ''}`
       : season || 'current conditions'
     const altPrompt = `You are an expert bass fishing guide for ${lake}, ${state}.
 
@@ -181,15 +198,19 @@ Major bite windows today: ${weather.moon.majorPeriods.join(', ')}
 Minor bite windows: ${weather.moon.minorPeriods.join(', ')}
 ` : ''
 
+  const spawnStage = inferSpawnStage(waterTempF ?? null, state)
+
   const weatherContext = weather ? `
 Current conditions at ${lake}:
-- Temperature: ${weather.tempF}°F (feels like ${weather.feelsLikeF}°F)
+- Air temperature: ${weather.tempF}°F (feels like ${weather.feelsLikeF}°F)
+- Water temperature: ${waterTempF != null ? `${waterTempF}°F` : 'unavailable'}
 - Sky: ${weather.skyCondition} (${weather.cloudCoverPct}% cloud cover)
 - Wind: ${weather.windMph} mph
 - Precipitation: ${weather.precipitation > 0 ? weather.precipitation + 'mm' : 'none'}
 - Time of day: ${weather.timeOfDay}
 - Season: ${weather.season}
-${moonContext}` : `Current season: ${season || 'unknown'}`
+${spawnStage ? `- SPAWN STAGE: ${spawnStage}` : ''}
+${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN STAGE: ${spawnStage}` : ''}`
 
   const colorContext = colorsFromData.length > 0
     ? `Known winning colors from tournament data:\n${[...new Set(colorsFromData)].slice(0, 10).join('\n')}`
@@ -309,6 +330,7 @@ IMPORTANT RULES — follow these in every response without exception:
 - BASS ONLY. This app targets largemouth, smallmouth, spotted, and Guadalupe bass. If you reference other species (crappie, white bass, striper, chain pickerel), only mention them in the context of habitat they share with bass — always clarify you're describing where bass can also be found ("bass relate to the same brush piles that hold crappie," not "target crappie").
 - NO TROLLING. Never recommend trolling as a technique. Trolling is prohibited in competitive bass fishing. Where trolling might otherwise apply (e.g. covering open water), recommend cranking instead.
 - SOURCE HIERARCHY: Weight sources by reliability — tournament results and pro articles are primary; YouTube transcripts are secondary; forum posts are supplemental background only. Never lead a recommendation with forum-only intel. If tournament or article data contradicts a forum claim, trust the tournament data.
+- SPAWN STAGE IS MANDATORY: The SPAWN STAGE line in the conditions above is derived from actual water temperature — treat it as ground truth. Do not generalize "spring" as a single pattern. Pre-spawn (staging), active spawn (beds), and post-spawn (recovery) require completely different techniques and locations. Never say "bass may be spawning" or "pre-spawn is possible" — state the phase definitively based on the water temp provided and recommend accordingly.
 - BAIT-SPECIFIC COLORS. When recommending colors for frogs (hollow body, swimming toads), use color names frogs actually come in: black, white, natural, olive/orange belly, green/brown, shad, bone — NOT soft plastic names like "Watermelon Red" or "Green Pumpkin." For hard baits (crankbaits, jerkbaits, bladed jigs), use manufacturer color names: sexy shad, chartreuse shad, ghost, chrome/blue back, bone, natural shad, fire tiger — NOT soft plastic colors. Soft plastic colors (Green Pumpkin, Watermelon Red, June Bug, Black/Blue, etc.) apply only to soft plastics.
 NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
 

@@ -112,26 +112,39 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// Paginate past Supabase's default 1,000-row cap
+async function fetchAllReports(): Promise<any[]> {
+  const PAGE = 500
+  const all: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('technique_report')
+      .select(`
+        *,
+        body_of_water(*),
+        tournament_result(*, tournament(*)),
+        bait_used(*),
+        conditions(*)
+      `)
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) { console.error('Fetch error:', error.message); break }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    console.log(`  Fetched ${all.length} reports so far…`)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return all
+}
+
 async function main() {
   console.log('Fetching technique reports...')
 
-  const { data: reports, error: fetchError } = await supabase
-    .from('technique_report')
-    .select(`
-      *,
-      body_of_water(*),
-      tournament_result(*, tournament(*)),
-      bait_used(*),
-      conditions(*)
-    `)
-    .order('created_at', { ascending: true })
+  const reports = await fetchAllReports()
 
-  if (fetchError) {
-    console.error('Error fetching reports:', fetchError)
-    process.exit(1)
-  }
-
-  if (!reports || reports.length === 0) {
+  if (reports.length === 0) {
     console.log('No reports found.')
     return
   }

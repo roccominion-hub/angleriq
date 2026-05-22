@@ -720,6 +720,7 @@ export default function SearchPage() {
   const [reportsOpen, setReportsOpen] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
+  const [waterTempF, setWaterTempF] = useState<number | null>(null)
   const [summary, setSummary] = useState<{ intel: string; today: string }>({ intel: '', today: '' })
   const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
@@ -929,14 +930,22 @@ export default function SearchPage() {
       setLoading(false)
 
       let currentWeather: Weather | null = null
+      let currentWaterTempF: number | null = null
       if (data.coords?.lat && data.coords?.lng) {
         try {
-          // If a future trip date is set, fetch forecast; otherwise fetch current conditions
+          // Fetch weather + water temp in parallel
           const weatherUrl = isScenario
             ? `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}&date=${tripDate}`
             : `/api/weather?lat=${data.coords.lat}&lng=${data.coords.lng}`
-          const wRes = await fetch(weatherUrl)
+          const [wRes, condRes] = await Promise.all([
+            fetch(weatherUrl),
+            data.water?.id ? fetch(`/api/lake-conditions?lakeId=${data.water.id}`) : Promise.resolve(null),
+          ])
           currentWeather = await wRes.json()
+          if (condRes) {
+            const condData = await condRes.json()
+            currentWaterTempF = condData?.conditions?.waterTemp?.valueFahrenheit ?? null
+          }
 
           // For future trips, use user-selected timeOfDay (or omit if not set)
           if (isScenario) {
@@ -945,6 +954,7 @@ export default function SearchPage() {
           }
 
           setWeather(currentWeather)
+          setWaterTempF(currentWaterTempF)
         } catch { /* weather is optional */ }
       }
 
@@ -955,11 +965,13 @@ export default function SearchPage() {
         body: JSON.stringify({
           lake: selectedLake,
           state: data.water?.state,
+          lakeId: data.water?.id,
           sampleSize: data.sampleSize,
           topBaits: data.topBaits,
           topPatterns: data.topPatterns,
           reports: data.reports,
           weather: currentWeather,
+          waterTempF: currentWaterTempF,
           filters: { ...buildApiFilters(isScenario), style: nowFilters.style },
         })
       }).then(r => r.json()).then(async d => {
@@ -1009,11 +1021,13 @@ export default function SearchPage() {
         body: JSON.stringify({
           lake: selectedLake,
           state: result.water?.state,
+          lakeId: result.water?.id,
           sampleSize: result.sampleSize,
           topBaits: result.topBaits,
           topPatterns: result.topPatterns,
           reports: result.reports,
           weather,
+          waterTempF,
           filters: { ...buildApiFilters(), style: nowFilters.style },
           _secondary: true,
         })
