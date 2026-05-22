@@ -324,7 +324,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
   const cond = conditions?.conditions
   const wind = cond?.wind
-  const temp = cond?.waterTemp
+  const waterTempF: number | null = cond?.waterTempF ?? null
+  const waterTempSource: string | null = cond?.waterTempSource ?? null
 
   return (
     <div className="w-full rounded-xl overflow-hidden border border-slate-200 shadow-md bg-slate-900">
@@ -333,11 +334,14 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       <div className="bg-slate-900 px-4 py-2.5 flex flex-wrap items-center gap-5 border-b border-slate-700/50">
         {loading && <span className="text-xs text-slate-500 animate-pulse">Loading…</span>}
 
-        {temp && (
+        {waterTempF !== null && (
           <div className="flex items-center gap-1.5">
             <Droplets size={13} className="text-cyan-400" />
-            <span className="text-xs font-bold text-white">{temp.valueFahrenheit}°F</span>
+            <span className="text-xs font-bold text-white">{waterTempF}°F</span>
             <span className="text-xs text-slate-400">water temp</span>
+            {waterTempSource === 'estimated' && (
+              <span className="text-[10px] text-slate-500 font-semibold">(est.)</span>
+            )}
           </div>
         )}
 

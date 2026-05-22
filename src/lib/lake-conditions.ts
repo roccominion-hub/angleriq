@@ -34,6 +34,7 @@ export interface LakeConditions {
   inflows: InflowGauge[]
   wind: WindData | null
   waterTempF: number | null
+  waterTempSource: 'measured' | 'estimated' | null
 }
 
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast'
@@ -220,20 +221,40 @@ async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   } catch { return [] }
 }
 
-// Fetch wind from Open-Meteo
-async function fetchWind(lat: number, lng: number): Promise<WindData | null> {
+// Monthly average surface water temps (°F) for TX and OK reservoirs.
+// TX = central TX baseline (~lat 32–33°N); OK = central OK (~lat 35°N).
+// Source: long-term USGS/TWDB reservoir averages.
+const MONTHLY_WATER_TEMP_F: Record<string, number[]> = {
+  TX: [54, 56, 63, 71, 78, 84, 87, 87, 83, 74, 63, 56],
+  OK: [45, 48, 56, 64, 72, 80, 84, 84, 78, 67, 55, 47],
+}
+
+// Estimate water temp when no sensor data is available.
+// Blends seasonal baseline (75%) with current air temp (25%) to account
+// for the lag between air and water temperature change.
+function estimateWaterTempF(airTempF: number, month: number, state: string): number {
+  const bases = MONTHLY_WATER_TEMP_F[state] ?? MONTHLY_WATER_TEMP_F.TX
+  const base = bases[month - 1]
+  return Math.round(base * 0.75 + airTempF * 0.25)
+}
+
+// Fetch wind + air temp from Open-Meteo in a single request
+async function fetchWeatherData(lat: number, lng: number): Promise<{ wind: WindData | null; airTempF: number | null }> {
   try {
-    const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=mph`
+    const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=mph&temperature_unit=fahrenheit`
     const data = await fetch(url, { next: { revalidate: 900 } }).then(r => r.ok ? r.json() : null)
-    if (!data?.current) return null
-    const { wind_speed_10m: spd, wind_direction_10m: dir, wind_gusts_10m: gust } = data.current
+    if (!data?.current) return { wind: null, airTempF: null }
+    const { wind_speed_10m: spd, wind_direction_10m: dir, wind_gusts_10m: gust, temperature_2m: airTemp } = data.current
     return {
-      speedMph: Math.round(spd),
-      directionDeg: dir,
-      directionLabel: toCompass(dir),
-      gustsMph: Math.round(gust),
+      wind: {
+        speedMph: Math.round(spd),
+        directionDeg: dir,
+        directionLabel: toCompass(dir),
+        gustsMph: Math.round(gust),
+      },
+      airTempF: airTemp != null ? Math.round(airTemp) : null,
     }
-  } catch { return null }
+  } catch { return { wind: null, airTempF: null } }
 }
 
 export async function getLakeConditions(
@@ -243,15 +264,31 @@ export async function getLakeConditions(
   usgsLakeSiteNo?: string | null,
   cwmsLocationCode?: string | null,
   cwmsOffice?: string | null,
+  state?: string | null,
 ): Promise<LakeConditions> {
-  const [waterLevel, inflows, wind] = await Promise.all([
+  const [waterLevel, inflows, weatherData] = await Promise.all([
     wdftSlug          ? fetchWdftLevel(wdftSlug)                                       :
     cwmsLocationCode  ? fetchCwmsLevel(cwmsLocationCode, cwmsOffice ?? 'SWT')          :
     usgsLakeSiteNo    ? fetchUsgsLakeLevel(usgsLakeSiteNo)                             : null,
     fetchInflows(lat, lng),
-    fetchWind(lat, lng),
+    fetchWeatherData(lat, lng),
   ])
-  return { waterLevel, inflows, wind, waterTempF: null }
+
+  const { wind, airTempF } = weatherData
+
+  // Water temp: measured sensor not yet available for most lakes.
+  // Fall back to estimation from air temp + seasonal baseline when possible.
+  const measuredWaterTempF: number | null = null  // placeholder for future USGS 00010 integration
+  let waterTempF: number | null = measuredWaterTempF
+  let waterTempSource: LakeConditions['waterTempSource'] = measuredWaterTempF !== null ? 'measured' : null
+
+  if (waterTempF === null && airTempF !== null) {
+    const month = new Date().getMonth() + 1
+    waterTempF = estimateWaterTempF(airTempF, month, state ?? 'TX')
+    waterTempSource = 'estimated'
+  }
+
+  return { waterLevel, inflows, wind, waterTempF, waterTempSource }
 }
 
 // OSM name aliases for lakes whose common name differs significantly from OSM

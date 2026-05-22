@@ -72,13 +72,16 @@ function inferSpawnStage(waterTempF: number | null, state: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, waterTempF, filters, lakeId, _secondary } = await req.json()
+  const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, waterTempF, waterTempSource, filters, lakeId, _secondary } = await req.json()
 
   // Secondary / alternative recommendation — separate prompt, no cache
   if (_secondary) {
     const spawnStageAlt = inferSpawnStage(waterTempF ?? null, state)
+    const waterAlt = waterTempF != null
+      ? `${waterTempF}°F${waterTempSource === 'estimated' ? ' est.' : ''}`
+      : 'unknown'
     const conditionSummary = weather
-      ? `Air: ${weather.tempF}°F, Water: ${waterTempF != null ? waterTempF + '°F' : 'unknown'}, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}${spawnStageAlt ? ' — ' + spawnStageAlt.split('—')[0].trim() : ''}`
+      ? `Air: ${weather.tempF}°F, Water: ${waterAlt}, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}${spawnStageAlt ? ' — ' + spawnStageAlt.split('—')[0].trim() : ''}`
       : season || 'current conditions'
     const altPrompt = `You are an expert bass fishing guide for ${lake}, ${state}.
 
@@ -200,10 +203,16 @@ Minor bite windows: ${weather.moon.minorPeriods.join(', ')}
 
   const spawnStage = inferSpawnStage(waterTempF ?? null, state)
 
+  const waterTempLabel = waterTempF != null
+    ? waterTempSource === 'estimated'
+      ? `~${waterTempF}°F (estimated ±5°F — inferred from current air temp and ${new Date().toLocaleString('en-US', { month: 'long' })} seasonal norms for ${state}; no sensor data available for this lake)`
+      : `${waterTempF}°F (measured)`
+    : 'unavailable'
+
   const weatherContext = weather ? `
 Current conditions at ${lake}:
 - Air temperature: ${weather.tempF}°F (feels like ${weather.feelsLikeF}°F)
-- Water temperature: ${waterTempF != null ? `${waterTempF}°F` : 'unavailable'}
+- Water temperature: ${waterTempLabel}
 - Sky: ${weather.skyCondition} (${weather.cloudCoverPct}% cloud cover)
 - Wind: ${weather.windMph} mph
 - Precipitation: ${weather.precipitation > 0 ? weather.precipitation + 'mm' : 'none'}

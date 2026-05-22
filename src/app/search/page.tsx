@@ -721,6 +721,7 @@ export default function SearchPage() {
   const [result, setResult] = useState<SearchResult | null>(null)
   const [weather, setWeather] = useState<Weather | null>(null)
   const [waterTempF, setWaterTempF] = useState<number | null>(null)
+  const [waterTempSource, setWaterTempSource] = useState<'measured' | 'estimated' | null>(null)
   const [summary, setSummary] = useState<{ intel: string; today: string }>({ intel: '', today: '' })
   const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
@@ -944,7 +945,8 @@ export default function SearchPage() {
           currentWeather = await wRes.json()
           if (condRes) {
             const condData = await condRes.json()
-            currentWaterTempF = condData?.conditions?.waterTemp?.valueFahrenheit ?? null
+            currentWaterTempF = condData?.conditions?.waterTempF ?? null
+            setWaterTempSource(condData?.conditions?.waterTempSource ?? null)
           }
 
           // For future trips, use user-selected timeOfDay (or omit if not set)
@@ -972,6 +974,7 @@ export default function SearchPage() {
           reports: data.reports,
           weather: currentWeather,
           waterTempF: currentWaterTempF,
+          waterTempSource: waterTempSource,
           filters: { ...buildApiFilters(isScenario), style: nowFilters.style },
         })
       }).then(r => r.json()).then(async d => {
@@ -1028,6 +1031,7 @@ export default function SearchPage() {
           reports: result.reports,
           weather,
           waterTempF,
+          waterTempSource,
           filters: { ...buildApiFilters(), style: nowFilters.style },
           _secondary: true,
         })

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   const { data: lake, error } = await supabase
     .from('body_of_water')
-    .select('id, name, lat, lng, usgs_site_no, usgs_lake_site_no, wdft_slug, cwms_location_code, cwms_office')
+    .select('id, name, state, lat, lng, usgs_site_no, usgs_lake_site_no, wdft_slug, cwms_location_code, cwms_office')
     .eq('id', lakeId)
     .single()
 
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     lake.usgs_lake_site_no,
     lake.cwms_location_code,
     lake.cwms_office,
+    lake.state,
   )
 
   return NextResponse.json({
