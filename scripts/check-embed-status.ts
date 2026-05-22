@@ -49,7 +49,7 @@ async function main() {
   const complete: { state: string; name: string; reports: number; embedded: number }[] = []
   const noReports: { name: string; state: string }[] = []
 
-  for (const lake of lakes?.data ?? lakes ?? []) {
+  for (const lake of lakes ?? []) {
     const r = reports[lake.id] ?? 0
     const e = embedded[lake.id] ?? 0
     totalReports += r
