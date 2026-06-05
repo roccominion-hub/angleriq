@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -761,7 +761,7 @@ function FilterBreadcrumbs({
   )
 }
 
-export default function SearchPage() {
+function SearchPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [lakes, setLakes] = useState<Lake[]>([])
@@ -1857,5 +1857,14 @@ export default function SearchPage() {
         }}
       />
     </main>
+  )
+}
+
+// useSearchParams() requires a Suspense boundary for Next.js static prerendering.
+export default function SearchPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <SearchPage />
+    </Suspense>
   )
 }
