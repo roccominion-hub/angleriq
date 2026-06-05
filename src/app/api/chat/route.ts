@@ -93,6 +93,43 @@ export async function POST(req: NextRequest) {
       ? `\nRELEVANT FISHING INTEL (use as primary source):\n${ragChunks.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}\n`
       : ''
 
+  // ── Spawn stage context ───────────────────────────────────────────────────
+  // Mirrors inferSpawnStage() in summary/route.ts.
+  // In report mode we have actual water temp — use it exactly.
+  // In homepage mode we have the current date — use TX/OK monthly averages to
+  // set hard boundaries so the model can't invent spawning activity in June.
+
+  function inferSpawnStageFromTemp(tempF: number): string {
+    if (tempF < 50)  return `WINTER PATTERN — ${tempF}°F water. Bass lethargic, holding tight to deep main-lake structure. Slow, subtle presentations essential. Do NOT suggest pre-spawn, spawning, or shallow patterns.`
+    if (tempF < 55)  return `LATE WINTER / EARLY PRE-SPAWN — ${tempF}°F water. Bass beginning first movements toward secondary points adjacent to spawning flats, but NOT staging yet. Feeding windows opening on warm afternoons.`
+    if (tempF < 62)  return `PRE-SPAWN — ${tempF}°F water. Bass actively staging on points, secondary channel swings, and structure leading to spawning flats. Feeding aggressively. Bass are NOT on beds yet. Do NOT recommend bed fishing or spawning patterns.`
+    if (tempF < 68)  return `SPAWN TRANSITION — ${tempF}°F water. Bass moving onto spawning flats and beds. Sight fishing opportunities for bedding fish. Some fish still staging. Males guarding; larger females may have vacated beds.`
+    if (tempF < 75)  return `POST-SPAWN — ${tempF}°F water. Spawn complete or wrapping up. Females recovering near first break lines off spawning flats. Males still guarding fry shallow. Do NOT recommend pre-spawn or spawning patterns.`
+    if (tempF < 83)  return `EARLY SUMMER — ${tempF}°F water. Bass following shad to main lake points, channel ledges, offshore humps. Morning/evening topwater bite developing. Deeper presentations more productive midday.`
+    return             `SUMMER — ${tempF}°F water. Full summer mode. Deep on offshore structure and ledges midday. Shade and cover early and late. Low-light windows most productive.`
+  }
+
+  // Month-based TX/OK spawn stage for homepage mode (no water temp available).
+  // Uses typical regional averages; explicitly forbids fabricating spawn activity.
+  function getHomepageSpawnContext(month: number /* 0-indexed */): string {
+    // month 0=Jan … 11=Dec
+    if (month <= 1)   return `SEASONAL CONTEXT (TX/OK, ${['January','February'][month]}): Typical water temps 45–54°F. WINTER PATTERN — bass deep and lethargic. Do NOT describe pre-spawn, spawning, or shallow activity. Slow finesse presentations near deep structure are the story.`
+    if (month === 2)  return `SEASONAL CONTEXT (TX/OK, March): Typical water temps 54–65°F. PRE-SPAWN beginning in most lakes. Bass staging on secondary points and channel edges adjacent to spawning flats. South TX lakes (Falcon, Amistad) may be further along. Do NOT say bass are "on beds" in most TX/OK lakes in March.`
+    if (month === 3)  return `SEASONAL CONTEXT (TX/OK, April): Typical water temps 63–72°F. SPAWN TRANSITION — bass actively moving onto flats and beds across most TX/OK lakes. Sight fishing applicable. Some post-spawn fish in south TX. Stage varies by specific lake and latitude.`
+    if (month === 4)  return `SEASONAL CONTEXT (TX/OK, May): Typical water temps 69–78°F. POST-SPAWN / EARLY SUMMER transition. Most bass have completed spawning. Females recovering near first break lines. Males finishing fry guard duty. Do NOT describe bass as actively spawning or pre-spawn unless the angler confirms colder-than-normal water.`
+    if (month <= 7)   return `SEASONAL CONTEXT (TX/OK, ${['June','July','August'][month-5]}): Typical water temps 75–88°F. SUMMER PATTERN — spawn is long over. Bass are on main lake ledges, offshore humps, and channel structure. Low-light topwater windows morning and evening. Finesse on deeper structure midday. NEVER describe June/July/August bass as pre-spawn or spawning in TX/OK. This is factually wrong.`
+    if (month === 8)  return `SEASONAL CONTEXT (TX/OK, September): Typical water temps 74–82°F. LATE SUMMER / EARLY FALL — bass beginning fall transition as water cools. Shad schooling in creeks. Reaction baits effective in the morning; ledge patterns still productive midday.`
+    if (month <= 10)  return `SEASONAL CONTEXT (TX/OK, ${['October','November'][month-9]}): Typical water temps 58–72°F. FALL PATTERN — bass following shad schools into creeks and secondary points. Reaction baits, topwater, and moving baits shine. No spawning activity.`
+    return             `SEASONAL CONTEXT (TX/OK, December): Typical water temps 48–58°F. LATE FALL / EARLY WINTER — bass slowing and moving deeper. Slow presentations near channel drops and main lake structure. No spawning activity.`
+  }
+
+  const now = new Date()
+  const spawnStageSection = context.mode === 'report' && context.waterTempF != null
+    ? `\nSPAWN STAGE (from measured/estimated water temperature — treat as ground truth):\n${inferSpawnStageFromTemp(context.waterTempF)}\n`
+    : context.mode === 'homepage'
+    ? `\n${getHomepageSpawnContext(now.getMonth())}\n`
+    : ''
+
   // ── Lake suggestion marker instruction ───────────────────────────────────
   // When the AI recommends a specific lake, it appends [LAKE:Name, State].
   // The client strips this from display and renders a "Run Report" button.
@@ -106,8 +143,9 @@ LAKE REPORT SUGGESTION: When you identify a specific lake as a strong recommenda
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of Texas and Oklahoma lakes. Help anglers decide where to fish and what patterns to target for their next trip.
 
 Today's date: ${currentDate}
-${ragSection}
+${spawnStageSection}${ragSection}
 RULES:
+- SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase for TX/OK based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
@@ -128,11 +166,12 @@ ${lakeMarkerInstruction}`
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant. The angler is reviewing a fishing intelligence report and has follow-up questions.
 
 Today's date: ${currentDate}
-
+${spawnStageSection}
 CURRENT REPORT CONTEXT:
 ${condParts.join('\n')}
 ${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${ragSection}
 RULES:
+- SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
 - Artificial lures only. Never recommend live bait.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Answer primarily in the context of ${context.lake ?? 'this lake'} — be consistent with the report data above, do not contradict it.
