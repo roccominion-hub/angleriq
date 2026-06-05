@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -763,6 +763,7 @@ function FilterBreadcrumbs({
 
 export default function SearchPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
@@ -820,14 +821,17 @@ export default function SearchPage() {
     fetch('/api/lakes').then(r => r.json()).then(setLakes)
   }, [])
 
-  // Pre-select a lake when arriving via ?lake=Name (e.g. from AnglerIQ Chat "Run Report" button)
+  // Pre-select a lake when arriving via ?lake=Name (e.g. from AnglerIQ Chat "Run Report" button).
+  // Uses useSearchParams so it re-runs on client-side navigation (same-page router.push) too.
+  // Strips any state suffix the AI may have appended (e.g. "Lake Texoma, TX/OK" → "Lake Texoma").
   useEffect(() => {
     if (lakes.length === 0) return
-    const param = new URLSearchParams(window.location.search).get('lake')
+    const param = searchParams.get('lake')
     if (!param) return
-    const matched = lakes.find(l => l.name.toLowerCase() === param.toLowerCase())
+    const lakeName = param.split(',')[0].trim()
+    const matched = lakes.find(l => l.name.toLowerCase() === lakeName.toLowerCase())
     if (matched) setSelectedLake(matched.name)
-  }, [lakes])
+  }, [lakes, searchParams])
 
   useEffect(() => {
     setSavedReportId(null)
