@@ -234,6 +234,66 @@ function scoreReportRelevance(report: any, waterTempF: number | null, season?: s
   return score
 }
 
+// Multi-tier lake name matcher — handles AI-generated names that differ from DB names.
+// Tiers (most → least strict): exact → normalized → prefix/startsWith → keyword intersection.
+function findMatchingLake(lakes: Lake[], rawParam: string): Lake | undefined {
+  if (!rawParam || lakes.length === 0) return undefined
+
+  // Strip state suffix the AI may append: "Lake Fork, TX" → "Lake Fork"
+  const term = rawParam.split(',')[0].trim()
+  const termLower = term.toLowerCase()
+
+  // 1. Exact match (case-insensitive)
+  const exact = lakes.find(l => l.name.toLowerCase() === termLower)
+  if (exact) return exact
+
+  // 2. Normalized match — collapse apostrophes, special punctuation, extra spaces
+  //    Handles: "Lake O the Pines" ↔ "Lake O' the Pines", "Bois dArc" ↔ "Bois d'Arc"
+  const norm = (s: string) =>
+    s.toLowerCase()
+      .replace(/['''`']/g, '')  // apostrophes
+      .replace(/\./g, '')        // periods
+      .replace(/\s+/g, ' ')
+      .trim()
+  const normTerm = norm(termLower)
+  const normalized = lakes.find(l => norm(l.name) === normTerm)
+  if (normalized) return normalized
+
+  // 3. Prefix / starts-with — AI name is a shorter version of the full DB name.
+  //    Handles: "Grand Lake" → "Grand Lake o' the Cherokees"
+  //             "Sam Rayburn" → "Sam Rayburn Reservoir"
+  //             "Toledo Bend" → "Toledo Bend Reservoir"
+  //             "Possum Kingdom" → "Possum Kingdom Lake"
+  const prefixed = lakes.find(l => {
+    const lLower = norm(l.name)
+    return lLower.startsWith(normTerm + ' ') || normTerm.startsWith(lLower + ' ')
+  })
+  if (prefixed) return prefixed
+
+  // 4. Keyword intersection — compare sets of significant words.
+  //    Handles cases where word order differs or minor words are dropped.
+  const STOP = new Set(['lake', 'reservoir', 'the', 'of', "o", 'and', 'state', 'park', 'creek'])
+  const keywords = (s: string) =>
+    s.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP.has(w))
+
+  const termKeys = keywords(termLower)
+  if (termKeys.length > 0) {
+    const wordMatch = lakes.find(l => {
+      const lakeKeys = keywords(l.name)
+      if (lakeKeys.length === 0) return false
+      const shared = termKeys.filter(w => lakeKeys.includes(w))
+      // All term keywords found in lake name, or all lake keywords found in term
+      return shared.length === termKeys.length || shared.length === lakeKeys.length
+    })
+    if (wordMatch) return wordMatch
+  }
+
+  return undefined
+}
+
 function toggleMultiFilter(
   setter: React.Dispatch<React.SetStateAction<any>>,
   key: string,
@@ -823,13 +883,12 @@ function SearchPage() {
 
   // Pre-select a lake when arriving via ?lake=Name (e.g. from AnglerIQ Chat "Run Report" button).
   // Uses useSearchParams so it re-runs on client-side navigation (same-page router.push) too.
-  // Strips any state suffix the AI may have appended (e.g. "Lake Texoma, TX/OK" → "Lake Texoma").
+  // findMatchingLake handles AI name variations: "Sam Rayburn" → "Sam Rayburn Reservoir", etc.
   useEffect(() => {
     if (lakes.length === 0) return
     const param = searchParams.get('lake')
     if (!param) return
-    const lakeName = param.split(',')[0].trim()
-    const matched = lakes.find(l => l.name.toLowerCase() === lakeName.toLowerCase())
+    const matched = findMatchingLake(lakes, param)
     if (matched) setSelectedLake(matched.name)
   }, [lakes, searchParams])
 
