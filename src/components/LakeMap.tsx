@@ -66,56 +66,42 @@ function shortName(siteName: string): string {
   return siteName.replace(/\s+(nr|near|at|ab|above|bl|below|bel)\s+.*/i, '').trim()
 }
 
-// Walk from the lake center toward the gauge and find where the path exits the
-// lake polygon — that intersection is the lake-edge entry point for this inflow.
-// No external API call needed; uses the polygon already loaded in features.
-function findLakeEdgePoint(
-  lakeLat: number,
-  lakeLng: number,
+// Find the point on the lake polygon boundary closest to the gauge.
+// This is the shoreline entry point for this stream — no dependency on
+// whether the lake center is inside the polygon, works for any geometry.
+function closestShorelinePoint(
   gaugeLat: number,
   gaugeLng: number,
   lakePolygons: number[][][],
+  fallbackLat: number,
+  fallbackLng: number,
 ): [number, number] {
-  if (!lakePolygons.length) {
-    // No polygon: return a point 60% of the way from lake center to gauge
-    return [lakeLat + (gaugeLat - lakeLat) * 0.6, lakeLng + (gaugeLng - lakeLng) * 0.6]
-  }
+  if (!lakePolygons.length) return [fallbackLat, fallbackLng]
 
-  function inPolygonLocal(px: number, py: number, ring: number[][]): boolean {
-    let inside = false
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i], [xj, yj] = ring[j]
-      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside
+  let best: [number, number] = [fallbackLat, fallbackLng]
+  let minDist = Infinity
+
+  for (const ring of lakePolygons) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [x1, y1] = ring[i]       // [lng, lat] in GeoJSON
+      const [x2, y2] = ring[i + 1]
+
+      // Project gauge onto this edge segment, clamped to [0,1]
+      const dx = x2 - x1, dy = y2 - y1
+      const len2 = dx * dx + dy * dy
+      const t = len2 > 0
+        ? Math.max(0, Math.min(1, ((gaugeLng - x1) * dx + (gaugeLat - y1) * dy) / len2))
+        : 0
+
+      const cLng = x1 + t * dx
+      const cLat = y1 + t * dy
+      const d = Math.hypot(cLat - gaugeLat, cLng - gaugeLng)
+
+      if (d < minDist) { minDist = d; best = [cLat, cLng] }
     }
-    return inside
-  }
-  function inAnyPoly(lng: number, lat: number) {
-    return lakePolygons.some(ring => inPolygonLocal(lng, lat, ring))
   }
 
-  const dLat = gaugeLat - lakeLat
-  const dLng = gaugeLng - lakeLng
-  const dist = Math.hypot(dLat, dLng)
-  if (dist === 0) return [lakeLat, lakeLng]
-
-  const uLat = dLat / dist
-  const uLng = dLng / dist
-  const step = 0.0008  // ~80m per step
-
-  let prevLat = lakeLat, prevLng = lakeLng
-  for (let t = step; t <= dist + step * 2; t += step) {
-    const tLat = lakeLat + uLat * t
-    const tLng = lakeLng + uLng * t
-    if (!inAnyPoly(tLng, tLat)) {
-      // Just crossed out of the polygon — previous point was at the edge
-      return [prevLat, prevLng]
-    }
-    prevLat = tLat; prevLng = tLng
-  }
-
-  // Gauge direction never exits lake (gauge is inside lake, or walk overshot)
-  // Return the point closest to the gauge that's still in the polygon
-  return [prevLat, prevLng]
+  return best
 }
 
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
@@ -139,7 +125,8 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const rampsDataRef         = useRef<any[] | null>(null)
   const nhdLayerRef          = useRef<any>(null)
   const inflowMarkersRef     = useRef<Map<string, any>>(new Map())  // siteNo → L.Marker
-  const inflowStreamLayerRef = useRef<any>(null)                    // active stream polyline
+  const inflowStreamLayerRef = useRef<any>(null)
+  const originalBoundsRef    = useRef<any>(null)  // saved after initial fitBounds
   const inflowGeoCacheRef    = useRef<Map<string, [number,number][][]>>(new Map()) // siteNo → geometry
 
   // Fetch conditions + features
@@ -185,6 +172,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         const bounds = waterbodyLayerRef.current.getBounds()
         if (bounds.isValid()) {
           map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+          originalBoundsRef.current = bounds  // save for restoring after inflow deselect
           setZoom(map.getZoom())
         }
       }
@@ -302,7 +290,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       inflowMarkersRef.current.clear()
 
       for (const inflow of inflows) {
-        const [eLat, eLng] = findLakeEdgePoint(lat, lng, inflow.lat, inflow.lng, lakePolygons)
+        const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
         const rating = rateInflow(inflow.flowCfs, maxCfs)
         const c = RATING_COLORS[rating]
         const icon = L.divIcon({
@@ -325,11 +313,14 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     const map = mapRef.current
     if (!map) return
 
-    // Toggle off
+    // Toggle off — remove highlight and restore original lake view
     if (selectedInflow === inflow.siteNo) {
       inflowStreamLayerRef.current?.remove()
       inflowStreamLayerRef.current = null
       setSelectedInflow(null)
+      if (originalBoundsRef.current) {
+        map.fitBounds(originalBoundsRef.current, { padding: [20, 20], maxZoom: 14 })
+      }
       return
     }
 
@@ -349,7 +340,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       }
     }
 
-    const [eLat, eLng] = findLakeEdgePoint(lat, lng, inflow.lat, inflow.lng, lakePolygons)
+    const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
     const rating = rateInflow(inflow.flowCfs, maxCfs)
     const c = RATING_COLORS[rating]
 
