@@ -151,6 +151,29 @@ function getTackleSetup(baitType: string, _weightOz: number) {
   return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '12-17 lb' }
 }
 
+// Derive the spawn/season stage bucket from water temp.
+// Mirrors the thresholds in summary/route.ts inferSpawnStage().
+type StageBucket = 'winter' | 'prespawn' | 'spawn' | 'postspawn' | 'summer'
+function stageFromTemp(tempF: number): StageBucket {
+  if (tempF < 55) return 'winter'
+  if (tempF < 62) return 'prespawn'
+  if (tempF < 68) return 'spawn'
+  if (tempF < 75) return 'postspawn'
+  return 'summer'
+}
+
+// Detect which stage keywords appear in a pattern/notes string.
+// Checked in specificity order so "pre-spawn" doesn't bleed into "spawn".
+function detectPatternStage(text: string): StageBucket | null {
+  const t = text.toLowerCase()
+  if (/pre.?spawn|prespawn|staging/i.test(t))                          return 'prespawn'
+  if (/post.?spawn|postspawn|fry.?guard/i.test(t))                     return 'postspawn'
+  if (/\bspawn\b|spawning|bed.?fish|sight.?fish|bedding|on.?beds/i.test(t)) return 'spawn'
+  if (/summer.?pattern|summer.?ledge|offshore.?ledge|deep.?ledge/i.test(t)) return 'summer'
+  if (/winter.?pattern|cold.?water.?pattern|deep.?winter/i.test(t))   return 'winter'
+  return null
+}
+
 // Score a technique report by relevance to current fishing conditions.
 // Higher score = more relevant. Used to re-order reports after water temp is available.
 function scoreReportRelevance(report: any, waterTempF: number | null, season?: string | null): number {
@@ -167,6 +190,27 @@ function scoreReportRelevance(report: any, waterTempF: number | null, season?: s
     // > 20°F apart: 0
   } else {
     score += 2 // no water temp in report: neutral, don't penalise
+  }
+
+  // Pattern text stage alignment — catches reports without a recorded water temp.
+  // Compare the stage implied by the pattern text against the stage implied by current water temp.
+  if (waterTempF != null) {
+    const currentStage = stageFromTemp(waterTempF)
+    const patternText  = `${report.pattern || ''} ${report.notes || ''}`
+    const patternStage = detectPatternStage(patternText)
+
+    if (patternStage != null) {
+      if (patternStage === currentStage) {
+        // Pattern explicitly matches the current stage — strong bonus, especially for
+        // reports without a water temp (the only stage signal we have for those)
+        score += wt == null ? 8 : 4
+      } else {
+        // Pattern conflicts with current stage — penalty scaled by how far apart the stages are
+        const ORDER: StageBucket[] = ['winter', 'prespawn', 'spawn', 'postspawn', 'summer']
+        const dist = Math.abs(ORDER.indexOf(patternStage) - ORDER.indexOf(currentStage))
+        score -= dist <= 1 ? 2 : 5  // adjacent stage: mild demotion; 2+ stages away: stronger
+      }
+    }
   }
 
   // Season match
