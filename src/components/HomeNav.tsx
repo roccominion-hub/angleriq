@@ -43,9 +43,9 @@ export function HomeNav() {
           {/* Ask AnglerIQ — always visible */}
           <button
             onClick={handleAskClick}
-            className="flex items-center gap-1.5 text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors"
+            className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white text-sm font-bold px-4 py-1.5 rounded-full transition-all shadow-sm shadow-blue-500/30"
           >
-            <MessageCircle size={15} />
+            <MessageCircle size={14} />
             Ask AnglerIQ
           </button>
 
@@ -128,14 +128,10 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
   }
 
   const searchBtnClass = variant === 'light'
-    ? 'bg-white hover:bg-blue-50 text-blue-600 font-bold text-base px-8 rounded-lg'
-    : 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg'
+    ? 'bg-white hover:bg-blue-50 text-blue-600 font-bold text-base px-8 rounded-xl'
+    : 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-xl'
 
   const searchHref = user ? '/search' : '/auth/signup'
-
-  const askBtnClass = variant === 'light'
-    ? 'border-2 border-white/70 hover:border-white text-white font-bold text-base px-7 rounded-lg flex items-center gap-2 transition-colors'
-    : 'border-2 border-blue-400/50 hover:border-blue-400 text-blue-200 hover:text-white font-bold text-base px-7 rounded-lg flex items-center gap-2 transition-colors'
 
   return (
     <>
@@ -146,7 +142,10 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
         </Button>
       </Link>
 
-      <button onClick={handleAskClick} className={askBtnClass}>
+      <button
+        onClick={handleAskClick}
+        className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white font-bold text-base px-7 rounded-xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-400/40 hover:-translate-y-px"
+      >
         <MessageCircle size={18} />
         Ask AnglerIQ
       </button>

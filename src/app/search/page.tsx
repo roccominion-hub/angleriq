@@ -1286,9 +1286,9 @@ function SearchPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setChatOpen(true)}
-            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+            className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white text-sm font-bold px-3.5 py-1.5 rounded-full transition-all shadow-sm shadow-blue-500/20"
           >
-            <MessageCircle size={15} />
+            <MessageCircle size={14} />
             <span className="hidden sm:inline">Ask AnglerIQ</span>
           </button>
           <NavUserMenu />
