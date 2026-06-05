@@ -172,26 +172,45 @@ async function fetchUsgsLakeLevel(siteNo: string): Promise<WaterLevel | null> {
 
 // Fetch inflow gauges from USGS (stream gages near lake) — hard 10s timeout so it never
 // delays or starves the waterway/map data which is higher priority.
+// km distance between two lat/lng points (Haversine)
+function distKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
+
 async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   try {
-    const pad = 0.7   // ~77km at TX/OK latitudes — covers inflow gauges on large reservoirs
-    const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`
+    const pad = 0.7
+    // USGS bBox requires ≤7 decimal places — floating point arithmetic can produce
+    // values like 32.199999999999996 which the API rejects with HTTP 400.
+    const r = (n: number) => parseFloat(n.toFixed(7))
+    const bbox = `${r(lng - pad)},${r(lat - pad)},${r(lng + pad)},${r(lat + pad)}`
+
     const ac1 = new AbortController()
     const t1 = setTimeout(() => ac1.abort(), 10000)
+    // Drop hasDataTypeCd=iv — some TX gauges only report daily values and would be missed
     const siteRes = await fetch(
-      `https://waterservices.usgs.gov/nwis/site/?bBox=${bbox}&siteType=ST&format=rdb&siteStatus=active&hasDataTypeCd=iv`,
+      `https://waterservices.usgs.gov/nwis/site/?bBox=${bbox}&siteType=ST&format=rdb&siteStatus=active`,
       { next: { revalidate: 3600 }, signal: ac1.signal } as RequestInit
     )
     clearTimeout(t1)
     if (!siteRes.ok) return []
     const txt = await siteRes.text()
-    const siteNos = txt.split('\n')
-      .filter(l => !l.startsWith('#') && !l.startsWith('agency') && !l.match(/^\d+s/) && l.trim())
-      .map(l => l.split('\t')[1])
-      .filter(Boolean)
-      .slice(0, 8)
 
-    if (!siteNos.length) return []
+    // RDB format: agency(0) site_no(1) name(2) type(3) dec_lat(4) dec_lng(5) ...
+    // Sort by distance to lake center so the closest/most relevant gauges are queried first
+    const sites = txt.split('\n')
+      .filter(l => !l.startsWith('#') && !l.startsWith('agency') && !l.match(/^\d+s/) && l.trim())
+      .map(l => { const c = l.split('\t'); return { no: c[1], slat: parseFloat(c[4]), slng: parseFloat(c[5]) } })
+      .filter(s => s.no && !isNaN(s.slat) && !isNaN(s.slng))
+      .sort((a, b) => distKm(lat, lng, a.slat, a.slng) - distKm(lat, lng, b.slat, b.slng))
+      .slice(0, 12)  // fetch the 12 nearest gauges (up from 8)
+
+    if (!sites.length) return []
+    const siteNos = sites.map(s => s.no)
 
     const ac2 = new AbortController()
     const t2 = setTimeout(() => ac2.abort(), 8000)
