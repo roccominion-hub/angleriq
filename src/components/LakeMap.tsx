@@ -293,16 +293,18 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
         const rating = rateInflow(inflow.flowCfs, maxCfs)
         const c = RATING_COLORS[rating]
-        const icon = L.divIcon({
-          className: '',
-          html: `<div style="width:12px;height:12px;border-radius:50%;background:${c.border};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.6)"></div>`,
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
-        })
-        const marker = L.marker([eLat, eLng], { icon })
-          .bindPopup(`<b>${shortName(inflow.siteName)}</b><br>${inflow.flowCfs.toLocaleString()} cfs`)
+
+        // Large transparent circle — communicates approximate area, not false precision
+        const circle = L.circle([eLat, eLng], {
+          radius: 350,
+          color: c.border,
+          fillColor: c.border,
+          fillOpacity: 0.12,
+          weight: 1.5,
+          opacity: 0.5,
+        }).bindPopup(`<b>${shortName(inflow.siteName)}</b><br>${inflow.flowCfs.toLocaleString()} cfs`)
           .addTo(map)
-        inflowMarkersRef.current.set(inflow.siteNo, marker)
+        inflowMarkersRef.current.set(inflow.siteNo, circle)
       }
     })
   }, [conditions, mapReady, features])
@@ -344,23 +346,32 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     const rating = rateInflow(inflow.flowCfs, maxCfs)
     const c = RATING_COLORS[rating]
 
-    // Pulsing ring marker at entry point
+    // Two-ring selected highlight: large transparent area + solid border
     import('leaflet').then(L => {
-      const pulseIcon = L.divIcon({
-        className: '',
-        html: `
-          <div style="position:relative;width:24px;height:24px">
-            <div style="position:absolute;inset:0;border-radius:50%;background:${c.border};opacity:0.35;animation:ping 1.2s cubic-bezier(0,0,0.2,1) infinite"></div>
-            <div style="position:absolute;inset:4px;border-radius:50%;background:${c.border};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>
-          </div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      })
       const group = L.layerGroup()
-      L.marker([eLat, eLng], { icon: pulseIcon, interactive: false }).addTo(group)
-      inflowStreamLayerRef.current = group.addTo(map)
 
-      // Zoom to lake-edge entry point
+      // Outer fill — large soft area indicator
+      L.circle([eLat, eLng], {
+        radius: 500,
+        color: c.border,
+        fillColor: c.border,
+        fillOpacity: 0.18,
+        weight: 0,
+        interactive: false,
+      }).addTo(group)
+
+      // Solid border ring — shows the selected state clearly
+      L.circle([eLat, eLng], {
+        radius: 500,
+        color: c.border,
+        fillColor: 'transparent',
+        fillOpacity: 0,
+        weight: 2.5,
+        opacity: 0.9,
+        interactive: false,
+      }).addTo(group)
+
+      inflowStreamLayerRef.current = group.addTo(map)
       map.setView([eLat, eLng], 14)
     })
   }
