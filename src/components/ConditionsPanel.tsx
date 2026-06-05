@@ -65,6 +65,7 @@ function MetricCard({ label, icon, children, className = '' }: {
 
 export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }: Props) {
   const [lakeLevel, setLakeLevel] = useState<any>(null)
+  const [lakeWind, setLakeWind] = useState<any>(null)
   const moon = weather.moon
   const isForecast = !!weather.forecastDate
 
@@ -72,9 +73,18 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
     if (!lakeId) return
     fetch(`/api/lake-conditions?lakeId=${lakeId}`)
       .then(r => r.json())
-      .then(d => setLakeLevel(d?.conditions?.waterLevel ?? null))
+      .then(d => {
+        setLakeLevel(d?.conditions?.waterLevel ?? null)
+        // Use wind from lake-conditions so direction matches the map header
+        // (both pull from the same Open-Meteo call with the same cache key)
+        setLakeWind(d?.conditions?.wind ?? null)
+      })
       .catch(() => {})
   }, [lakeId])
+
+  // Prefer lake-conditions wind direction (matches map header); fall back to weather API
+  const windDirDeg: number | null = lakeWind?.directionDeg ?? weather.windDirection ?? null
+  const windDirLabel: string | null = lakeWind?.directionLabel ?? (weather.windDirection != null ? toCompass(weather.windDirection) : null)
 
   const formattedDate = weather.forecastDate
     ? new Date(weather.forecastDate + 'T12:00:00Z').toLocaleDateString('en-US', {
@@ -150,19 +160,17 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
               {weather.windMph ?? '—'}
             </p>
             <p className="text-sm font-semibold text-slate-500 mb-0.5">mph</p>
-            {weather.windDirection != null && (
+            {windDirDeg != null && (
               <div
                 className="mb-0.5 text-blue-400"
-                style={{ transform: `rotate(${windIconDeg(weather.windDirection)}deg)` }}
+                style={{ transform: `rotate(${windIconDeg(windDirDeg)}deg)` }}
               >
                 <Navigation size={14} fill="currentColor" />
               </div>
             )}
           </div>
           <p className="text-[11px] text-slate-400 font-medium">
-            {weather.windDirection != null
-              ? `from ${toCompass(weather.windDirection)}`
-              : ''}
+            {windDirLabel != null ? `from ${windDirLabel}` : ''}
           </p>
         </MetricCard>
 
