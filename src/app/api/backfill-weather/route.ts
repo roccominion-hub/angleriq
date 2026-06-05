@@ -18,10 +18,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy — avoids module-level instantiation that blows up at build time
+// when env vars aren't available (e.g. Vercel preview builds)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 function interpretSkyCode(code: number): string {
   if (code === 0) return 'sunny'
@@ -95,6 +99,7 @@ async function fetchHistoricalWeather(date: string, lat: number, lng: number) {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase()
   const body = await req.json()
   const { secret, limit = 50, dryRun = false } = body
 
