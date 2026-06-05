@@ -184,11 +184,11 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
           <MetricCard
             label="Solunar"
             icon={<span className="text-[11px]">{moon.emoji}</span>}
-            className="sm:col-span-2"
+            className="col-span-2"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex items-start">
               {/* Left: rating + moon phase */}
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${solunarColors}`}>
                   {moon.solunarLabel}
                 </span>
@@ -196,8 +196,10 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
                   {moon.emoji} {moon.phase} · {moon.illumination}% illuminated
                 </p>
               </div>
-              {/* Right: bite windows */}
-              <div className="text-right ml-auto shrink-0">
+              {/* Divider */}
+              <div className="w-px bg-slate-100 self-stretch mx-4 shrink-0" />
+              {/* Right: bite windows — left aligned */}
+              <div className="shrink-0">
                 {moon.majorPeriods.length > 0 && (
                   <div className="mb-1">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Major</p>
@@ -227,11 +229,11 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
               lakeLevel.trend === 'rising' ? 'text-green-500' :
               lakeLevel.trend === 'falling' ? 'text-red-400' : 'text-slate-400'
             } />}
-            className="sm:col-span-2"
+            className="col-span-2"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex items-start">
               {/* Left: elevation + trend */}
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="flex items-end gap-1.5">
                   <p className="text-2xl font-bold text-slate-800 leading-none">
                     {lakeLevel.valueFt.toLocaleString()}
@@ -253,25 +255,28 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
                     : ''}
                 </p>
               </div>
-              {/* Right: % full + bar */}
+              {/* Right: % full + bar — only shown when data available */}
               {lakeLevel.percentFull != null && lakeLevel.percentFull > 0 && (
-                <div className="shrink-0 w-24 ml-auto">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pool Capacity</p>
-                  <p className="text-base font-bold text-slate-700">{lakeLevel.percentFull}%</p>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${
-                        lakeLevel.percentFull >= 90 ? 'bg-green-400' :
-                        lakeLevel.percentFull >= 70 ? 'bg-blue-400' :
-                        lakeLevel.percentFull >= 50 ? 'bg-amber-400' : 'bg-red-400'
-                      }`}
-                      style={{ width: `${Math.min(100, Math.max(0, lakeLevel.percentFull))}%` }}
-                    />
+                <>
+                  <div className="w-px bg-slate-100 self-stretch mx-4 shrink-0" />
+                  <div className="shrink-0 w-28">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pool Capacity</p>
+                    <p className="text-base font-bold text-slate-700">{lakeLevel.percentFull}%</p>
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          lakeLevel.percentFull >= 90 ? 'bg-green-400' :
+                          lakeLevel.percentFull >= 70 ? 'bg-blue-400' :
+                          lakeLevel.percentFull >= 50 ? 'bg-amber-400' : 'bg-red-400'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(0, lakeLevel.percentFull))}%` }}
+                      />
+                    </div>
+                    {lakeLevel.date && (
+                      <p className="text-[10px] text-slate-400 mt-1">as of {lakeLevel.date}</p>
+                    )}
                   </div>
-                  {lakeLevel.date && (
-                    <p className="text-[10px] text-slate-400 mt-1">as of {lakeLevel.date}</p>
-                  )}
-                </div>
+                </>
               )}
             </div>
           </MetricCard>
