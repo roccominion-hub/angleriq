@@ -12,6 +12,7 @@ import { Slider } from '@/components/ui/slider'
 import { Logo } from '@/components/Logo'
 import { LakeMap } from '@/components/LakeMap'
 import { LakeLevel } from '@/components/LakeLevel'
+import { ConditionsPanel } from '@/components/ConditionsPanel'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
@@ -35,7 +36,7 @@ const MERGED_LAKE_LABELS: Record<string, string> = {
   'Lake Tyler':  'Lake Tyler / Lake Tyler East',
 }
 interface BaitRecord { bait_type: string; bait_name: string; color: string; weight_oz: number; product_url: string; retailer: string; line_type: string; line_lb_test: number }
-interface Weather { tempF?: number; feelsLikeF?: number; tempLowF?: number; cloudCoverPct?: number; windMph?: number; precipitation?: number; skyCondition?: string; timeOfDay?: string; season?: string; weatherDesc?: string; moon?: MoonData; forecastDate?: string; weatherConditions?: string }
+interface Weather { tempF?: number; feelsLikeF?: number; tempLowF?: number; cloudCoverPct?: number; windMph?: number; windDirection?: number; precipitation?: number; skyCondition?: string; timeOfDay?: string; season?: string; weatherDesc?: string; moon?: MoonData; forecastDate?: string; weatherConditions?: string }
 interface SearchResult {
   water: Lake & { lat: number; lng: number }
   sampleSize: number
@@ -1295,7 +1296,14 @@ export default function SearchPage() {
               </Badge>
             </div>
 
-            {weather && <WeatherBar weather={weather} lakeId={result.water.id} />}
+            {weather && (
+              <ConditionsPanel
+                weather={weather}
+                waterTempF={waterTempF}
+                waterTempSource={waterTempSource}
+                lakeId={result.water.id}
+              />
+            )}
 
             {result && !loading && (
               <div className="flex justify-end mb-1">
