@@ -55,10 +55,10 @@ function rateInflow(flowCfs: number, maxCfs: number): InflowRating {
   return 'low'
 }
 
-const RATING_COLORS: Record<InflowRating, { bg: string; border: string; text: string; dot: string }> = {
-  high:   { bg: '#166534', border: '#16a34a', text: '#bbf7d0', dot: 'bg-green-400' },
-  medium: { bg: '#92400e', border: '#d97706', text: '#fde68a', dot: 'bg-amber-400' },
-  low:    { bg: '#1e3a5f', border: '#3b82f6', text: '#bfdbfe', dot: 'bg-blue-400'  },
+const RATING_COLORS: Record<InflowRating, { bg: string; border: string; text: string }> = {
+  high:   { bg: '#166534', border: '#16a34a', text: '#bbf7d0' },
+  medium: { bg: '#92400e', border: '#d97706', text: '#fde68a' },
+  low:    { bg: '#3b0764', border: '#a855f7', text: '#e9d5ff' },
 }
 
 // Shorten USGS site name to just the stream name (strip "nr XYZ" / "at XYZ" etc.)
@@ -66,67 +66,56 @@ function shortName(siteName: string): string {
   return siteName.replace(/\s+(nr|near|at|ab|above|bl|below|bel)\s+.*/i, '').trim()
 }
 
-// Fetch waterway geometry near the lake using a bounding box when available,
-// falling back to a radius around the lake center.
-async function fetchLakeEdgeStreams(
+// Walk from the lake center toward the gauge and find where the path exits the
+// lake polygon — that intersection is the lake-edge entry point for this inflow.
+// No external API call needed; uses the polygon already loaded in features.
+function findLakeEdgePoint(
   lakeLat: number,
   lakeLng: number,
-  bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number },
-): Promise<[number, number][][]> {
-  // Expand bbox slightly so streams entering at the edges are included
-  const pad = 0.02
-  const area = bbox
-    ? `${bbox.minLat - pad},${bbox.minLng - pad},${bbox.maxLat + pad},${bbox.maxLng + pad}`
-    : null
-  const query = area
-    ? `[out:json][timeout:20];way["waterway"~"river|stream|canal"](${area});out geom;`
-    : `[out:json][timeout:15];way["waterway"~"river|stream|canal"](around:8000,${lakeLat},${lakeLng});out geom;`
-
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: query,
-    signal: AbortSignal.timeout(20000),
-  })
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.elements ?? [])
-    .filter((el: any) => el.type === 'way' && el.geometry?.length > 1)
-    .map((el: any) => el.geometry.map((pt: any) => [pt.lat, pt.lon] as [number, number]))
-}
-
-// Among all stream endpoints near the lake, find the one closest to the gauge —
-// that is where this stream enters the lake from the gauge's direction.
-function findEntryPointForGauge(
-  lines: [number, number][][],
   gaugeLat: number,
   gaugeLng: number,
-): [number, number] | null {
-  let best: [number, number] | null = null
-  let minDist = Infinity
-  for (const line of lines) {
-    if (!line.length) continue
-    for (const pt of [line[0], line[line.length - 1]]) {
-      const d = Math.hypot(pt[0] - gaugeLat, pt[1] - gaugeLng)
-      if (d < minDist) { minDist = d; best = pt }
-    }
+  lakePolygons: number[][][],
+): [number, number] {
+  if (!lakePolygons.length) {
+    // No polygon: return a point 60% of the way from lake center to gauge
+    return [lakeLat + (gaugeLat - lakeLat) * 0.6, lakeLng + (gaugeLng - lakeLng) * 0.6]
   }
-  return best
-}
 
-// Return only the stream lines whose closest endpoint is within thresholdDeg
-// of the target entry point — i.e. lines belonging to this particular inflow.
-function filterLinesNearEntry(
-  lines: [number, number][][],
-  entryLat: number,
-  entryLng: number,
-  thresholdDeg = 0.015,  // ~1.5 km
-): [number, number][][] {
-  return lines.filter(line => {
-    for (const pt of [line[0], line[line.length - 1]]) {
-      if (Math.hypot(pt[0] - entryLat, pt[1] - entryLng) <= thresholdDeg) return true
+  function inPolygonLocal(px: number, py: number, ring: number[][]): boolean {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j]
+      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside
     }
-    return false
-  })
+    return inside
+  }
+  function inAnyPoly(lng: number, lat: number) {
+    return lakePolygons.some(ring => inPolygonLocal(lng, lat, ring))
+  }
+
+  const dLat = gaugeLat - lakeLat
+  const dLng = gaugeLng - lakeLng
+  const dist = Math.hypot(dLat, dLng)
+  if (dist === 0) return [lakeLat, lakeLng]
+
+  const uLat = dLat / dist
+  const uLng = dLng / dist
+  const step = 0.0008  // ~80m per step
+
+  let prevLat = lakeLat, prevLng = lakeLng
+  for (let t = step; t <= dist + step * 2; t += step) {
+    const tLat = lakeLat + uLat * t
+    const tLng = lakeLng + uLng * t
+    if (!inAnyPoly(tLng, tLat)) {
+      // Just crossed out of the polygon — previous point was at the edge
+      return [prevLat, prevLng]
+    }
+    prevLat = tLat; prevLng = tLng
+  }
+
+  // Gauge direction never exits lake (gauge is inside lake, or walk overshot)
+  // Return the point closest to the gauge that's still in the polygon
+  return [prevLat, prevLng]
 }
 
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
@@ -142,7 +131,6 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
   // Inflow interaction state
   const [selectedInflow, setSelectedInflow] = useState<string | null>(null)
-  const [inflowLoading, setInflowLoading] = useState(false)
 
   const windLayerRef         = useRef<any>(null)
   const tileLayerRef         = useRef<any>(null)
@@ -288,59 +276,54 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions, features, overlays, baseLayer, zoom, mapReady])
 
-  // Inflow stream lines — draw each inflow's stream in its rating color at the lake edge.
-  // Uses the lake bounding box for the Overpass query when available.
-  const lakeEdgeStreamsRef = useRef<[number,number][][] | null>(null)
+  // Inflow markers — colored dot at the lake-edge entry point for each gauge.
+  // Uses the lake polygon (already loaded) to find where each stream enters —
+  // no Overpass call needed.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !conditions?.conditions?.inflows?.length) return
+    if (!mapReady || !mapRef.current || !conditions?.conditions?.inflows?.length || !features) return
     const inflows: any[] = conditions.conditions.inflows.slice(0, 6)
     const maxCfs = Math.max(...inflows.map((f: any) => f.flowCfs))
     const map = mapRef.current
 
-    import('leaflet').then(async L => {
-      // Clear previous inflow layers
+    // Extract lake polygon rings for edge detection
+    const lakePolygons: number[][][] = []
+    if (features?.waterbodies?.features) {
+      for (const f of features.waterbodies.features) {
+        const geom = f.geometry
+        if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
+        if (geom?.type === 'MultiPolygon') {
+          for (const poly of geom.coordinates) lakePolygons.push(poly[0])
+        }
+      }
+    }
+
+    import('leaflet').then(L => {
       inflowMarkersRef.current.forEach(m => m.remove())
       inflowMarkersRef.current.clear()
 
-      // Fetch lake-edge streams once, using the lake polygon bbox when available
-      if (!lakeEdgeStreamsRef.current) {
-        const wb = features?.waterwayBbox
-        lakeEdgeStreamsRef.current = await fetchLakeEdgeStreams(lat, lng, wb ?? undefined).catch(() => [])
-      }
-      const lines = lakeEdgeStreamsRef.current ?? []
-      if (!lines.length || !map) return
-
-      // For each inflow, draw its stream lines in the rating color
       for (const inflow of inflows) {
-        const entryPt = findEntryPointForGauge(lines, inflow.lat, inflow.lng)
-        if (!entryPt) continue
-
+        const [eLat, eLng] = findLakeEdgePoint(lat, lng, inflow.lat, inflow.lng, lakePolygons)
         const rating = rateInflow(inflow.flowCfs, maxCfs)
         const c = RATING_COLORS[rating]
-        const streamLines = filterLinesNearEntry(lines, entryPt[0], entryPt[1])
-        if (!streamLines.length) continue
-
-        const group = L.layerGroup()
-        for (const coords of streamLines) {
-          // Glow layer
-          L.polyline(coords, { color: c.border, weight: 8, opacity: 0.2, interactive: false }).addTo(group)
-          // Solid line in rating color
-          L.polyline(coords, { color: c.border, weight: 3, opacity: 0.85, interactive: false }).addTo(group)
-        }
-        // Store as a single "marker" (actually a layer group) keyed by siteNo
-        const groupLayer = group.addTo(map)
-        inflowMarkersRef.current.set(inflow.siteNo, groupLayer)
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:12px;height:12px;border-radius:50%;background:${c.border};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.6)"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6],
+        })
+        const marker = L.marker([eLat, eLng], { icon })
+          .bindPopup(`<b>${shortName(inflow.siteName)}</b><br>${inflow.flowCfs.toLocaleString()} cfs`)
+          .addTo(map)
+        inflowMarkersRef.current.set(inflow.siteNo, marker)
       }
     })
   }, [conditions, mapReady, features])
 
-  // Handle inflow selection — brighten that stream and fly to its lake entry point
-  async function handleInflowSelect(inflow: any) {
-    // Capture map reference NOW before any awaits — async ops can trigger
-    // re-renders that null out mapRef.current before we finish
+  // Handle inflow selection — place a pulsing marker at the lake-edge entry
+  // point and zoom to it. No external API call — uses the lake polygon only.
+  function handleInflowSelect(inflow: any) {
     const map = mapRef.current
     if (!map) return
-    const L = (await import('leaflet')).default
 
     // Toggle off
     if (selectedInflow === inflow.siteNo) {
@@ -353,42 +336,42 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     setSelectedInflow(inflow.siteNo)
     inflowStreamLayerRef.current?.remove()
     inflowStreamLayerRef.current = null
-    setInflowLoading(true)
 
-    // Reuse geometry already fetched for the passive stream lines
-    if (!lakeEdgeStreamsRef.current) {
-      const wb = features?.waterwayBbox
-      lakeEdgeStreamsRef.current = await fetchLakeEdgeStreams(lat, lng, wb ?? undefined).catch(() => [])
-    }
-    const lines = lakeEdgeStreamsRef.current ?? []
-    setInflowLoading(false)
-
-    const entryPoint = lines.length
-      ? findEntryPointForGauge(lines, inflow.lat, inflow.lng)
-      : null
-
-    // Validate coordinates before any map operations
-    if (entryPoint && (isNaN(entryPoint[0]) || isNaN(entryPoint[1]))) {
-      console.warn('Invalid entry point coordinates', entryPoint)
-      return
+    // Extract lake polygon rings
+    const lakePolygons: number[][][] = []
+    if (features?.waterbodies?.features) {
+      for (const f of features.waterbodies.features) {
+        const geom = f.geometry
+        if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
+        if (geom?.type === 'MultiPolygon') {
+          for (const poly of geom.coordinates) lakePolygons.push(poly[0])
+        }
+      }
     }
 
-    // Draw the selected stream brighter — thicker, full-opacity rating color
+    const [eLat, eLng] = findLakeEdgePoint(lat, lng, inflow.lat, inflow.lng, lakePolygons)
     const rating = rateInflow(inflow.flowCfs, maxCfs)
     const c = RATING_COLORS[rating]
-    const streamLines = entryPoint ? filterLinesNearEntry(lines, entryPoint[0], entryPoint[1]) : lines
 
-    const group = L.layerGroup()
-    for (const coords of streamLines) {
-      L.polyline(coords, { color: c.border, weight: 12, opacity: 0.3, interactive: false }).addTo(group)
-      L.polyline(coords, { color: c.border, weight: 5, opacity: 1.0, interactive: false }).addTo(group)
-    }
-    inflowStreamLayerRef.current = group.addTo(map)
+    // Pulsing ring marker at entry point
+    import('leaflet').then(L => {
+      const pulseIcon = L.divIcon({
+        className: '',
+        html: `
+          <div style="position:relative;width:24px;height:24px">
+            <div style="position:absolute;inset:0;border-radius:50%;background:${c.border};opacity:0.35;animation:ping 1.2s cubic-bezier(0,0,0.2,1) infinite"></div>
+            <div style="position:absolute;inset:4px;border-radius:50%;background:${c.border};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>
+          </div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      })
+      const group = L.layerGroup()
+      L.marker([eLat, eLng], { icon: pulseIcon, interactive: false }).addTo(group)
+      inflowStreamLayerRef.current = group.addTo(map)
 
-    // Fly to the lake-edge entry point — use flyTo which handles interruption better than setView
-    if (entryPoint) {
-      map.flyTo(entryPoint, 14)
-    }
+      // Zoom to lake-edge entry point
+      map.setView([eLat, eLng], 14)
+    })
   }
 
   // Boat ramps
@@ -548,8 +531,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         <div className="bg-slate-900 border-t border-slate-700/50 px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Inflows</span>
-            {inflowLoading && <span className="text-[10px] text-cyan-400 animate-pulse">loading stream…</span>}
-            {selectedInflow && !inflowLoading && (
+            {selectedInflow && (
               <span className="text-[10px] text-cyan-400">stream highlighted · tap to clear</span>
             )}
           </div>
