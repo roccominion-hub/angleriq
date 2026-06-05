@@ -66,10 +66,10 @@ function shortName(siteName: string): string {
   return siteName.replace(/\s+(nr|near|at|ab|above|bl|below|bel)\s+.*/i, '').trim()
 }
 
-// Fetch Overpass waterway geometry between a gauge and the lake.
-// Radius of 10km captures the gauge + stream segment reaching the shore.
-async function fetchInflowGeometry(lat: number, lng: number): Promise<[number, number][][]> {
-  const query = `[out:json][timeout:15];way["waterway"~"river|stream|canal"](around:10000,${lat},${lng});out geom;`
+// Fetch waterway geometry near the LAKE CENTER (not the gauge) so we get
+// segments that are actually entering the reservoir, not miles upstream.
+async function fetchLakeEdgeStreams(lakeLat: number, lakeLng: number): Promise<[number, number][][]> {
+  const query = `[out:json][timeout:15];way["waterway"~"river|stream|canal"](around:6000,${lakeLat},${lakeLng});out geom;`
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
     body: query,
@@ -82,22 +82,20 @@ async function fetchInflowGeometry(lat: number, lng: number): Promise<[number, n
     .map((el: any) => el.geometry.map((pt: any) => [pt.lat, pt.lon] as [number, number]))
 }
 
-// Find the stream point that sits closest to the lake center — this is where the
-// stream terminates as it enters the reservoir, i.e. the lake-edge entry point.
-// We check only the two endpoints of each polyline since Overpass stream ways
-// typically end at the reservoir shoreline, not mid-lake.
-function findStreamEntryPoint(
+// Among all stream endpoints near the lake, find the one whose direction from
+// the lake center most closely points toward the gauge. That endpoint is where
+// THIS particular stream enters the lake.
+function findEntryPointForGauge(
   lines: [number, number][][],
-  lakeLat: number,
-  lakeLng: number,
+  gaugeLat: number,
+  gaugeLng: number,
 ): [number, number] | null {
   let best: [number, number] | null = null
   let minDist = Infinity
   for (const line of lines) {
     if (!line.length) continue
-    // Check both endpoints
     for (const pt of [line[0], line[line.length - 1]]) {
-      const d = Math.hypot(pt[0] - lakeLat, pt[1] - lakeLng)
+      const d = Math.hypot(pt[0] - gaugeLat, pt[1] - gaugeLng)
       if (d < minDist) { minDist = d; best = pt }
     }
   }
@@ -263,26 +261,40 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions, features, overlays, baseLayer, zoom, mapReady])
 
-  // Inflow markers — small colored dot at gauge location, no text
+  // Inflow lake-edge markers — fetched once per lake, placed at shore entry points
+  // These replace the old gauge-location dots which appeared far from the lake.
+  const lakeEdgeStreamsRef = useRef<[number,number][][] | null>(null)
   useEffect(() => {
     if (!mapReady || !mapRef.current || !conditions?.conditions?.inflows?.length) return
     const inflows: any[] = conditions.conditions.inflows.slice(0, 6)
     const maxCfs = Math.max(...inflows.map((f: any) => f.flowCfs))
 
-    import('leaflet').then(L => {
+    // Fetch lake-edge stream geometry once, then place a dot for each inflow
+    // at the shore entry point closest to that gauge
+    import('leaflet').then(async L => {
       inflowMarkersRef.current.forEach(m => m.remove())
       inflowMarkersRef.current.clear()
 
+      if (!lakeEdgeStreamsRef.current) {
+        lakeEdgeStreamsRef.current = await fetchLakeEdgeStreams(lat, lng).catch(() => [])
+      }
+      const lines = lakeEdgeStreamsRef.current ?? []
+
       for (const inflow of inflows) {
+        const entryPt = lines.length
+          ? findEntryPointForGauge(lines, inflow.lat, inflow.lng)
+          : null
+        const markerPos: [number, number] = entryPt ?? [inflow.lat, inflow.lng]
+
         const rating = rateInflow(inflow.flowCfs, maxCfs)
         const c = RATING_COLORS[rating]
         const icon = L.divIcon({
           className: '',
-          html: `<div style="width:12px;height:12px;border-radius:50%;background:${c.border};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.6);cursor:pointer"></div>`,
+          html: `<div style="width:12px;height:12px;border-radius:50%;background:${c.border};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.6)"></div>`,
           iconSize: [12, 12],
           iconAnchor: [6, 6],
         })
-        const marker = L.marker([inflow.lat, inflow.lng], { icon })
+        const marker = L.marker(markerPos, { icon })
           .bindPopup(`<b>${shortName(inflow.siteName)}</b><br>${inflow.flowCfs.toLocaleString()} cfs`)
           .addTo(mapRef.current)
         inflowMarkersRef.current.set(inflow.siteNo, marker)
@@ -290,13 +302,12 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions, mapReady])
 
-  // Handle inflow selection — fetch stream geometry, find lake-edge entry point, draw highlight
+  // Handle inflow selection — highlight the stream and zoom to its lake-edge entry point
   async function handleInflowSelect(inflow: any) {
     if (!mapRef.current) return
-
     const L = (await import('leaflet')).default
 
-    // Toggle off if already selected
+    // Toggle off
     if (selectedInflow === inflow.siteNo) {
       inflowStreamLayerRef.current?.remove()
       inflowStreamLayerRef.current = null
@@ -307,59 +318,48 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     setSelectedInflow(inflow.siteNo)
     inflowStreamLayerRef.current?.remove()
     inflowStreamLayerRef.current = null
-
-    // Fetch stream geometry (cached after first load)
     setInflowLoading(true)
-    let lines = inflowGeoCacheRef.current.get(inflow.siteNo)
-    if (!lines) {
-      lines = await fetchInflowGeometry(inflow.lat, inflow.lng)
-      inflowGeoCacheRef.current.set(inflow.siteNo, lines)
+
+    // Reuse the lake-edge geometry already fetched for the dot markers
+    // (queries near lake center, so results are at the shoreline, not upstream)
+    if (!lakeEdgeStreamsRef.current) {
+      lakeEdgeStreamsRef.current = await fetchLakeEdgeStreams(lat, lng).catch(() => [])
     }
+    const lines = lakeEdgeStreamsRef.current ?? []
     setInflowLoading(false)
 
     if (!mapRef.current) return
 
-    // Find where the stream meets the lake edge (endpoint closest to lake center)
+    // Entry point = stream endpoint nearest this gauge's direction from the lake
     const entryPoint = lines.length
-      ? findStreamEntryPoint(lines, lat, lng)
+      ? findEntryPointForGauge(lines, inflow.lat, inflow.lng)
       : null
 
-    // Pan to lake-edge entry point, or fall back to gauge location
-    const focusPoint = entryPoint ?? [inflow.lat, inflow.lng] as [number, number]
-    mapRef.current.setView(focusPoint, Math.max(mapRef.current.getZoom(), 13), { animate: true })
-
-    if (!lines.length) return
-
-    // Draw highlight polylines
+    // Draw highlighted stream lines
     const group = L.layerGroup()
     for (const coords of lines) {
       L.polyline(coords, { color: '#22d3ee', weight: 10, opacity: 0.2, interactive: false }).addTo(group)
       L.polyline(coords, { color: '#06b6d4', weight: 4, opacity: 0.9, interactive: false }).addTo(group)
     }
 
-    // Place a larger highlighted marker at the lake-edge entry point
+    // Larger highlighted marker at the entry point
     if (entryPoint) {
       const rating = rateInflow(inflow.flowCfs, maxCfs)
       const c = RATING_COLORS[rating]
       const entryIcon = L.divIcon({
         className: '',
-        html: `<div style="width:18px;height:18px;border-radius:50%;background:${c.border};border:3px solid white;box-shadow:0 0 0 2px ${c.border},0 2px 8px rgba(0,0,0,0.5)"></div>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9],
+        html: `<div style="width:20px;height:20px;border-radius:50%;background:${c.border};border:3px solid white;box-shadow:0 0 0 2px ${c.border},0 2px 8px rgba(0,0,0,0.5)"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
       })
       L.marker(entryPoint, { icon: entryIcon, interactive: false }).addTo(group)
     }
 
     inflowStreamLayerRef.current = group.addTo(mapRef.current)
 
-    // Fit to stream bounds, centered near the lake-edge entry
-    const allCoords = lines.flat()
-    if (allCoords.length && entryPoint) {
-      // Zoom to entry point at a reasonable zoom rather than fitting entire stream
-      mapRef.current.setView(entryPoint, 13, { animate: true })
-    } else if (allCoords.length) {
-      const bounds = L.latLngBounds(allCoords)
-      if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14, animate: true })
+    // Zoom to lake-edge entry point after the layer is added
+    if (entryPoint && mapRef.current) {
+      mapRef.current.setView(entryPoint, 14, { animate: true })
     }
   }
 
