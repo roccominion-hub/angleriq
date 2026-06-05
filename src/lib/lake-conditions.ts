@@ -174,7 +174,7 @@ async function fetchUsgsLakeLevel(siteNo: string): Promise<WaterLevel | null> {
 // delays or starves the waterway/map data which is higher priority.
 async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   try {
-    const pad = 0.4
+    const pad = 0.7   // ~77km at TX/OK latitudes — covers inflow gauges on large reservoirs
     const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`
     const ac1 = new AbortController()
     const t1 = setTimeout(() => ac1.abort(), 10000)
