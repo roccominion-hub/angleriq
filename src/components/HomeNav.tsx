@@ -5,13 +5,17 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
-import { LogOut, BookOpen } from 'lucide-react'
+import { LogOut, BookOpen, MessageCircle } from 'lucide-react'
+import { ChatDrawer } from '@/components/ChatDrawer'
+
+// ── HomeNav ───────────────────────────────────────────────────────────────
 
 export function HomeNav() {
   const supabase = createClient()
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
@@ -23,81 +27,135 @@ export function HomeNav() {
     ? (user.user_metadata?.full_name || user.email || 'A').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : null
 
+  function handleAskClick() {
+    if (!user) {
+      router.push('/auth/login?next=/search')
+      return
+    }
+    setChatOpen(true)
+  }
+
   return (
-    <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
-      <Logo className="h-8 w-auto" variant="light" />
-      <div className="flex gap-3 items-center">
-        {user ? (
-          <>
-            <Link href="/search" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
-              Search
-            </Link>
-            <div className="relative">
-              <button
-                onClick={() => setMenuOpen(o => !o)}
-                className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-700 transition-colors"
-              >
-                {initials}
-              </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-10 z-50 bg-white border border-slate-200 rounded-xl shadow-lg w-48 py-1">
-                    <div className="px-3 py-2 border-b border-slate-100">
-                      <p className="text-xs font-semibold text-slate-900 truncate">{user.user_metadata?.full_name || user.email}</p>
-                      <p className="text-xs text-slate-400 truncate">{user.email}</p>
+    <>
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
+        <Logo className="h-8 w-auto" variant="light" />
+        <div className="flex gap-3 items-center">
+          {/* Ask AnglerIQ — always visible */}
+          <button
+            onClick={handleAskClick}
+            className="flex items-center gap-1.5 text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors"
+          >
+            <MessageCircle size={15} />
+            Ask AnglerIQ
+          </button>
+
+          {user ? (
+            <>
+              <Link href="/search" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
+                Search
+              </Link>
+              <div className="relative">
+                <button
+                  onClick={() => setMenuOpen(o => !o)}
+                  className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center hover:bg-blue-700 transition-colors"
+                >
+                  {initials}
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <div className="absolute right-0 top-10 z-50 bg-white border border-slate-200 rounded-xl shadow-lg w-48 py-1">
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{user.user_metadata?.full_name || user.email}</p>
+                        <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                      </div>
+                      <Link href="/account" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                        <BookOpen size={14} /> My Reports
+                      </Link>
+                      <button
+                        onClick={async () => { await supabase.auth.signOut(); setMenuOpen(false); setUser(null) }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <LogOut size={14} /> Sign Out
+                      </button>
                     </div>
-                    <Link href="/account" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                      <BookOpen size={14} /> My Reports
-                    </Link>
-                    <button
-                      onClick={async () => { await supabase.auth.signOut(); setMenuOpen(false); setUser(null) }}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <LogOut size={14} /> Sign Out
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <Link href="/auth/login" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
-              Sign In
-            </Link>
-            <Link href="/auth/signup">
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-5">
-                Get Started Free
-              </Button>
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <Link href="/auth/login" className="text-sm font-semibold text-slate-300 hover:text-blue-400 transition-colors">
+                Sign In
+              </Link>
+              <Link href="/auth/signup">
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-5">
+                  Get Started Free
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
+      </nav>
+
+      <ChatDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        context={{ mode: 'homepage' }}
+      />
+    </>
   )
 }
 
+// ── HomeCTA ───────────────────────────────────────────────────────────────
+
 export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean; variant?: 'dark' | 'light' }) {
   const supabase = createClient()
+  const router = useRouter()
   const [user, setUser] = useState<any>(isLoggedIn ? true : null)
+  const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
   }, [])
 
-  const btnClass = variant === 'light'
+  function handleAskClick() {
+    if (!user) {
+      router.push('/auth/login?next=/search')
+      return
+    }
+    setChatOpen(true)
+  }
+
+  const searchBtnClass = variant === 'light'
     ? 'bg-white hover:bg-blue-50 text-blue-600 font-bold text-base px-8 rounded-lg'
     : 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-lg'
 
-  const href = user ? '/search' : '/auth/signup'
+  const searchHref = user ? '/search' : '/auth/signup'
+
+  const askBtnClass = variant === 'light'
+    ? 'border-2 border-white/70 hover:border-white text-white font-bold text-base px-7 rounded-lg flex items-center gap-2 transition-colors'
+    : 'border-2 border-blue-400/50 hover:border-blue-400 text-blue-200 hover:text-white font-bold text-base px-7 rounded-lg flex items-center gap-2 transition-colors'
 
   return (
-    <Link href={href}>
-      <Button size="lg" className={btnClass}>
-        Search a Lake
-        <span className="ml-1">›</span>
-      </Button>
-    </Link>
+    <>
+      <Link href={searchHref}>
+        <Button size="lg" className={searchBtnClass}>
+          Search a Lake
+          <span className="ml-1">›</span>
+        </Button>
+      </Link>
+
+      <button onClick={handleAskClick} className={askBtnClass}>
+        <MessageCircle size={18} />
+        Ask AnglerIQ
+      </button>
+
+      <ChatDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        context={{ mode: 'homepage' }}
+      />
+    </>
   )
 }

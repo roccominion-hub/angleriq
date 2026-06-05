@@ -16,12 +16,14 @@ import { ConditionsPanel } from '@/components/ConditionsPanel'
 import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
-  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation
+  ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
+  MessageCircle
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 import { NavUserMenu } from '@/components/NavUserMenu'
 import { createClient } from '@/lib/supabase/client'
+import { ChatDrawer } from '@/components/ChatDrawer'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 
@@ -812,6 +814,7 @@ export default function SearchPage() {
   const [milkRunLoading, setMilkRunLoading] = useState(false)
   const [milkRun, setMilkRun] = useState<{ patterns: MilkRunPattern[]; proTip: string } | null>(null)
   const [error, setError] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/lakes').then(r => r.json()).then(setLakes)
@@ -1208,7 +1211,16 @@ export default function SearchPage() {
     <main className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
-        <NavUserMenu />
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setChatOpen(true)}
+            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+          >
+            <MessageCircle size={15} />
+            <span className="hidden sm:inline">Ask AnglerIQ</span>
+          </button>
+          <NavUserMenu />
+        </div>
       </nav>
 
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -1507,6 +1519,28 @@ export default function SearchPage() {
               </CardContent>
             </Card>
 
+            {/* ── Ask AnglerIQ ──────────────────────────────────────── */}
+            {summary.intel && (
+              <div className="flex items-center justify-between bg-slate-900 rounded-xl px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                    <Fish size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white leading-tight">Have questions about this report?</p>
+                    <p className="text-xs text-slate-400 leading-tight">Ask AnglerIQ for deeper analysis or alternative approaches</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setChatOpen(true)}
+                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 ml-4"
+                >
+                  <MessageCircle size={14} />
+                  Ask
+                </button>
+              </div>
+            )}
+
             {/* ── Additional Intel from Articles ─────────────────────── */}
             <div>
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -1791,6 +1825,24 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+
+      {/* ── AnglerIQ Chat Drawer ──────────────────────────────────── */}
+      <ChatDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        context={{
+          mode: 'report',
+          lakeId: result?.water?.id,
+          lake: result?.water?.name ?? selectedLake,
+          state: result?.water?.state,
+          season: weather?.season,
+          waterTempF: waterTempF,
+          topBaits: result?.topBaits,
+          topPatterns: result?.topPatterns,
+          intel: summary.intel,
+          today: summary.today,
+        }}
+      />
     </main>
   )
 }
