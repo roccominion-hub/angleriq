@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
 
   const embedding = await generateEmbedding(ragQueryText)
   let ragChunks: string[] = []
+  let lureChunks: string[] = []
 
   if (embedding) {
     // Technique embeddings — lake-filtered in report mode
@@ -86,11 +87,35 @@ export async function POST(req: NextRequest) {
     }
 
     ragChunks = ragChunks.slice(0, 8)
+
+    // ── Lure catalog RAG ─────────────────────────────────────────────────
+    // Pull brand/product data when the message or report context references specific baits.
+    // Always query with a lower threshold — lure descriptions should be factually exact.
+    const lureQueryText = context.topBaits?.length
+      ? `${message} ${context.topBaits.slice(0, 5).map(b => b.name).join(' ')}`
+      : message
+
+    // Use a fresh embedding scoped to the lure query if it differs meaningfully
+    const lureEmbedding = lureQueryText !== ragQueryText
+      ? (await generateEmbedding(lureQueryText)) ?? embedding
+      : embedding
+
+    const { data: lureData } = await supabase.rpc('match_lure_catalog', {
+      query_embedding: lureEmbedding,
+      match_count: 4,
+      match_threshold: 0.35,
+    })
+    lureChunks = (lureData ?? []).map((c: any) => c.chunk_text as string)
   }
 
   const ragSection =
     ragChunks.length > 0
       ? `\nRELEVANT FISHING INTEL (use as primary source):\n${ragChunks.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}\n`
+      : ''
+
+  const lureSection =
+    lureChunks.length > 0
+      ? `\nLURE / BAIT CATALOG (authoritative product facts — use these when describing specific baits):\n${lureChunks.map((c, i) => `[L${i + 1}] ${c}`).join('\n\n')}\n`
       : ''
 
   // ── Spawn stage context ───────────────────────────────────────────────────
@@ -143,9 +168,10 @@ LAKE REPORT SUGGESTION: When you identify a specific lake as a strong recommenda
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of Texas and Oklahoma lakes. Help anglers decide where to fish and what patterns to target for their next trip.
 
 Today's date: ${currentDate}
-${spawnStageSection}${ragSection}
+${spawnStageSection}${ragSection}${lureSection}
 RULES:
 - SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase for TX/OK based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
+- LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
@@ -169,9 +195,10 @@ Today's date: ${currentDate}
 ${spawnStageSection}
 CURRENT REPORT CONTEXT:
 ${condParts.join('\n')}
-${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${ragSection}
+${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${ragSection}${lureSection}
 RULES:
 - SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
+- LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Answer primarily in the context of ${context.lake ?? 'this lake'} — be consistent with the report data above, do not contradict it.
