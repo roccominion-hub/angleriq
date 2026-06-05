@@ -128,8 +128,8 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
   }
 
   const searchBtnClass = variant === 'light'
-    ? 'bg-white hover:bg-blue-50 text-blue-600 font-bold text-base px-8 rounded-xl'
-    : 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-xl'
+    ? 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 rounded-xl'
+    : 'bg-white hover:bg-blue-50 text-blue-700 font-bold text-base px-8 rounded-xl shadow-lg hover:shadow-white/20'
 
   const searchHref = user ? '/search' : '/auth/signup'
 

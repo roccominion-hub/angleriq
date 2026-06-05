@@ -1605,7 +1605,7 @@ function SearchPage() {
                 </div>
                 <button
                   onClick={() => setChatOpen(true)}
-                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 ml-4"
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all shadow-sm shadow-blue-500/30 shrink-0 ml-4"
                 >
                   <MessageCircle size={14} />
                   Ask
