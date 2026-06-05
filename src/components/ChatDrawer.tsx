@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Fish, Loader2, Send, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { useRouter } from 'next/navigation'
+import { Fish, Loader2, Send, X, ArrowRight } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ export interface ChatContext {
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  suggestedLake?: string  // parsed from [LAKE:...] marker, stripped from content
 }
 
 // ── Starter prompts ────────────────────────────────────────────────────────
@@ -27,8 +30,8 @@ interface Message {
 const HOMEPAGE_PROMPTS = [
   'Which TX lake is fishing best right now?',
   'Where should I go for big bass this weekend?',
-  'What Oklahoma lakes are producing in spring?',
-  'Best lake for a weekend tournament this time of year?',
+  'What Oklahoma lakes are producing this time of year?',
+  'Best lake for a weekend tournament right now?',
 ]
 
 function getReportPrompts(lake: string): string[] {
@@ -36,12 +39,24 @@ function getReportPrompts(lake: string): string[] {
     `What's the best time of day to fish ${lake}?`,
     'What depth should I focus on right now?',
     'What alternative technique would you suggest?',
-    `How does ${lake} typically fish in these conditions?`,
+    `Are there nearby lakes with similar patterns worth comparing?`,
   ]
 }
 
+// ── Lake marker parser ────────────────────────────────────────────────────
+// The AI appends [LAKE:Name, State] when recommending a fishery.
+// Strip the marker from displayed text and return both.
+
+function parseLakeMarker(text: string): { content: string; suggestedLake?: string } {
+  const match = text.match(/\[LAKE:([^\]]+)\]\s*$/m)
+  if (!match) return { content: text }
+  return {
+    content: text.replace(/\n?\[LAKE:[^\]]+\]\s*$/m, '').trimEnd(),
+    suggestedLake: match[1].trim(),
+  }
+}
+
 // ── Markdown renderer ──────────────────────────────────────────────────────
-// Handles **bold** and newlines. Safe for streaming partial text.
 
 function MessageContent({ text }: { text: string }) {
   const lines = text.split('\n')
@@ -75,12 +90,17 @@ interface ChatDrawerProps {
 }
 
 export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // Mount portal only on client
+  useEffect(() => { setMounted(true) }, [])
 
   // Focus input when drawer opens
   useEffect(() => {
@@ -114,24 +134,25 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
     const trimmed = text.trim()
     if (!trimmed || streaming) return
 
-    // Abort any prior stream
     abortRef.current?.abort()
 
     const userMsg: Message = { role: 'user', content: trimmed }
     const historyBeforeSend = [...messages]
-    const nextMessages: Message[] = [...historyBeforeSend, userMsg, { role: 'assistant', content: '' }]
-    setMessages(nextMessages)
+    setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content: '' }])
     setInput('')
     setStreaming(true)
 
     const abort = new AbortController()
     abortRef.current = abort
 
+    // Pass history without the suggestedLake field (API only needs role + content)
+    const apiHistory = historyBeforeSend.map(m => ({ role: m.role, content: m.content }))
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed, history: historyBeforeSend, context }),
+        body: JSON.stringify({ message: trimmed, history: apiHistory, context }),
         signal: abort.signal,
       })
 
@@ -146,14 +167,15 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
         const { done, value } = await reader.read()
         if (done) break
         accumulated += decoder.decode(value, { stream: true })
-        setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content: accumulated }])
+        // Strip lake marker during streaming too so it never flashes on screen
+        const { content } = parseLakeMarker(accumulated)
+        setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content }])
       }
 
-      // Flush any remaining bytes
+      // Final parse after stream completes — extract lake suggestion
       accumulated += decoder.decode()
-      if (accumulated) {
-        setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content: accumulated }])
-      }
+      const { content, suggestedLake } = parseLakeMarker(accumulated)
+      setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content, suggestedLake }])
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         setMessages([
@@ -168,22 +190,29 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
     }
   }
 
+  function handleRunReport(lake: string) {
+    onClose()
+    // Encode the lake name as a URL param; the search page reads it on mount
+    router.push(`/search?lake=${encodeURIComponent(lake)}`)
+  }
+
   const lakeLine =
     context.mode === 'report' && context.lake
       ? `${context.lake}${context.state ? ` · ${context.state}` : ''}`
       : 'Bass Fishing Assistant'
 
-  return (
+  // ── Portal content ─────────────────────────────────────────────────────
+  const drawerContent = (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — z-[200] keeps it above sticky nav (z-50) and hero (z-0) stacking contexts */}
       <div
-        className={`fixed inset-0 bg-black/40 z-40 transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-black/40 z-[200] transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
       />
 
       {/* Drawer panel */}
       <div
-        className={`fixed right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed right-0 top-0 h-full w-full sm:w-[420px] bg-white shadow-2xl z-[201] flex flex-col transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-slate-950 shrink-0">
@@ -218,7 +247,7 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
                 <p className="text-xs text-slate-500 max-w-[280px] mx-auto">
                   {context.mode === 'homepage'
                     ? 'Get help finding the right lake and pattern for your next trip.'
-                    : `Dig deeper into ${context.lake ?? 'this lake'} — conditions, techniques, timing.`}
+                    : `Dig deeper into ${context.lake ?? 'this lake'} — conditions, techniques, timing, nearby lakes.`}
                 </p>
               </div>
 
@@ -237,25 +266,47 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
             </div>
           ) : (
             messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'assistant' && (
-                  <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                    <Fish size={11} className="text-white" />
+              <div key={i}>
+                <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                      <Fish size={11} className="text-white" />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white rounded-br-sm'
+                        : 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                    }`}
+                  >
+                    {msg.content
+                      ? <MessageContent text={msg.content} />
+                      : streaming && i === messages.length - 1
+                      ? (
+                        <span className="inline-flex gap-1 items-center py-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </span>
+                      )
+                      : null}
+                  </div>
+                </div>
+
+                {/* Run Report button — appears below the message when AI recommends a lake */}
+                {msg.role === 'assistant' && msg.suggestedLake && (
+                  <div className="ml-8 mt-2">
+                    <button
+                      onClick={() => handleRunReport(msg.suggestedLake!)}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors"
+                    >
+                      <Fish size={13} />
+                      Run a Report for {msg.suggestedLake}
+                      <ArrowRight size={13} />
+                    </button>
                   </div>
                 )}
-                <div
-                  className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-sm'
-                      : 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                  }`}
-                >
-                  {msg.content
-                    ? <MessageContent text={msg.content} />
-                    : streaming && i === messages.length - 1
-                    ? <span className="inline-flex gap-1 items-center"><span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} /><span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} /><span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} /></span>
-                    : null}
-                </div>
               </div>
             ))
           )}
@@ -297,4 +348,7 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
       </div>
     </>
   )
+
+  if (!mounted) return null
+  return createPortal(drawerContent, document.body)
 }

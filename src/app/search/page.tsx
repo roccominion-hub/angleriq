@@ -820,6 +820,15 @@ export default function SearchPage() {
     fetch('/api/lakes').then(r => r.json()).then(setLakes)
   }, [])
 
+  // Pre-select a lake when arriving via ?lake=Name (e.g. from AnglerIQ Chat "Run Report" button)
+  useEffect(() => {
+    if (lakes.length === 0) return
+    const param = new URLSearchParams(window.location.search).get('lake')
+    if (!param) return
+    const matched = lakes.find(l => l.name.toLowerCase() === param.toLowerCase())
+    if (matched) setSelectedLake(matched.name)
+  }, [lakes])
+
   useEffect(() => {
     setSavedReportId(null)
   }, [selectedLake])

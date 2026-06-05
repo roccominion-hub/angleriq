@@ -40,6 +40,11 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabase()
 
+  // Current date — injected into every prompt so the model knows the time of year
+  const currentDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  })
+
   // ── RAG retrieval ────────────────────────────────────────────────────────
   const ragQueryText =
     context.mode === 'report' && context.lake
@@ -71,11 +76,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // If report mode came up short, broaden the search
-    if (context.mode === 'report' && ragChunks.length < 3) {
+    // If short on chunks, always broaden the search (covers nearby lake questions in report mode)
+    if (ragChunks.length < 4) {
       const { data: broadChunks } = await supabase.rpc('match_technique_embeddings', {
         query_embedding: embedding,
-        match_count: 4,
+        match_count: 5,
       })
       ragChunks = [...ragChunks, ...(broadChunks ?? []).map((c: any) => c.content as string)]
     }
@@ -88,23 +93,33 @@ export async function POST(req: NextRequest) {
       ? `\nRELEVANT FISHING INTEL (use as primary source):\n${ragChunks.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}\n`
       : ''
 
-  // ── System prompt ─────────────────────────────────────────────────────────
+  // ── Lake suggestion marker instruction ───────────────────────────────────
+  // When the AI recommends a specific lake, it appends [LAKE:Name, State].
+  // The client strips this from display and renders a "Run Report" button.
+  const lakeMarkerInstruction = `
+LAKE REPORT SUGGESTION: When you identify a specific lake as a strong recommendation for the angler to fish — whether answering a direct "where should I go" question or pivoting to a nearby lake — append exactly this marker on a new line at the very end of your response: [LAKE:Exact Lake Name, State Abbreviation] (e.g. [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK]). Only include this marker when you are genuinely recommending a lake the angler should consider fishing. Do not include it for every lake you mention — only the one you'd most recommend.`
+
+  // ── System prompts ────────────────────────────────────────────────────────
   let systemPrompt: string
 
   if (context.mode === 'homepage') {
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of Texas and Oklahoma lakes. Help anglers decide where to fish and what patterns to target for their next trip.
+
+Today's date: ${currentDate}
 ${ragSection}
 RULES:
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
 - Focus recommendations on TX and OK fisheries.
-- Keep answers concise and direct (3-6 sentences unless the angler asks for detail).
+- Keep answers concise and direct (3-6 sentences unless the angler asks for more detail).
 - If you lack data for a specific lake, say so and offer the best guidance you can.
-- Never recommend trolling.`
+- Never recommend trolling.
+- Stay on topic: bass fishing, lake conditions, tackle, and related fishing subjects only.
+${lakeMarkerInstruction}`
   } else {
     const condParts: string[] = []
-    if (context.lake && context.state) condParts.push(`Lake: ${context.lake}, ${context.state}`)
+    if (context.lake && context.state) condParts.push(`Primary lake: ${context.lake}, ${context.state}`)
     if (context.season)                condParts.push(`Season: ${context.season}`)
     if (context.waterTempF != null)    condParts.push(`Water temp: ${context.waterTempF}°F`)
     if (context.topBaits?.length)      condParts.push(`Top tournament baits: ${context.topBaits.slice(0, 5).map(b => b.name).join(', ')}`)
@@ -112,16 +127,20 @@ RULES:
 
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant. The angler is reviewing a fishing intelligence report and has follow-up questions.
 
+Today's date: ${currentDate}
+
 CURRENT REPORT CONTEXT:
 ${condParts.join('\n')}
 ${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${ragSection}
 RULES:
 - Artificial lures only. Never recommend live bait.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
-- Answer in the specific context of ${context.lake ?? 'this lake'} when possible.
-- Be consistent with the report data above — do not contradict it.
-- Keep answers concise and actionable unless detail is requested.
-- Never recommend trolling.`
+- Answer primarily in the context of ${context.lake ?? 'this lake'} — be consistent with the report data above, do not contradict it.
+- You MAY discuss nearby or similar lakes when it helps the angler understand regional patterns or consider an alternative fishery. Comparing techniques across similar fisheries is valuable context.
+- Keep answers concise and actionable unless more detail is requested.
+- Never recommend trolling.
+- Stay on topic: bass fishing and related fishing subjects only.
+${lakeMarkerInstruction}`
   }
 
   // ── Anthropic streaming call ──────────────────────────────────────────────
