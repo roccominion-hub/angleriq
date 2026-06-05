@@ -36,14 +36,6 @@ function toCompass(deg: number) { return COMPASS[Math.round(deg / 22.5) % 16] }
 // Icon rotates to show the direction wind is flowing TOWARD (from deg + 180)
 function windIconDeg(fromDeg: number) { return (fromDeg + 180) % 360 }
 
-function tempColor(f: number) {
-  if (f < 50) return 'text-blue-500'
-  if (f < 65) return 'text-sky-500'
-  if (f < 80) return 'text-emerald-600'
-  if (f < 90) return 'text-orange-500'
-  return 'text-red-500'
-}
-
 function skyIcon(condition: string) {
   if (condition?.includes('rain')) return <CloudRain size={15} className="text-blue-400" />
   if (condition?.includes('overcast') || condition?.includes('cloud')) return <Cloud size={15} className="text-slate-400" />
@@ -112,10 +104,10 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
 
         {/* ── Water Temp ── */}
-        <MetricCard label="Water Temp" icon={<Droplets size={11} className="text-cyan-500" />}>
+        <MetricCard label="Water Temp" icon={<Droplets size={11} className="text-blue-500" />}>
           {waterTempF != null ? (
             <>
-              <p className="text-2xl font-extrabold text-cyan-600 leading-none">{waterTempF}°F</p>
+              <p className="text-2xl font-bold text-blue-600 leading-none">{waterTempF}°F</p>
               <p className="text-[11px] text-slate-400 font-medium">
                 {waterTempSource === 'measured'
                   ? 'Live sensor'
@@ -132,9 +124,9 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
         {/* ── Air Temp ── */}
         <MetricCard
           label={isForecast ? 'Forecast High' : 'Air Temp'}
-          icon={<Thermometer size={11} className="text-orange-400" />}
+          icon={<Thermometer size={11} className="text-slate-400" />}
         >
-          <p className={`text-2xl font-extrabold leading-none ${weather.tempF ? tempColor(weather.tempF) : 'text-slate-700'}`}>
+          <p className="text-2xl font-bold text-slate-800 leading-none">
             {weather.tempF}°F
           </p>
           <p className="text-[11px] text-slate-400 font-medium">
@@ -154,7 +146,7 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
         {/* ── Wind ── */}
         <MetricCard label="Wind" icon={<Wind size={11} className="text-slate-400" />}>
           <div className="flex items-end gap-2">
-            <p className={`text-2xl font-extrabold leading-none ${(weather.windMph ?? 0) >= 15 ? 'text-amber-500' : 'text-slate-800'}`}>
+            <p className={`text-2xl font-bold leading-none ${(weather.windMph ?? 0) >= 15 ? 'text-amber-500' : 'text-slate-800'}`}>
               {weather.windMph ?? '—'}
             </p>
             <p className="text-sm font-semibold text-slate-500 mb-0.5">mph</p>
@@ -194,9 +186,9 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
             icon={<span className="text-[11px]">{moon.emoji}</span>}
             className="sm:col-span-2"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
               {/* Left: rating + moon phase */}
-              <div className="flex-1 min-w-0">
+              <div>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${solunarColors}`}>
                   {moon.solunarLabel}
                 </span>
@@ -205,7 +197,7 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
                 </p>
               </div>
               {/* Right: bite windows */}
-              <div className="text-right shrink-0">
+              <div className="text-right ml-auto shrink-0">
                 {moon.majorPeriods.length > 0 && (
                   <div className="mb-1">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Major</p>
@@ -237,11 +229,11 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
             } />}
             className="sm:col-span-2"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
               {/* Left: elevation + trend */}
-              <div className="flex-1 min-w-0">
+              <div>
                 <div className="flex items-end gap-1.5">
-                  <p className="text-2xl font-extrabold text-slate-800 leading-none">
+                  <p className="text-2xl font-bold text-slate-800 leading-none">
                     {lakeLevel.valueFt.toLocaleString()}
                   </p>
                   <p className="text-sm font-semibold text-slate-400 mb-0.5">ft</p>
@@ -263,7 +255,7 @@ export function ConditionsPanel({ weather, waterTempF, waterTempSource, lakeId }
               </div>
               {/* Right: % full + bar */}
               {lakeLevel.percentFull != null && lakeLevel.percentFull > 0 && (
-                <div className="shrink-0 w-24">
+                <div className="shrink-0 w-24 ml-auto">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pool Capacity</p>
                   <p className="text-base font-bold text-slate-700">{lakeLevel.percentFull}%</p>
                   <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1">
