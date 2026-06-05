@@ -151,6 +151,43 @@ function getTackleSetup(baitType: string, _weightOz: number) {
   return { reel: 'Baitcaster', rod: `7'0" Medium Heavy Fast Action`, lineType: 'Fluorocarbon', lineLb: '12-17 lb' }
 }
 
+// Score a technique report by relevance to current fishing conditions.
+// Higher score = more relevant. Used to re-order reports after water temp is available.
+function scoreReportRelevance(report: any, waterTempF: number | null, season?: string | null): number {
+  let score = 0
+  const wt = report.conditions?.[0]?.water_temp_f
+
+  // Water temp proximity — primary signal (reports within a few degrees of current temp are most useful)
+  if (wt != null && waterTempF != null) {
+    const diff = Math.abs(wt - waterTempF)
+    if (diff <= 3)       score += 10
+    else if (diff <= 7)  score += 7
+    else if (diff <= 12) score += 4
+    else if (diff <= 20) score += 2
+    // > 20°F apart: 0
+  } else {
+    score += 2 // no water temp in report: neutral, don't penalise
+  }
+
+  // Season match
+  if (season && report.season && report.season.toLowerCase() === season.toLowerCase()) {
+    score += 5
+  }
+
+  // Confidence
+  if (report.confidence === 'high')        score += 3
+  else if (report.confidence === 'medium') score += 1
+
+  // Recency (newer reports slightly favoured within the same relevance band)
+  if (report.reported_date) {
+    const age = new Date().getFullYear() - new Date(report.reported_date).getFullYear()
+    if (age <= 1)      score += 2
+    else if (age <= 3) score += 1
+  }
+
+  return score
+}
+
 function toggleMultiFilter(
   setter: React.Dispatch<React.SetStateAction<any>>,
   key: string,
@@ -961,6 +998,15 @@ export default function SearchPage() {
         } catch { /* weather is optional */ }
       }
 
+      // Re-order reports by relevance to current conditions (water temp proximity + season match).
+      // Done here, after water temp is known, since temp isn't available at search time.
+      const sortedReports = [...(data.reports || [])].sort((a, b) =>
+        scoreReportRelevance(b, currentWaterTempF, currentWeather?.season) -
+        scoreReportRelevance(a, currentWaterTempF, currentWeather?.season)
+      )
+      // Update result so the UI and secondary rec path both use the relevance-sorted list
+      setResult((prev: any) => prev ? { ...prev, reports: sortedReports } : prev)
+
       // Build filters: use scenario filters for future trips, now filters for today
       fetch('/api/summary', {
         method: 'POST',
@@ -972,7 +1018,7 @@ export default function SearchPage() {
           sampleSize: data.sampleSize,
           topBaits: data.topBaits,
           topPatterns: data.topPatterns,
-          reports: data.reports,
+          reports: sortedReports,
           weather: currentWeather,
           waterTempF: currentWaterTempF,
           waterTempSource: waterTempSource,
@@ -1589,7 +1635,7 @@ export default function SearchPage() {
                 </button>
               </div>
               {reportsOpen && (() => {
-                const allReports = result.reports.slice(0, 20)
+                const allReports = result.reports
                 const richReports = allReports.filter((r: any) => r.bait_used?.length > 0 || r.angler_name)
                 const thinReports = allReports.filter((r: any) => !r.bait_used?.length && !r.angler_name)
                 return (

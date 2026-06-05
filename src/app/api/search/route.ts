@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
     unfilteredCount: reports?.length || 0,
     topBaits,
     topPatterns,
-    reports: reportsForAgg.slice(0, 20),
+    reports: reportsForAgg,
     coords: { lat: water.lat, lng: water.lng },
   })
 }
