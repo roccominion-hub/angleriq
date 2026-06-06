@@ -22,7 +22,7 @@ export interface ChatContext {
 interface Message {
   role: 'user' | 'assistant'
   content: string
-  suggestedLake?: string  // parsed from [LAKE:...] marker, stripped from content
+  suggestedLakes?: string[]  // parsed from [LAKE:...] markers, stripped from content
 }
 
 // ── Starter prompts ────────────────────────────────────────────────────────
@@ -44,16 +44,15 @@ function getReportPrompts(lake: string): string[] {
 }
 
 // ── Lake marker parser ────────────────────────────────────────────────────
-// The AI appends [LAKE:Name, State] when recommending a fishery.
-// Strip the marker from displayed text and return both.
+// The AI appends one [LAKE:Name, State] marker per recommended lake.
+// Strip all markers from displayed text and return the lake names.
 
-function parseLakeMarker(text: string): { content: string; suggestedLake?: string } {
-  const match = text.match(/\[LAKE:([^\]]+)\]\s*$/m)
-  if (!match) return { content: text }
-  return {
-    content: text.replace(/\n?\[LAKE:[^\]]+\]\s*$/m, '').trimEnd(),
-    suggestedLake: match[1].trim(),
-  }
+function parseLakeMarkers(text: string): { content: string; suggestedLakes?: string[] } {
+  const matches = [...text.matchAll(/\[LAKE:([^\]]+)\]/g)]
+  if (matches.length === 0) return { content: text }
+  const lakes = [...new Set(matches.map(m => m[1].trim()))]
+  const content = text.replace(/\n?\[LAKE:[^\]]+\]/g, '').trimEnd()
+  return { content, suggestedLakes: lakes }
 }
 
 // ── Markdown renderer ──────────────────────────────────────────────────────
@@ -167,15 +166,15 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
         const { done, value } = await reader.read()
         if (done) break
         accumulated += decoder.decode(value, { stream: true })
-        // Strip lake marker during streaming too so it never flashes on screen
-        const { content } = parseLakeMarker(accumulated)
+        // Strip lake markers during streaming so they never flash on screen
+        const { content } = parseLakeMarkers(accumulated)
         setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content }])
       }
 
-      // Final parse after stream completes — extract lake suggestion
+      // Final parse after stream completes — extract all lake suggestions
       accumulated += decoder.decode()
-      const { content, suggestedLake } = parseLakeMarker(accumulated)
-      setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content, suggestedLake }])
+      const { content, suggestedLakes } = parseLakeMarkers(accumulated)
+      setMessages([...historyBeforeSend, userMsg, { role: 'assistant', content, suggestedLakes }])
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         setMessages([
@@ -294,17 +293,20 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
                   </div>
                 </div>
 
-                {/* Run Report button — appears below the message when AI recommends a lake */}
-                {msg.role === 'assistant' && msg.suggestedLake && (
-                  <div className="ml-8 mt-2">
-                    <button
-                      onClick={() => handleRunReport(msg.suggestedLake!)}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors"
-                    >
-                      <Fish size={13} />
-                      Run a Report for {msg.suggestedLake}
-                      <ArrowRight size={13} />
-                    </button>
+                {/* Run Report buttons — one per recommended lake */}
+                {msg.role === 'assistant' && msg.suggestedLakes && msg.suggestedLakes.length > 0 && (
+                  <div className="ml-8 mt-2 flex flex-col gap-1.5">
+                    {msg.suggestedLakes.map((lake) => (
+                      <button
+                        key={lake}
+                        onClick={() => handleRunReport(lake)}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors self-start"
+                      >
+                        <Fish size={13} />
+                        Run a Report for {lake}
+                        <ArrowRight size={13} />
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

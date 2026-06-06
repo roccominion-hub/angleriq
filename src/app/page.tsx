@@ -42,7 +42,7 @@ export default function Home() {
             — then delivers an actionable plan for your day on the water.
           </p>
 
-          <div className="flex gap-3 justify-center">
+          <div className="flex flex-wrap gap-3 justify-center">
             <HomeCTA />
           </div>
 
@@ -99,7 +99,7 @@ export default function Home() {
         <p className="text-blue-100 font-medium mb-8 text-lg">
           Search your lake. Get your game plan. Win more.
         </p>
-        <div className="flex gap-3 justify-center">
+        <div className="flex flex-wrap gap-3 justify-center">
           <HomeCTA variant="light" />
         </div>
       </section>

@@ -216,10 +216,14 @@ export async function POST(req: NextRequest) {
     : ''
 
   // ── Lake suggestion marker instruction ───────────────────────────────────
-  // When the AI recommends a specific lake, it appends [LAKE:Name, State].
-  // The client strips this from display and renders a "Run Report" button.
+  // When the AI recommends lakes, it appends one [LAKE:Name, State] marker
+  // per recommended lake. The client strips them and renders "Run Report" buttons.
   const lakeMarkerInstruction = `
-LAKE REPORT SUGGESTION: When you identify a specific lake as a strong recommendation for the angler to fish — whether answering a direct "where should I go" question or pivoting to a nearby lake — append exactly this marker on a new line at the very end of your response: [LAKE:Exact Lake Name, State Abbreviation] (e.g. [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK]). Only include this marker when you are genuinely recommending a lake the angler should consider fishing. Do not include it for every lake you mention — only the one you'd most recommend.`
+LAKE REPORT SUGGESTION: When you recommend specific lakes to fish — whether answering "where should I go", comparing fisheries, or suggesting alternatives — append a [LAKE:Exact Lake Name, State Abbreviation] marker for EACH lake you recommend, one per line, at the very end of your response. Examples: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK]. Rules:
+- Include a marker for every lake you'd genuinely suggest the angler consider fishing — not every lake you mention, only ones you'd recommend.
+- If recommending multiple lakes (e.g. "I'd suggest Fork, Rayburn, or Texoma"), emit all three markers.
+- If the angler asks you to "generate a report" or "run a report" or "pull up the intel" for any lake you mentioned — including lakes from earlier in the conversation — emit the [LAKE:...] marker for that lake immediately, do not say you cannot do it.
+- If you've already recommended a lake and the angler asks for another recommendation, emit a new marker for that lake.`
 
   // ── System prompts ────────────────────────────────────────────────────────
   let systemPrompt: string
@@ -266,6 +270,8 @@ RULES:
 - Keep answers concise and actionable unless more detail is requested.
 - Never recommend trolling.
 - Stay on topic: bass fishing and related fishing subjects only.
+- TECHNIQUE EXPERTISE: You are an expert in ALL bass fishing techniques, not just what appears in the current lake report. When an angler asks about a specific technique (dock skipping, flipping, punching, drop shot, ned rig, shakey head, topwater walking, frog fishing, etc.) draw on your full expert knowledge even if it isn't mentioned in the tournament intel above. Technique questions should always get accurate, detailed answers.
+- DOCK SKIPPING SPECIFICALLY: Dock skipping is a finesse/power technique using SOFT PLASTICS (Senko/stick bait, tube, craw, beaver, worm) skipped with a spinning or baitcaster setup far back under shaded boat docks — especially long docks over deeper water adjacent to creek channels, points, or main lake depth. It is NOT a jerkbait technique. Target docks with shade over water 4–10+ feet deep and quick access to deeper water. Summer and post-spawn dock skipping is proven on TX/OK fisheries when water temps are 75°F+.
 ${lakeMarkerInstruction}`
   }
 

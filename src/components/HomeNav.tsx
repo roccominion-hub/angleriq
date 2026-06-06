@@ -41,12 +41,14 @@ export function HomeNav() {
         <Logo className="h-8 w-auto" variant="light" />
         <div className="flex gap-3 items-center">
           {/* Ask AnglerIQ — always visible */}
+          {/* Icon-only on mobile, full label on sm+ */}
           <button
             onClick={handleAskClick}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white text-sm font-bold px-4 py-1.5 rounded-full transition-all shadow-sm shadow-blue-500/30"
+            className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white text-sm font-bold px-3 sm:px-4 py-1.5 rounded-full transition-all shadow-sm shadow-blue-500/30"
+            aria-label="Ask AnglerIQ"
           >
-            <MessageCircle size={14} />
-            Ask AnglerIQ
+            <MessageCircle size={15} />
+            <span className="hidden sm:inline">Ask AnglerIQ</span>
           </button>
 
           {user ? (
