@@ -219,11 +219,15 @@ export async function POST(req: NextRequest) {
   // When the AI recommends lakes, it appends one [LAKE:Name, State] marker
   // per recommended lake. The client strips them and renders "Run Report" buttons.
   const lakeMarkerInstruction = `
-LAKE REPORT SUGGESTION: When you recommend specific lakes to fish — whether answering "where should I go", comparing fisheries, or suggesting alternatives — append a [LAKE:Exact Lake Name, State Abbreviation] marker for EACH lake you recommend, one per line, at the very end of your response. Examples: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK]. Rules:
-- Include a marker for every lake you'd genuinely suggest the angler consider fishing — not every lake you mention, only ones you'd recommend.
-- If recommending multiple lakes (e.g. "I'd suggest Fork, Rayburn, or Texoma"), emit all three markers.
-- If the angler asks you to "generate a report" or "run a report" or "pull up the intel" for any lake you mentioned — including lakes from earlier in the conversation — emit the [LAKE:...] marker for that lake immediately, do not say you cannot do it.
-- If you've already recommended a lake and the angler asks for another recommendation, emit a new marker for that lake.`
+LAKE REPORT MARKERS — MANDATORY: Every lake you recommend must have a [LAKE:Exact Lake Name, State Abbreviation] marker appended at the very end of your response, one per line. There is no limit. If you recommend 4 lakes, emit 4 markers. If you recommend 6, emit 6.
+
+Format: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK] or [LAKE:Grand Lake, OK]
+
+Rules:
+- COUNT CAREFULLY: Before finishing your response, count how many lakes you recommended by name. Emit exactly that many markers — one for each, in the same order you mentioned them.
+- Every named lake you suggest the angler consider fishing must have a marker. No exceptions.
+- Do NOT emit markers for lakes you merely mentioned in passing or used as a contrast/comparison without recommending.
+- If the angler asks you to "generate a report", "run a report", or "pull up the intel" for any lake you mentioned — including lakes from earlier in the conversation — emit the [LAKE:...] marker for that lake immediately. Do not say you cannot do it.`
 
   // ── System prompts ────────────────────────────────────────────────────────
   let systemPrompt: string
