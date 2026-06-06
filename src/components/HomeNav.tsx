@@ -146,7 +146,7 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
 
       <button
         onClick={handleAskClick}
-        className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white font-bold text-base px-7 rounded-xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-400/40 hover:-translate-y-px"
+        className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300 text-white font-bold text-base px-7 py-3 rounded-xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-400/40 hover:-translate-y-px"
       >
         <MessageCircle size={18} />
         Ask AnglerIQ
