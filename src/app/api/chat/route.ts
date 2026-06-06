@@ -54,6 +54,59 @@ export async function POST(req: NextRequest) {
   const embedding = await generateEmbedding(ragQueryText)
   let ragChunks: string[] = []
   let lureChunks: string[] = []
+  const lureSeen = new Set<string>()  // shared dedup set across both lure passes
+
+  // ── Lure catalog — Pass 1: keyword name/brand search ─────────────────────
+  // Runs unconditionally — no Voyage call needed. Catches explicit bait names
+  // ("Whopper Plopper", "JackHammer", "Senko") even when rate-limited.
+  //
+  // Searches the `name` and `brand` columns ONLY (not chunk_text).
+  // Product names don't contain common English words, so there are no false
+  // positives from words like "fish", "how", "the", "run" that appear in
+  // every chunk_text description.
+  const baitNames = context.topBaits?.slice(0, 5).map(b => b.name) ?? []
+
+  // Extract meaningful words: 3+ chars, not common stop words
+  const STOP_WORDS = new Set([
+    // Common English
+    'the','and','for','are','but','not','you','all','can','her','was','one','our',
+    'out','were','they','this','that','with','have','from','had','his','him','has',
+    'its','how','who','what','when','will','would','could','your','about','tell',
+    'does','into','just','also','like','some','more','than','should','use','best',
+    'get','got','put','make','good','work','want','need','give','using','fish',
+    // Generic fishing words that appear as brand substrings (would cause false positives)
+    'bait','lure','bass','fishing','lures',
+  ])
+  const messageWords = message
+    .replace(/[^a-z0-9\s\-]/gi, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !STOP_WORDS.has(w.toLowerCase()))
+
+  // Also include full topBait name phrases (split into words for the name search)
+  const baitWords = baitNames.flatMap(n =>
+    n.replace(/[^a-z0-9\s\-]/gi, ' ').split(/\s+/).filter(w => w.length >= 3)
+  )
+
+  const allSearchTerms = [...new Set([...messageWords, ...baitWords])]
+
+  if (allSearchTerms.length > 0) {
+    // Match against name OR brand columns — avoids false positives from chunk_text
+    const orFilter = allSearchTerms.flatMap(term => [
+      `name.ilike.%${term}%`,
+      `brand.ilike.%${term}%`,
+    ]).join(',')
+    const { data: kwData } = await supabase
+      .from('lure_catalog')
+      .select('chunk_text, brand, name')
+      .or(orFilter)
+      .limit(6)
+    for (const row of kwData ?? []) {
+      if (!lureSeen.has(row.name)) {
+        lureSeen.add(row.name)
+        lureChunks.push(row.chunk_text as string)
+      }
+    }
+  }
 
   if (embedding) {
     // Technique embeddings — lake-filtered in report mode
@@ -88,14 +141,13 @@ export async function POST(req: NextRequest) {
 
     ragChunks = ragChunks.slice(0, 8)
 
-    // ── Lure catalog RAG ─────────────────────────────────────────────────
-    // Pull brand/product data when the message or report context references specific baits.
-    // Always query with a lower threshold — lure descriptions should be factually exact.
-    const lureQueryText = context.topBaits?.length
-      ? `${message} ${context.topBaits.slice(0, 5).map(b => b.name).join(' ')}`
+    // ── Lure catalog — Pass 2: semantic embedding search ──────────────────
+    // Catches technique/category queries ("deep diving crankbait for ledges")
+    // that don't name a specific bait. Deduped against Pass 1 keyword results.
+    const lureQueryText = baitNames.length
+      ? `${message} ${baitNames.join(' ')}`
       : message
 
-    // Use a fresh embedding scoped to the lure query if it differs meaningfully
     const lureEmbedding = lureQueryText !== ragQueryText
       ? (await generateEmbedding(lureQueryText)) ?? embedding
       : embedding
@@ -103,10 +155,18 @@ export async function POST(req: NextRequest) {
     const { data: lureData } = await supabase.rpc('match_lure_catalog', {
       query_embedding: lureEmbedding,
       match_count: 4,
-      match_threshold: 0.35,
+      match_threshold: 0.30,
     })
-    lureChunks = (lureData ?? []).map((c: any) => c.chunk_text as string)
+    for (const row of lureData ?? []) {
+      if (!lureSeen.has(row.name)) {
+        lureSeen.add(row.name)
+        lureChunks.push(row.chunk_text as string)
+      }
+    }
   }
+
+  // Cap total lure chunks at 6 to keep prompt size reasonable
+  lureChunks = lureChunks.slice(0, 6)
 
   const ragSection =
     ragChunks.length > 0
