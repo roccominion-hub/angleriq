@@ -4,16 +4,27 @@ import { Search, X, Star, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-interface Lake { id: string; name: string; state: string }
+interface Lake { id: string; name: string; state: string; lat?: number | null; lng?: number | null }
+
+export interface LogCatch {
+  weight?: number | null
+  length?: number | null
+  bait?: string | null
+  technique?: string | null
+  time?: string | null
+  notes?: string | null
+}
 
 export interface LogDraft {
   id?: string
   lake_id?: string | null
   lake_name: string
   lake_state?: string | null
+  lat?: number | null
+  lng?: number | null
   spot?: string | null
   trip_date: string
-  time_of_day?: string | null
+  time_of_day?: string[] | null
   water_temp_f?: number | null
   air_temp_f?: number | null
   sky?: string | null
@@ -23,10 +34,12 @@ export interface LogDraft {
   techniques?: string[]
   baits?: string[]
   structure?: string[]
-  depth?: string | null
+  depth?: string[] | null
   pattern_notes?: string | null
   fish_count?: number | null
   big_fish_lbs?: number | null
+  big_fish_entries?: number[] | null
+  catches?: LogCatch[] | null
   total_weight_lbs?: number | null
   rating?: number | null
   notes?: string | null
@@ -37,6 +50,7 @@ const SKY_OPTIONS = ['sunny', 'partly cloudy', 'overcast', 'rain']
 const WIND_OPTIONS = ['calm', 'light', 'moderate', 'strong']
 const CLARITY_OPTIONS = ['clear', 'stained', 'muddy']
 const LEVEL_OPTIONS = ['low', 'normal', 'high', 'rising', 'falling']
+const DEPTH_OPTIONS = ['0-5 ft', '5-10 ft', '10-15 ft', '15-20 ft', '20-30 ft', '30+ ft']
 const TECHNIQUE_OPTIONS = [
   'flipping', 'pitching', 'punching', 'dock skipping', 'drop shot', 'ned rig', 'shakey head',
   'crankbaiting', 'jerkbaiting', 'topwater', 'frogging', 'chatterbait', 'spinnerbait',
@@ -207,10 +221,15 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
   const [lakeState, setLakeState] = useState<string | null>(initial?.lake_state || null)
   const [spot, setSpot] = useState(initial?.spot || '')
   const [tripDate, setTripDate] = useState(initial?.trip_date || today)
-  const [timeOfDay, setTimeOfDay] = useState<string | null>(initial?.time_of_day || null)
+  const [timeOfDay, setTimeOfDay] = useState<string[]>(initial?.time_of_day || [])
 
   const [fishCount, setFishCount] = useState<string>(initial?.fish_count != null ? String(initial.fish_count) : '')
-  const [bigFish, setBigFish] = useState<string>(initial?.big_fish_lbs != null ? String(initial.big_fish_lbs) : '')
+  const [bigFishEntries, setBigFishEntries] = useState<number[]>(
+    initial?.big_fish_entries?.length ? initial.big_fish_entries
+    : initial?.big_fish_lbs != null ? [initial.big_fish_lbs]
+    : []
+  )
+  const [bigFishDraft, setBigFishDraft] = useState('')
   const [totalWeight, setTotalWeight] = useState<string>(initial?.total_weight_lbs != null ? String(initial.total_weight_lbs) : '')
   const [rating, setRating] = useState<number | null>(initial?.rating ?? null)
 
@@ -220,22 +239,103 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
   const [wind, setWind] = useState<string | null>(initial?.wind || null)
   const [clarity, setClarity] = useState<string | null>(initial?.water_clarity || null)
   const [level, setLevel] = useState<string | null>(initial?.water_level || null)
+  const [autoFillNote, setAutoFillNote] = useState('')
+  const [autoFilling, setAutoFilling] = useState(false)
+  const [lakeCoords, setLakeCoords] = useState<{ lat: number; lng: number } | null>(
+    initial?.lat != null && initial?.lng != null ? { lat: initial.lat, lng: initial.lng } : null
+  )
+  const conditionsTouchedRef = useRef(false)
 
   const [techniques, setTechniques] = useState<string[]>(initial?.techniques || [])
   const [baits, setBaits] = useState<string[]>(initial?.baits || [])
   const [structure, setStructure] = useState<string[]>(initial?.structure || [])
-  const [depth, setDepth] = useState(initial?.depth || '')
+  const [depth, setDepth] = useState<string[]>(initial?.depth || [])
   const [patternNotes, setPatternNotes] = useState(initial?.pattern_notes || '')
+
+  const [catches, setCatches] = useState<LogCatch[]>(initial?.catches || [])
 
   const [notes, setNotes] = useState(initial?.notes || '')
 
-  const [openSection, setOpenSection] = useState<'conditions' | 'technique' | null>(null)
+  const [openSection, setOpenSection] = useState<'conditions' | 'technique' | 'catches' | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   function toggle(arr: string[], setArr: (v: string[]) => void, val: string) {
     setArr(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
   }
+
+  function addBigFish() {
+    const n = parseFloat(bigFishDraft)
+    if (!isNaN(n) && n > 0) setBigFishEntries(prev => [...prev, n])
+    setBigFishDraft('')
+  }
+
+  function addCatch() {
+    setCatches(prev => [...prev, {}])
+    setOpenSection('catches')
+  }
+  function updateCatch(i: number, patch: Partial<LogCatch>) {
+    setCatches(prev => prev.map((c, idx) => idx === i ? { ...c, ...patch } : c))
+  }
+  function removeCatch(i: number) {
+    setCatches(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  // Mark conditions as user-touched once they manually change anything in that
+  // section, so a later auto-fill (e.g. lake/date change) won't clobber it.
+  function markTouched<T>(setter: (v: T) => void) {
+    return (v: T) => { conditionsTouchedRef.current = true; setter(v) }
+  }
+
+  // Auto-populate Conditions from real weather/lake data once both a lake (with
+  // known coordinates) and a date are set — but only fill fields the angler
+  // hasn't already touched, so it never overwrites a manual entry.
+  useEffect(() => {
+    if (!lakeCoords || !tripDate) return
+    let cancelled = false
+    setAutoFilling(true)
+    setAutoFillNote('')
+
+    function bucketWind(mph: number | null | undefined): string | null {
+      if (mph == null) return null
+      if (mph < 5) return 'calm'
+      if (mph < 12) return 'light'
+      if (mph < 20) return 'moderate'
+      return 'strong'
+    }
+    function mapSky(s: string | null | undefined): string | null {
+      if (!s) return null
+      const v = s.toLowerCase()
+      if (v.includes('sun') || v.includes('clear')) return 'sunny'
+      if (v.includes('partly')) return 'partly cloudy'
+      if (v.includes('rain') || v.includes('storm')) return 'rain'
+      if (v.includes('cloud') || v.includes('overcast')) return 'overcast'
+      return null
+    }
+
+    Promise.all([
+      fetch(`/api/weather?lat=${lakeCoords.lat}&lng=${lakeCoords.lng}&date=${tripDate}`).then(r => r.json()).catch(() => null),
+      lakeId ? fetch(`/api/lake-conditions?lakeId=${lakeId}`).then(r => r.json()).catch(() => null) : Promise.resolve(null),
+    ]).then(([weatherData, condData]) => {
+      if (cancelled) return
+      const conditions = condData?.conditions
+      const filled: string[] = []
+
+      if (!conditionsTouchedRef.current) {
+        if (!waterTemp && conditions?.waterTempF != null) { setWaterTemp(String(Math.round(conditions.waterTempF))); filled.push('water temp') }
+        if (!airTemp && weatherData?.tempF != null) { setAirTemp(String(Math.round(weatherData.tempF))); filled.push('air temp') }
+        if (!sky) { const s = mapSky(weatherData?.skyCondition); if (s) { setSky(s); filled.push('sky') } }
+        if (!wind) { const w = bucketWind(weatherData?.windMph); if (w) { setWind(w); filled.push('wind') } }
+        if (!level && conditions?.waterLevel?.status) { setLevel(String(conditions.waterLevel.status).toLowerCase()); filled.push('water level') }
+      }
+
+      if (filled.length) setAutoFillNote(`Auto-filled ${filled.join(', ')} from today's conditions for this lake — adjust anything that doesn't match what you saw on the water.`)
+      setAutoFilling(false)
+    }).catch(() => { if (!cancelled) setAutoFilling(false) })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lakeCoords, tripDate, lakeId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -247,6 +347,8 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
       lake_id: lakeId,
       lake_name: lakeName.trim(),
       lake_state: lakeState,
+      lat: lakeCoords?.lat ?? null,
+      lng: lakeCoords?.lng ?? null,
       spot: spot.trim() || null,
       trip_date: tripDate,
       time_of_day: timeOfDay,
@@ -254,10 +356,12 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
       air_temp_f: airTemp ? Number(airTemp) : null,
       sky, wind, water_clarity: clarity, water_level: level,
       techniques, baits, structure,
-      depth: depth.trim() || null,
+      depth,
       pattern_notes: patternNotes.trim() || null,
       fish_count: fishCount ? parseInt(fishCount, 10) : null,
-      big_fish_lbs: bigFish ? Number(bigFish) : null,
+      big_fish_entries: bigFishEntries,
+      big_fish_lbs: bigFishEntries.length ? Math.max(...bigFishEntries) : null,
+      catches: catches.filter(c => c.weight != null || c.length != null || c.bait || c.technique || c.time || c.notes),
       total_weight_lbs: totalWeight ? Number(totalWeight) : null,
       rating,
       notes: notes.trim() || null,
@@ -288,8 +392,12 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
             value={lakeName}
             state={lakeState}
             onSelect={(lake, raw) => {
-              if (lake) { setLakeName(lake.name); setLakeId(lake.id); setLakeState(lake.state) }
-              else { setLakeName(raw); setLakeId(null); setLakeState(null) }
+              if (lake) {
+                setLakeName(lake.name); setLakeId(lake.id); setLakeState(lake.state)
+                setLakeCoords(lake.lat != null && lake.lng != null ? { lat: lake.lat, lng: lake.lng } : null)
+              } else {
+                setLakeName(raw); setLakeId(null); setLakeState(null); setLakeCoords(null)
+              }
             }}
           />
         </Field>
@@ -298,17 +406,37 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
         </Field>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <Field label="Fish caught">
           <Input type="number" min="0" inputMode="numeric" placeholder="0" value={fishCount} onChange={e => setFishCount(e.target.value)} className="h-9 text-sm" />
         </Field>
-        <Field label="Big fish (lbs)">
-          <Input type="number" min="0" step="0.1" inputMode="decimal" placeholder="—" value={bigFish} onChange={e => setBigFish(e.target.value)} className="h-9 text-sm" />
-        </Field>
-        <Field label="How was it?">
-          <div className="h-9 flex items-center"><StarRating value={rating} onChange={setRating} /></div>
+        <Field label="Big fish (lbs) — add each one">
+          <div>
+            {bigFishEntries.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {bigFishEntries.map((w, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    {w} lb
+                    <button type="button" onClick={() => setBigFishEntries(es => es.filter((_, idx) => idx !== i))} className="hover:text-amber-900"><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <Input
+              type="number" min="0" step="0.1" inputMode="decimal" placeholder="e.g. 5.4 — press Enter to add"
+              value={bigFishDraft}
+              onChange={e => setBigFishDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addBigFish() } }}
+              onBlur={addBigFish}
+              className="h-9 text-sm"
+            />
+          </div>
         </Field>
       </div>
+
+      <Field label="How was the trip overall? (star rating)">
+        <div className="h-9 flex items-center"><StarRating value={rating} onChange={setRating} /></div>
+      </Field>
 
       <Field label="Spot (optional)">
         <Input type="text" placeholder="e.g. north riprap near the dam" value={spot} onChange={e => setSpot(e.target.value)} className="h-9 text-sm" />
@@ -321,19 +449,25 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
         open={openSection === 'conditions'}
         onToggle={() => setOpenSection(s => s === 'conditions' ? null : 'conditions')}
       >
+        {autoFilling && (
+          <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Looking up conditions for this lake and date…</p>
+        )}
+        {!autoFilling && autoFillNote && (
+          <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">{autoFillNote}</p>
+        )}
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Water temp (°F)">
-            <Input type="number" inputMode="decimal" placeholder="—" value={waterTemp} onChange={e => setWaterTemp(e.target.value)} className="h-9 text-sm" />
+            <Input type="number" inputMode="decimal" placeholder="—" value={waterTemp} onChange={e => markTouched(setWaterTemp)(e.target.value)} className="h-9 text-sm" />
           </Field>
           <Field label="Air temp (°F)">
-            <Input type="number" inputMode="decimal" placeholder="—" value={airTemp} onChange={e => setAirTemp(e.target.value)} className="h-9 text-sm" />
+            <Input type="number" inputMode="decimal" placeholder="—" value={airTemp} onChange={e => markTouched(setAirTemp)(e.target.value)} className="h-9 text-sm" />
           </Field>
         </div>
-        <Field label="Time of day"><SingleChoiceChips options={TIME_OPTIONS} value={timeOfDay} onChange={setTimeOfDay} /></Field>
-        <Field label="Sky"><SingleChoiceChips options={SKY_OPTIONS} value={sky} onChange={setSky} /></Field>
-        <Field label="Wind"><SingleChoiceChips options={WIND_OPTIONS} value={wind} onChange={setWind} /></Field>
-        <Field label="Water clarity"><SingleChoiceChips options={CLARITY_OPTIONS} value={clarity} onChange={setClarity} /></Field>
-        <Field label="Water level"><SingleChoiceChips options={LEVEL_OPTIONS} value={level} onChange={setLevel} /></Field>
+        <Field label="Time of day (select all that apply)"><ChipToggleGroup options={TIME_OPTIONS} selected={timeOfDay} onToggle={v => toggle(timeOfDay, setTimeOfDay, v)} /></Field>
+        <Field label="Sky"><SingleChoiceChips options={SKY_OPTIONS} value={sky} onChange={markTouched(setSky)} /></Field>
+        <Field label="Wind"><SingleChoiceChips options={WIND_OPTIONS} value={wind} onChange={markTouched(setWind)} /></Field>
+        <Field label="Water clarity"><SingleChoiceChips options={CLARITY_OPTIONS} value={clarity} onChange={markTouched(setClarity)} /></Field>
+        <Field label="Water level"><SingleChoiceChips options={LEVEL_OPTIONS} value={level} onChange={markTouched(setLevel)} /></Field>
       </Section>
 
       <Section
@@ -345,14 +479,10 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
         <Field label="Techniques"><ChipToggleGroup options={TECHNIQUE_OPTIONS} selected={techniques} onToggle={v => toggle(techniques, setTechniques, v)} /></Field>
         <Field label="Baits"><TagInput values={baits} onChange={setBaits} placeholder="Type a bait and press Enter — e.g. Texas-rigged Senko" /></Field>
         <Field label="Structure / cover"><ChipToggleGroup options={STRUCTURE_OPTIONS} selected={structure} onToggle={v => toggle(structure, setStructure, v)} /></Field>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Depth">
-            <Input type="text" placeholder="e.g. 8-12 ft" value={depth} onChange={e => setDepth(e.target.value)} className="h-9 text-sm" />
-          </Field>
-          <Field label="Total weight (lbs)">
-            <Input type="number" min="0" step="0.1" inputMode="decimal" placeholder="—" value={totalWeight} onChange={e => setTotalWeight(e.target.value)} className="h-9 text-sm" />
-          </Field>
-        </div>
+        <Field label="Depth (select all that apply)"><ChipToggleGroup options={DEPTH_OPTIONS} selected={depth} onToggle={v => toggle(depth, setDepth, v)} /></Field>
+        <Field label="Total weight (lbs)">
+          <Input type="number" min="0" step="0.1" inputMode="decimal" placeholder="—" value={totalWeight} onChange={e => setTotalWeight(e.target.value)} className="h-9 text-sm sm:max-w-[12rem]" />
+        </Field>
         <Field label="Pattern notes">
           <textarea
             value={patternNotes}
@@ -362,6 +492,48 @@ export function LogEntryForm({ initial, onCancel, onSaved }: { initial?: Partial
             className="w-full bg-white border border-slate-200 text-slate-800 text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400 resize-none"
           />
         </Field>
+      </Section>
+
+      <Section
+        title="Individual Catches (optional)"
+        subtitle="Log specific fish — weight, length, bait, time — one by one"
+        open={openSection === 'catches'}
+        onToggle={() => setOpenSection(s => s === 'catches' ? null : 'catches')}
+      >
+        {catches.length === 0 && (
+          <p className="text-xs text-slate-400">No individual catches logged yet — add one if you want to track specific fish in detail.</p>
+        )}
+        <div className="space-y-3">
+          {catches.map((c, i) => (
+            <div key={i} className="border border-slate-200 rounded-lg p-3 space-y-2.5 relative">
+              <button type="button" onClick={() => removeCatch(i)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500"><X size={14} /></button>
+              <p className="text-xs font-bold text-slate-500">Catch #{i + 1}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <Field label="Weight (lbs)">
+                  <Input type="number" min="0" step="0.1" inputMode="decimal" placeholder="—" value={c.weight ?? ''} onChange={e => updateCatch(i, { weight: e.target.value ? Number(e.target.value) : null })} className="h-9 text-sm" />
+                </Field>
+                <Field label="Length (in)">
+                  <Input type="number" min="0" step="0.1" inputMode="decimal" placeholder="—" value={c.length ?? ''} onChange={e => updateCatch(i, { length: e.target.value ? Number(e.target.value) : null })} className="h-9 text-sm" />
+                </Field>
+                <Field label="Time">
+                  <Input type="text" placeholder="e.g. 7:40am" value={c.time ?? ''} onChange={e => updateCatch(i, { time: e.target.value })} className="h-9 text-sm" />
+                </Field>
+                <Field label="Bait">
+                  <Input type="text" placeholder="e.g. Senko" value={c.bait ?? ''} onChange={e => updateCatch(i, { bait: e.target.value })} className="h-9 text-sm" />
+                </Field>
+              </div>
+              <Field label="Technique">
+                <Input type="text" placeholder="e.g. wacky rig along the riprap" value={c.technique ?? ''} onChange={e => updateCatch(i, { technique: e.target.value })} className="h-9 text-sm" />
+              </Field>
+              <Field label="Notes">
+                <Input type="text" placeholder="anything else worth noting about this fish" value={c.notes ?? ''} onChange={e => updateCatch(i, { notes: e.target.value })} className="h-9 text-sm" />
+              </Field>
+            </div>
+          ))}
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={addCatch} className="text-xs h-8 border-slate-200 text-slate-600 hover:bg-slate-50">
+          + Add a catch
+        </Button>
       </Section>
 
       <Field label="Notes (optional)">

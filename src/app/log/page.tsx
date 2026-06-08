@@ -8,9 +8,10 @@ import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
+import { NavUserMenu } from '@/components/NavUserMenu'
 import {
   Plus, MapPin, Calendar, Fish, Star, Trophy, Award, Compass, Trash2, Pencil,
-  ChevronDown, ChevronUp, X, LogOut,
+  ChevronDown, ChevronUp, X,
 } from 'lucide-react'
 
 const MyWatersMap = dynamic(() => import('@/components/MyWatersMap').then(m => m.MyWatersMap), { ssr: false })
@@ -48,7 +49,7 @@ function fmtDate(d: string) {
 function LogCard({ log, onEdit, onDelete }: { log: any; onEdit: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const hasDetail = !!(log.water_temp_f || log.air_temp_f || log.sky || log.wind || log.water_clarity || log.water_level
-    || (log.techniques?.length) || (log.baits?.length) || (log.structure?.length) || log.depth || log.pattern_notes || log.notes)
+    || (log.techniques?.length) || (log.baits?.length) || (log.structure?.length) || (log.depth?.length) || log.pattern_notes || log.notes || (log.catches?.length))
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5">
@@ -57,7 +58,9 @@ function LogCard({ log, onEdit, onDelete }: { log: any; onEdit: () => void; onDe
           <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
             <p className="font-extrabold text-slate-900 truncate">{log.lake_name}</p>
             {log.lake_state && <span className="text-xs font-semibold text-slate-400">{log.lake_state}</span>}
-            {log.time_of_day && <span className="text-xs text-slate-400">{TIME_LABELS[log.time_of_day] || log.time_of_day}</span>}
+            {Array.isArray(log.time_of_day) && log.time_of_day.length > 0 && (
+              <span className="text-xs text-slate-400">{log.time_of_day.map((t: string) => TIME_LABELS[t] || t).join(' · ')}</span>
+            )}
           </div>
           <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><Calendar size={12} /> {fmtDate(log.trip_date)}</span>
@@ -78,7 +81,12 @@ function LogCard({ log, onEdit, onDelete }: { log: any; onEdit: () => void; onDe
               <Fish size={12} /> {log.fish_count} {log.fish_count === 1 ? 'fish' : 'fish'}
             </span>
           )}
-          {log.big_fish_lbs != null && (
+          {Array.isArray(log.big_fish_entries) && log.big_fish_entries.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold">
+              <Trophy size={12} /> {log.big_fish_entries.slice().sort((a: number, b: number) => b - a).map((w: number) => `${w} lb`).join(', ')}
+              {log.big_fish_entries.length > 1 ? ' kickers' : ' kicker'}
+            </span>
+          ) : log.big_fish_lbs != null && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold">
               <Trophy size={12} /> {log.big_fish_lbs} lb kicker
             </span>
@@ -109,16 +117,34 @@ function LogCard({ log, onEdit, onDelete }: { log: any; onEdit: () => void; onDe
               {log.water_level && <span className="capitalize">{log.water_level} level</span>}
             </div>
           )}
-          {(log.techniques?.length > 0 || log.baits?.length > 0 || log.structure?.length > 0 || log.depth) && (
+          {(log.techniques?.length > 0 || log.baits?.length > 0 || log.structure?.length > 0 || log.depth?.length > 0) && (
             <div className="space-y-1.5">
               {log.techniques?.length > 0 && <p className="text-xs"><span className="font-semibold text-slate-700">Techniques:</span> {log.techniques.join(', ')}</p>}
               {log.baits?.length > 0 && <p className="text-xs"><span className="font-semibold text-slate-700">Baits:</span> {log.baits.join(', ')}</p>}
               {log.structure?.length > 0 && <p className="text-xs"><span className="font-semibold text-slate-700">Structure:</span> {log.structure.join(', ')}</p>}
-              {log.depth && <p className="text-xs"><span className="font-semibold text-slate-700">Depth:</span> {log.depth}</p>}
+              {log.depth?.length > 0 && <p className="text-xs"><span className="font-semibold text-slate-700">Depth:</span> {log.depth.join(', ')}</p>}
             </div>
           )}
           {log.pattern_notes && <p className="text-xs italic text-slate-500">"{log.pattern_notes}"</p>}
           {log.notes && <p className="text-xs text-slate-500">{log.notes}</p>}
+          {Array.isArray(log.catches) && log.catches.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs font-semibold text-slate-700 mb-1.5">Individual catches ({log.catches.length})</p>
+              <div className="space-y-1.5">
+                {log.catches.map((c: any, i: number) => (
+                  <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5">
+                    <span className="font-bold text-slate-700">#{i + 1}</span>
+                    {c.weight != null && <span>{c.weight} lb</span>}
+                    {c.length != null && <span>{c.length}&quot;</span>}
+                    {c.bait && <span className="text-slate-500">{c.bait}</span>}
+                    {c.technique && <span className="text-slate-500">{c.technique}</span>}
+                    {c.time && <span className="text-slate-400">{c.time}</span>}
+                    {c.notes && <span className="text-slate-400 italic">&ldquo;{c.notes}&rdquo;</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -169,11 +195,6 @@ export default function LogPage() {
     loadAll()
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -197,10 +218,7 @@ export default function LogPage() {
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
         <div className="flex items-center gap-4">
-          <Link href="/account" className="text-sm font-semibold text-slate-500 hover:text-slate-700">My Account</Link>
-          <button onClick={handleSignOut} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 font-semibold">
-            <LogOut size={14} /> Sign Out
-          </button>
+          <NavUserMenu />
         </div>
       </nav>
 
@@ -233,7 +251,8 @@ export default function LogPage() {
                 water_clarity: editing.water_clarity, water_level: editing.water_level,
                 techniques: editing.techniques, baits: editing.baits, structure: editing.structure,
                 depth: editing.depth, pattern_notes: editing.pattern_notes,
-                fish_count: editing.fish_count, big_fish_lbs: editing.big_fish_lbs, total_weight_lbs: editing.total_weight_lbs,
+                fish_count: editing.fish_count, big_fish_lbs: editing.big_fish_lbs, big_fish_entries: editing.big_fish_entries,
+                catches: editing.catches, total_weight_lbs: editing.total_weight_lbs,
                 rating: editing.rating, notes: editing.notes,
               } as LogDraft : undefined}
               onCancel={() => { setShowForm(false); setEditing(null) }}

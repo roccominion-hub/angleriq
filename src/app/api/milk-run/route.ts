@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserIdFromRequest, getPersonalIntelSection } from '@/lib/personalIntel'
 
 export async function POST(req: NextRequest) {
   const { lake, state, intel, today, topBaits, topPatterns, weather, filters } = await req.json()
@@ -7,12 +8,19 @@ export async function POST(req: NextRequest) {
     ? `${weather.tempF}°F, ${weather.skyCondition}, ${weather.timeOfDay}, ${weather.season}`
     : filters?.season || 'current conditions'
 
+  const personalIntelSection = await getPersonalIntelSection(await getUserIdFromRequest(), lake, {
+    waterTempF: weather?.waterTempF ?? null,
+    season: weather?.season ?? filters?.season ?? null,
+    clarity: filters?.waterClarity && filters.waterClarity !== 'all' ? filters.waterClarity : null,
+  })
+
   const prompt = `You are an expert bass fishing tournament guide for ${lake}, ${state}.
 
 CRITICAL RULES:
 - Recommend artificial lures ONLY. Never suggest live bait, cut bait, or natural bait.
 - Target largemouth, smallmouth, spotted, and Guadalupe bass only. Do not mention other species as targets.
 - Use bait-category-appropriate colors: frog colors (black, white, natural, olive) for frogs; manufacturer color names (sexy shad, ghost, chartreuse shad, bone) for hard baits; soft plastic colors (Green Pumpkin, Watermelon Red, Black/Blue) for soft plastics only.
+${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: ${personalIntelSection.trim()}\n  When entries above are flagged [SIMILAR CONDITIONS TO TODAY] or otherwise clearly relevant, build at least one pattern in the plan directly around what's worked for THIS angler on THIS lake — call it out as informed by their own history (e.g. "Pattern X — built on what's produced for you here before"). Don't force it if their history doesn't fit today's conditions; in that case just let the broader data lead.\n` : ''}
 
 INTELLIGENCE SUMMARY:
 ${intel}

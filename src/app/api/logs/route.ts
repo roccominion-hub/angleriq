@@ -50,7 +50,8 @@ export async function POST(request: Request) {
 
   // When
   if (body.trip_date) row.trip_date = body.trip_date
-  if (body.time_of_day) row.time_of_day = body.time_of_day
+  if (Array.isArray(body.time_of_day)) row.time_of_day = body.time_of_day
+  else if (body.time_of_day) row.time_of_day = [body.time_of_day]
 
   // Environment / Conditions
   if (body.water_temp_f != null) row.water_temp_f = body.water_temp_f
@@ -64,12 +65,18 @@ export async function POST(request: Request) {
   if (Array.isArray(body.techniques)) row.techniques = body.techniques
   if (Array.isArray(body.baits)) row.baits = body.baits
   if (Array.isArray(body.structure)) row.structure = body.structure
-  if (body.depth) row.depth = body.depth
+  if (Array.isArray(body.depth)) row.depth = body.depth
+  else if (body.depth) row.depth = [body.depth]
   if (body.pattern_notes) row.pattern_notes = body.pattern_notes
 
   // Results
   if (body.fish_count != null) row.fish_count = body.fish_count
-  if (body.big_fish_lbs != null) row.big_fish_lbs = body.big_fish_lbs
+  if (Array.isArray(body.big_fish_entries)) {
+    row.big_fish_entries = body.big_fish_entries
+    if (body.big_fish_entries.length > 0) row.big_fish_lbs = Math.max(...body.big_fish_entries)
+  }
+  if (body.big_fish_lbs != null && row.big_fish_lbs == null) row.big_fish_lbs = body.big_fish_lbs
+  if (Array.isArray(body.catches)) row.catches = body.catches
   if (body.total_weight_lbs != null) row.total_weight_lbs = body.total_weight_lbs
   if (body.rating != null) row.rating = body.rating
   if (body.notes) row.notes = body.notes

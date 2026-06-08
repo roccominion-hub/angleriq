@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getLakeRagContext, formatRagContextForPrompt } from '@/lib/rag'
 import { generateEmbedding } from '@/lib/embeddings'
-import { getUserIdFromRequest, getPersonalIntelSection } from '@/lib/personalIntel'
+import { getUserIdFromRequest, getPersonalIntelSection, getMyIntelData } from '@/lib/personalIntel'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -74,6 +74,16 @@ function inferSpawnStage(waterTempF: number | null, state: string): string {
 
 export async function POST(req: NextRequest) {
   const { lake, state, season, sampleSize, topBaits, topPatterns, reports, weather, waterTempF, waterTempSource, filters, lakeId, _secondary } = await req.json()
+
+  // "My Intel" — structured personal-history data for the report UI. Per-user,
+  // so it's computed fresh regardless of the (shared) AI-summary cache state,
+  // and included in every response path below.
+  const myIntelUserId = _secondary ? null : await getUserIdFromRequest()
+  const myIntel = myIntelUserId ? await getMyIntelData(myIntelUserId, lake, {
+    waterTempF: waterTempF ?? null,
+    season: season ?? null,
+    clarity: filters?.waterClarity && filters.waterClarity !== 'all' ? filters.waterClarity : null,
+  }) : null
 
   // Secondary / alternative recommendation — separate prompt, no cache
   if (_secondary) {
@@ -158,7 +168,7 @@ Be direct, specific, and confident. No filler.`
 
   // If both cached, return immediately (no usage charge)
   if (cachedIntel && cachedToday) {
-    return NextResponse.json({ intel: cachedIntel, today: cachedToday, cached: true })
+    return NextResponse.json({ intel: cachedIntel, today: cachedToday, myIntel, cached: true })
   }
 
   // Track usage — only on real AI calls (cache miss)
@@ -167,7 +177,11 @@ Be direct, specific, and confident. No filler.`
   // Personal Intel — the angler's own logged trips to this lake (if any).
   // Surfaces what's actually worked for THEM, woven alongside the broader
   // tournament intel rather than replacing it.
-  const personalIntelSection = await getPersonalIntelSection(await getUserIdFromRequest(), lake)
+  const personalIntelSection = await getPersonalIntelSection(myIntelUserId, lake, {
+    waterTempF: waterTempF ?? null,
+    season: season ?? null,
+    clarity: filters?.waterClarity && filters.waterClarity !== 'all' ? filters.waterClarity : null,
+  })
 
   // Extract all colors from real data
   const colorsFromData: string[] = []
@@ -439,5 +453,5 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     })
   }
 
-  return NextResponse.json({ intel: intelText, today: todayText, cached: false })
+  return NextResponse.json({ intel: intelText, today: todayText, myIntel, cached: false })
 }

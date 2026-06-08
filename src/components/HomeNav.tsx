@@ -75,7 +75,7 @@ export function HomeNav() {
                         <Compass size={14} /> My Fishing Log
                       </Link>
                       <Link href="/account" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                        <BookOpen size={14} /> My Reports
+                        <BookOpen size={14} /> Account
                       </Link>
                       <button
                         onClick={async () => { await supabase.auth.signOut(); setMenuOpen(false); setUser(null) }}

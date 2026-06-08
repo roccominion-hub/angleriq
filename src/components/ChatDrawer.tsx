@@ -31,14 +31,14 @@ const HOMEPAGE_PROMPTS = [
   'Which TX lake is fishing best right now?',
   'Where should I go for big bass this weekend?',
   'What Oklahoma lakes are producing this time of year?',
-  'Best lake for a weekend tournament right now?',
+  'Where have I had the most success?',
 ]
 
 function getReportPrompts(lake: string): string[] {
   return [
     `What's the best time of day to fish ${lake}?`,
     'What depth should I focus on right now?',
-    'What alternative technique would you suggest?',
+    `What is my history on this lake (or similar lakes)?`,
     `Are there nearby lakes with similar patterns worth comparing?`,
   ]
 }

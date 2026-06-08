@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateEmbedding } from '@/lib/embeddings'
-import { getUserIdFromRequest, getPersonalIntelSection } from '@/lib/personalIntel'
+import { getUserIdFromRequest, getPersonalIntelSection, getPersonalIntelOverview } from '@/lib/personalIntel'
 
 function getSupabase() {
   return createClient(
@@ -230,10 +230,14 @@ Rules:
 - Do NOT emit markers for lakes you merely mentioned in passing or used as a contrast/comparison without recommending.
 - If the angler asks you to "generate a report", "run a report", or "pull up the intel" for any lake you mentioned — including lakes from earlier in the conversation — emit the [LAKE:...] marker for that lake immediately. Do not say you cannot do it.`
 
-  // Personal Intel — the angler's own logged trips to the lake under discussion.
-  // Only fetched in report mode, where there's a specific lake to match against.
+  // Personal Intel — the angler's own logged trip history.
+  // Report mode: trips to the specific lake under discussion (+ similar-conditions flags).
+  // Homepage mode: an aggregate "where have I had success" overview across all logged trips.
+  const personalUserId = await getUserIdFromRequest()
   const personalIntelSection = context.mode === 'report' && context.lake
-    ? await getPersonalIntelSection(await getUserIdFromRequest(), context.lake)
+    ? await getPersonalIntelSection(personalUserId, context.lake, { waterTempF: context.waterTempF, season: context.season })
+    : context.mode === 'homepage'
+    ? await getPersonalIntelOverview(personalUserId)
     : ''
 
   // ── System prompts ────────────────────────────────────────────────────────
@@ -243,9 +247,9 @@ Rules:
     systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of Texas and Oklahoma lakes. Help anglers decide where to fish and what patterns to target for their next trip.
 
 Today's date: ${currentDate}
-${spawnStageSection}${ragSection}${lureSection}
+${spawnStageSection}${personalIntelSection}${ragSection}${lureSection}
 RULES:
-- SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase for TX/OK based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
+${personalIntelSection ? `- PERSONAL FISHING HISTORY IS PRIORITY CONTEXT: The PERSONAL FISHING HISTORY section above is the angler's own logged trip data — real results from their own rod, ranked by their personal success. When asked things like "where have I had the most success," "where should I go," or "what's worked for me," answer directly and specifically from this data — name the lakes, the numbers, the techniques that produced for THEM. Don't deflect to generic recommendations when their own history answers the question. Never fabricate history beyond what's listed there.\n` : ''}- SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase for TX/OK based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
 - LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
@@ -272,7 +276,7 @@ CURRENT REPORT CONTEXT:
 ${condParts.join('\n')}
 ${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${personalIntelSection}${ragSection}${lureSection}
 RULES:
-${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INTEL section above is the angler's OWN logged trips to ${context.lake} — real results from their own rod, not generic data. When relevant to their question, lead with what's actually worked for THEM (cite specifics — dates, baits, techniques, conditions) before falling back to generic tournament intel. If they ask something like "what's worked for me here," answer directly from PERSONAL INTEL — don't deflect to generic advice. Never fabricate personal history beyond what's listed there.\n` : ''}- SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
+${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INTEL section above contains the angler's OWN logged trips — "THIS LAKE" covers ${context.lake} specifically (entries flagged [SIMILAR CONDITIONS TO TODAY] are the most relevant — lean on those first), and "OTHER LOGGED WATERS" covers their history on other lakes for "similar lakes" comparisons. This is real data from their own rod, not generic intel. When they ask things like "what's worked for me here," "what's my history on this lake (or similar lakes)," lead with specifics — dates, baits, techniques, conditions — straight from this section. Never fabricate personal history beyond what's listed there.\n` : ''}- SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
 - LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).

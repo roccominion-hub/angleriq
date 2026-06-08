@@ -4,12 +4,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
+import { NavUserMenu } from '@/components/NavUserMenu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import {
-  Fish, Bookmark, BookmarkCheck, Trash2, Download, LogOut, Crown,
+  Fish, Bookmark, BookmarkCheck, Trash2, Download, Crown,
   Pencil, Camera, KeyRound, ShieldCheck, MapPin, Compass, AlertTriangle, Check, X, Loader2,
 } from 'lucide-react'
 
@@ -159,11 +160,6 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
     } finally {
       setUpgrading(false)
     }
-  }
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/')
   }
 
   // ── Provider detection ──────────────────────────────────────────────────
@@ -325,9 +321,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
     <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
-        <button onClick={handleSignOut} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 font-semibold">
-          <LogOut size={14} /> Sign Out
-        </button>
+        <NavUserMenu />
       </nav>
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">

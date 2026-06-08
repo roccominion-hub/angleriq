@@ -69,7 +69,8 @@ create policy if not exists "reports_delete_own" on public.saved_reports for del
 -- fishing_logs: personal trip log entries — "golf round log" for anglers.
 -- Only user_id, lake_name, trip_date are required; everything else (conditions,
 -- technique, results) is optional so a quick log still has value.
--- See supabase/migrations/20260608c_fishing_logs.sql for full DDL + RLS + storage policies.
+-- See supabase/migrations/20260608c_fishing_logs.sql and 20260608d_fishing_logs_v2.sql
+-- for full DDL + RLS + storage policies.
 create table if not exists public.fishing_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
@@ -82,7 +83,7 @@ create table if not exists public.fishing_logs (
   lng double precision,
   -- When
   trip_date date not null default current_date,
-  time_of_day text,                   -- dawn | morning | midday | afternoon | evening | night
+  time_of_day text[] default '{}',    -- multi-select: dawn | morning | midday | afternoon | evening | night
   -- Environment / Conditions
   water_temp_f numeric,
   air_temp_f numeric,
@@ -94,11 +95,13 @@ create table if not exists public.fishing_logs (
   techniques text[] default '{}',
   baits text[] default '{}',
   structure text[] default '{}',
-  depth text,
+  depth text[] default '{}',          -- multi-select depth-range chips, e.g. {"5-10 ft","10-15 ft"}
   pattern_notes text,
   -- Results
   fish_count integer,
-  big_fish_lbs numeric,
+  big_fish_lbs numeric,               -- best single fish (max of big_fish_entries) — kept for aggregates
+  big_fish_entries numeric[] default '{}', -- full list of "big fish" weights logged for the trip
+  catches jsonb default '[]',         -- optional individual-catch breakdown: [{ weight, length, bait, technique, time, notes }]
   total_weight_lbs numeric,
   rating integer check (rating between 1 and 5),
   notes text,

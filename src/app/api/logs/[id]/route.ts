@@ -6,7 +6,7 @@ const EDITABLE_FIELDS = [
   'trip_date', 'time_of_day',
   'water_temp_f', 'air_temp_f', 'sky', 'wind', 'water_clarity', 'water_level',
   'techniques', 'baits', 'structure', 'depth', 'pattern_notes',
-  'fish_count', 'big_fish_lbs', 'total_weight_lbs', 'rating', 'notes', 'photos',
+  'fish_count', 'big_fish_lbs', 'big_fish_entries', 'catches', 'total_weight_lbs', 'rating', 'notes', 'photos',
 ]
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

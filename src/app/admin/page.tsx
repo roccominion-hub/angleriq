@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { Logo } from '@/components/Logo'
+import { NavUserMenu } from '@/components/NavUserMenu'
 import Link from 'next/link'
 
 const serviceSupabase = createServiceClient(
@@ -67,7 +68,10 @@ export default async function AdminPage() {
     <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
         <Link href="/"><Logo className="h-7 w-auto" /></Link>
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Admin</span>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Admin</span>
+          <NavUserMenu />
+        </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">

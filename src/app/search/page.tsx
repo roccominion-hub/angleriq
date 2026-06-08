@@ -17,13 +17,14 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle
+  MessageCircle, Compass
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 import { NavUserMenu } from '@/components/NavUserMenu'
 import { createClient } from '@/lib/supabase/client'
 import { ChatDrawer } from '@/components/ChatDrawer'
+import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 
@@ -48,6 +49,30 @@ interface SearchResult {
   coords?: { lat: number; lng: number }
 }
 interface MilkRunPattern { number: number; name: string; why: string; how: string; where: string }
+interface MyIntelTrip {
+  trip_date: string
+  fish_count: number | null
+  big_fish_lbs: number | null
+  rating: number | null
+  techniques: string[]
+  baits: string[]
+  structure: string[]
+  depth: string[] | null
+  water_temp_f: number | null
+  water_clarity: string | null
+  pattern_notes: string | null
+  notes: string | null
+  similar: boolean
+}
+interface MyIntelData {
+  tripCount: number
+  similarCount: number
+  totalFish: number
+  bestTrip: MyIntelTrip | null
+  topTechniques: string[]
+  topBaits: string[]
+  trips: MyIntelTrip[]
+}
 
 const CURRENT_YEAR = new Date().getFullYear()
 const TODAY = new Date().toISOString().split('T')[0]
@@ -839,6 +864,8 @@ function SearchPage() {
   }, [])
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [logModalInitial, setLogModalInitial] = useState<Partial<LogDraft> | null>(null)
+  const [logSavedNotice, setLogSavedNotice] = useState(false)
 
   // Right-now filters
   const [nowFilters, setNowFilters] = useState({
@@ -867,7 +894,7 @@ function SearchPage() {
   const [weather, setWeather] = useState<Weather | null>(null)
   const [waterTempF, setWaterTempF] = useState<number | null>(null)
   const [waterTempSource, setWaterTempSource] = useState<'measured' | 'estimated' | null>(null)
-  const [summary, setSummary] = useState<{ intel: string; today: string }>({ intel: '', today: '' })
+  const [summary, setSummary] = useState<{ intel: string; today: string; myIntel?: MyIntelData | null }>({ intel: '', today: '' })
   const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -1145,7 +1172,7 @@ function SearchPage() {
         })
       }).then(r => r.json()).then(async d => {
         const intel = d.intel || ''
-        setSummary({ intel, today: '' })
+        setSummary({ intel, today: '', myIntel: d.myIntel ?? null })
         setSummaryLoading(false)
         // Auto-trigger Recommended Plan
         if (intel) {
@@ -1480,7 +1507,46 @@ function SearchPage() {
             )}
 
             {result && !loading && (
-              <div className="flex justify-end mb-1">
+              <div className="flex justify-end items-center gap-2 mb-1 flex-wrap">
+                <Button
+                  onClick={() => setLogModalInitial({
+                    lake_id: result.water.id,
+                    lake_name: result.water.name,
+                    lake_state: result.water.state,
+                    lat: result.coords?.lat ?? null,
+                    lng: result.coords?.lng ?? null,
+                    trip_date: tripDate || TODAY,
+                    water_temp_f: waterTempF ?? undefined,
+                    air_temp_f: weather?.tempF != null ? Math.round(weather.tempF) : undefined,
+                    sky: weather?.skyCondition || undefined,
+                    time_of_day: weather?.timeOfDay ? [weather.timeOfDay] : undefined,
+                  })}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-xs h-8 gap-1.5"
+                >
+                  <Compass size={13} /> Log a Trip
+                </Button>
+                <Button
+                  onClick={() => setLogModalInitial({
+                    lake_id: result.water.id,
+                    lake_name: result.water.name,
+                    lake_state: result.water.state,
+                    lat: result.coords?.lat ?? null,
+                    lng: result.coords?.lng ?? null,
+                    trip_date: tripDate || TODAY,
+                    water_temp_f: waterTempF ?? undefined,
+                    air_temp_f: weather?.tempF != null ? Math.round(weather.tempF) : undefined,
+                    sky: weather?.skyCondition || undefined,
+                    time_of_day: weather?.timeOfDay ? [weather.timeOfDay] : undefined,
+                    fish_count: 1,
+                  })}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-xs h-8 gap-1.5"
+                >
+                  <Fish size={13} /> Log a Catch
+                </Button>
                 {savedReportId ? (
                   <span className="flex items-center gap-1.5 text-green-700 text-sm font-semibold bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
                     ✓ Report saved — <Link href="/account" className="underline underline-offset-2">view in My Reports</Link>
@@ -1496,6 +1562,12 @@ function SearchPage() {
                     {saving ? 'Saving...' : '💾 Save Report'}
                   </Button>
                 )}
+              </div>
+            )}
+
+            {logSavedNotice && (
+              <div className="flex items-center gap-1.5 text-green-700 text-sm font-semibold bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                ✓ Trip logged — <Link href="/log" className="underline underline-offset-2">view in My Fishing Log</Link>
               </div>
             )}
 
@@ -1525,6 +1597,80 @@ function SearchPage() {
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
                       <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
                     </div>
+
+                    {/* My Intel — the angler's own logged history on this lake */}
+                    {summary.myIntel && summary.myIntel.tripCount > 0 && (
+                      <div className="border border-blue-100 rounded-xl overflow-hidden">
+                        <div className="bg-blue-50 px-4 py-2.5 flex items-center gap-2">
+                          <History size={14} className="text-blue-600" />
+                          <span className="text-blue-900 font-bold text-sm">My Intel</span>
+                          <span className="text-xs text-blue-500">— your logged history on this lake</span>
+                        </div>
+                        <div className="px-4 py-3 bg-white space-y-3">
+                          <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
+                            <span><span className="font-bold text-slate-900">{summary.myIntel.tripCount}</span> trip{summary.myIntel.tripCount === 1 ? '' : 's'} logged</span>
+                            <span><span className="font-bold text-slate-900">{summary.myIntel.totalFish}</span> fish caught</span>
+                            {summary.myIntel.bestTrip && (
+                              <span>best day: <span className="font-bold text-slate-900">{summary.myIntel.bestTrip.fish_count} fish</span> on {summary.myIntel.bestTrip.trip_date}</span>
+                            )}
+                            {summary.myIntel.similarCount > 0 && (
+                              <span className="inline-flex items-center gap-1 text-blue-700 font-semibold">
+                                <Zap size={11} /> {summary.myIntel.similarCount} trip{summary.myIntel.similarCount === 1 ? '' : 's'} in similar conditions to today
+                              </span>
+                            )}
+                          </div>
+
+                          {(summary.myIntel.topTechniques.length > 0 || summary.myIntel.topBaits.length > 0) && (
+                            <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+                              {summary.myIntel.topTechniques.length > 0 && (
+                                <span>your go-to techniques here: <span className="font-semibold text-slate-700">{summary.myIntel.topTechniques.join(', ')}</span></span>
+                              )}
+                              {summary.myIntel.topBaits.length > 0 && (
+                                <span>your go-to baits here: <span className="font-semibold text-slate-700">{summary.myIntel.topBaits.join(', ')}</span></span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            {summary.myIntel.trips.map((t, i) => (
+                              <div key={i} className={`rounded-lg px-3 py-2 text-xs leading-relaxed ${t.similar ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 border border-slate-100'}`}>
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                  <span className="font-bold text-slate-800">{t.trip_date}</span>
+                                  {t.similar && (
+                                    <span className="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded">
+                                      <Zap size={9} /> Similar conditions to today
+                                    </span>
+                                  )}
+                                  {t.fish_count != null && <span className="text-slate-600">{t.fish_count} fish</span>}
+                                  {t.big_fish_lbs != null && <span className="text-slate-600">{t.big_fish_lbs} lb kicker</span>}
+                                  {t.water_temp_f != null && <span className="text-slate-500">{t.water_temp_f}°F water</span>}
+                                  {t.water_clarity && <span className="text-slate-500">{t.water_clarity} water</span>}
+                                  {t.depth?.length ? <span className="text-slate-500">{t.depth.join(', ')}</span> : null}
+                                  {t.rating != null && <span className="text-amber-600">{'★'.repeat(t.rating)}{'☆'.repeat(Math.max(0, 5 - t.rating))}</span>}
+                                </div>
+                                {(t.techniques.length > 0 || t.baits.length > 0 || t.structure.length > 0) && (
+                                  <p className="text-slate-500 mt-1">
+                                    {t.techniques.length > 0 && <>techniques: <span className="text-slate-700">{t.techniques.join(', ')}</span>{(t.baits.length > 0 || t.structure.length > 0) && ' · '}</>}
+                                    {t.baits.length > 0 && <>baits: <span className="text-slate-700">{t.baits.join(', ')}</span>{t.structure.length > 0 && ' · '}</>}
+                                    {t.structure.length > 0 && <>structure: <span className="text-slate-700">{t.structure.join(', ')}</span></>}
+                                  </p>
+                                )}
+                                {(t.pattern_notes || t.notes) && (
+                                  <p className="text-slate-500 italic mt-1">&ldquo;{t.pattern_notes || t.notes}&rdquo;</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {summary.myIntel.similarCount > 0 && (
+                            <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2 leading-relaxed">
+                              <span className="font-bold">Worth noting:</span> conditions today look similar to {summary.myIntel.similarCount} of your past trip{summary.myIntel.similarCount === 1 ? '' : 's'} here — the Recommended Plan below leans on what's worked for you in the past when it lines up with today.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Recommended Plan (auto-generated) */}
                     {milkRunLoading && !milkRun && (
                       <div className="space-y-3 pt-1">
@@ -1915,6 +2061,32 @@ function SearchPage() {
           today: summary.today,
         }}
       />
+
+      {/* ── Log a Trip / Log a Catch modal ───────────────────────── */}
+      {logModalInitial && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setLogModalInitial(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+              <h2 className="font-bold text-slate-800 flex items-center gap-2"><Compass size={16} className="text-blue-600" /> Log a New Trip</h2>
+              <button onClick={() => setLogModalInitial(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5">
+              <LogEntryForm
+                initial={logModalInitial}
+                onCancel={() => setLogModalInitial(null)}
+                onSaved={() => {
+                  setLogModalInitial(null)
+                  setLogSavedNotice(true)
+                  setTimeout(() => setLogSavedNotice(false), 6000)
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
