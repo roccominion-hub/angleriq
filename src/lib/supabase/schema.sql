@@ -8,6 +8,12 @@ create table if not exists public.profiles (
   subscription_status text default 'trial',  -- trial | active | cancelled | expired
   subscription_tier text default 'free',     -- free | pro
   stripe_customer_id text,
+  welcome_email_sent_at timestamptz,         -- set once welcome email is sent — prevents dupes/misses on delayed email confirmation
+  home_state text,                           -- preferences (added 20260608_account_features.sql)
+  favorite_lakes text[] default '{}',
+  preferred_bait_types text[] default '{}',
+  fishing_style text,                        -- power | finesse | balanced
+  boat_access text,                          -- boat | kayak | bank
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
