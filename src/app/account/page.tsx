@@ -15,7 +15,7 @@ import {
   Zap, Feather, Scale, Sailboat, Waves, Anchor, PartyPopper, Pin,
 } from 'lucide-react'
 
-const STATES = ['TX', 'OK']
+const STATES = ['TX', 'OK', 'LA']
 const BAIT_TYPE_OPTIONS = ['soft plastic', 'jig', 'crankbait', 'jerkbait', 'topwater', 'swimbait', 'bladed jig', 'spinnerbait', 'spoon', 'drop shot', 'ned rig']
 const FISHING_STYLES = [
   { value: 'power', label: 'Power Fishing', icon: Zap },

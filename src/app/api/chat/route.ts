@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
   // ── Spawn stage context ───────────────────────────────────────────────────
   // Mirrors inferSpawnStage() in summary/route.ts.
   // In report mode we have actual water temp — use it exactly.
-  // In homepage mode we have the current date — use TX/OK monthly averages to
+  // In homepage mode we have the current date — use TX/OK/LA monthly averages to
   // set hard boundaries so the model can't invent spawning activity in June.
 
   function inferSpawnStageFromTemp(tempF: number): string {
@@ -195,18 +195,20 @@ export async function POST(req: NextRequest) {
     return             `SUMMER — ${tempF}°F water. Full summer mode. Deep on offshore structure and ledges midday. Shade and cover early and late. Low-light windows most productive.`
   }
 
-  // Month-based TX/OK spawn stage for homepage mode (no water temp available).
+  // Month-based TX/OK/LA spawn stage for homepage mode (no water temp available).
   // Uses typical regional averages; explicitly forbids fabricating spawn activity.
+  // LA note: south Louisiana lakes run 2–4 weeks ahead of north TX/OK in spring;
+  // north LA reservoirs (Claiborne, D'Arbonne, Bodcau) track close to central TX.
   function getHomepageSpawnContext(month: number /* 0-indexed */): string {
     // month 0=Jan … 11=Dec
-    if (month <= 1)   return `SEASONAL CONTEXT (TX/OK, ${['January','February'][month]}): Typical water temps 45–54°F. WINTER PATTERN — bass deep and lethargic. Do NOT describe pre-spawn, spawning, or shallow activity. Slow finesse presentations near deep structure are the story.`
-    if (month === 2)  return `SEASONAL CONTEXT (TX/OK, March): Typical water temps 54–65°F. PRE-SPAWN beginning in most lakes. Bass staging on secondary points and channel edges adjacent to spawning flats. South TX lakes (Falcon, Amistad) may be further along. Do NOT say bass are "on beds" in most TX/OK lakes in March.`
-    if (month === 3)  return `SEASONAL CONTEXT (TX/OK, April): Typical water temps 63–72°F. SPAWN TRANSITION — bass actively moving onto flats and beds across most TX/OK lakes. Sight fishing applicable. Some post-spawn fish in south TX. Stage varies by specific lake and latitude.`
-    if (month === 4)  return `SEASONAL CONTEXT (TX/OK, May): Typical water temps 69–78°F. POST-SPAWN / EARLY SUMMER transition. Most bass have completed spawning. Females recovering near first break lines. Males finishing fry guard duty. Do NOT describe bass as actively spawning or pre-spawn unless the angler confirms colder-than-normal water.`
-    if (month <= 7)   return `SEASONAL CONTEXT (TX/OK, ${['June','July','August'][month-5]}): Typical water temps 75–88°F. SUMMER PATTERN — spawn is long over. Bass are on main lake ledges, offshore humps, and channel structure. Low-light topwater windows morning and evening. Finesse on deeper structure midday. NEVER describe June/July/August bass as pre-spawn or spawning in TX/OK. This is factually wrong.`
-    if (month === 8)  return `SEASONAL CONTEXT (TX/OK, September): Typical water temps 74–82°F. LATE SUMMER / EARLY FALL — bass beginning fall transition as water cools. Shad schooling in creeks. Reaction baits effective in the morning; ledge patterns still productive midday.`
-    if (month <= 10)  return `SEASONAL CONTEXT (TX/OK, ${['October','November'][month-9]}): Typical water temps 58–72°F. FALL PATTERN — bass following shad schools into creeks and secondary points. Reaction baits, topwater, and moving baits shine. No spawning activity.`
-    return             `SEASONAL CONTEXT (TX/OK, December): Typical water temps 48–58°F. LATE FALL / EARLY WINTER — bass slowing and moving deeper. Slow presentations near channel drops and main lake structure. No spawning activity.`
+    if (month <= 1)   return `SEASONAL CONTEXT (TX/OK/LA, ${['January','February'][month]}): Typical water temps 45–60°F (warmer in south LA). WINTER PATTERN — bass deep and lethargic across most lakes. Do NOT describe pre-spawn, spawning, or shallow activity for TX/OK. South Louisiana lakes may begin early pre-spawn movement by mid-February on warm stretches. Slow finesse presentations near deep structure are the story for most waters.`
+    if (month === 2)  return `SEASONAL CONTEXT (TX/OK/LA, March): Typical water temps 54–66°F. PRE-SPAWN beginning in most TX/OK lakes. South Louisiana lakes (Bistineau, Black Lake, Catahoula, oxbow lakes) are likely in SPAWN TRANSITION or early spawn — water temps there run 3–5°F warmer than north TX/OK in March. Bass staging on secondary points and channel edges across most waters; sight fishing possible in south LA. Do NOT say bass are "on beds" in north TX/OK lakes in March.`
+    if (month === 3)  return `SEASONAL CONTEXT (TX/OK/LA, April): Typical water temps 63–74°F. SPAWN TRANSITION — bass actively moving onto flats and beds across most TX/OK and north LA lakes. Sight fishing applicable. South Louisiana lakes are likely in POST-SPAWN or early summer transition. Stage varies by specific lake and latitude.`
+    if (month === 4)  return `SEASONAL CONTEXT (TX/OK/LA, May): Typical water temps 69–80°F. POST-SPAWN / EARLY SUMMER transition. Most bass have completed spawning across TX, OK, and LA. Females recovering near first break lines. Males finishing fry guard duty. Do NOT describe bass as actively spawning or pre-spawn unless the angler confirms colder-than-normal water.`
+    if (month <= 7)   return `SEASONAL CONTEXT (TX/OK/LA, ${['June','July','August'][month-5]}): Typical water temps 75–89°F. SUMMER PATTERN — spawn is long over. Bass are on main lake ledges, offshore humps, and channel structure. In south Louisiana natural lakes and the Atchafalaya Basin, shallow matted grass and lily pad edges hold bass early/late. Low-light topwater windows morning and evening. NEVER describe summer bass as pre-spawn or spawning in TX/OK/LA. This is factually wrong.`
+    if (month === 8)  return `SEASONAL CONTEXT (TX/OK/LA, September): Typical water temps 74–85°F. LATE SUMMER / EARLY FALL — bass beginning fall transition as water cools. Shad schooling in creeks and points. LA shallow lake bass remain active in grass and pads. Reaction baits effective in the morning; ledge patterns still productive midday.`
+    if (month <= 10)  return `SEASONAL CONTEXT (TX/OK/LA, ${['October','November'][month-9]}): Typical water temps 58–76°F. FALL PATTERN — bass following shad schools into creeks and secondary points across TX, OK, and north LA. South Louisiana lakes cool more slowly. Reaction baits, topwater, and moving baits shine. No spawning activity.`
+    return             `SEASONAL CONTEXT (TX/OK/LA, December): Typical water temps 48–59°F. LATE FALL / EARLY WINTER — bass slowing and moving deeper. South LA lakes are warmer than TX/OK in December (55–62°F typical) and can still support active bass near channel edges. Slow presentations near channel drops and main lake structure elsewhere.`
   }
 
   const now = new Date()
@@ -222,7 +224,7 @@ export async function POST(req: NextRequest) {
   const lakeMarkerInstruction = `
 LAKE REPORT MARKERS — MANDATORY: Every lake you recommend must have a [LAKE:Exact Lake Name, State Abbreviation] marker appended at the very end of your response, one per line. There is no limit. If you recommend 4 lakes, emit 4 markers. If you recommend 6, emit 6.
 
-Format: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK] or [LAKE:Grand Lake, OK]
+Format: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK] or [LAKE:Grand Lake, OK] or [LAKE:Toledo Bend Reservoir, TX/LA] or [LAKE:Catahoula Lake, LA]
 
 Rules:
 - COUNT CAREFULLY: Before finishing your response, count how many lakes you recommended by name. Emit exactly that many markers — one for each, in the same order you mentioned them.
@@ -254,7 +256,7 @@ ${personalIntelSection ? `- PERSONAL FISHING HISTORY — ONE SIGNAL AMONG MANY, 
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
-- Focus recommendations on TX and OK fisheries.
+- Focus recommendations on TX, OK, and LA fisheries.
 - Keep answers concise and direct (3-6 sentences unless the angler asks for more detail).
 - If you lack data for a specific lake, say so and offer the best guidance you can.
 - Never recommend trolling.

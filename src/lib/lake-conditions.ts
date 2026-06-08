@@ -240,12 +240,16 @@ async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   } catch { return [] }
 }
 
-// Monthly average surface water temps (°F) for TX and OK reservoirs.
+// Monthly average surface water temps (°F) for TX, OK, and LA reservoirs.
 // TX = central TX baseline (~lat 32–33°N); OK = central OK (~lat 35°N).
-// Source: long-term USGS/TWDB reservoir averages.
+// LA = central LA baseline (~lat 31°N) — slightly warmer than TX year-round;
+//      south LA lakes (below ~30.5°N) run another 1–2°F warmer still.
+// Source: long-term USGS reservoir averages.
 const MONTHLY_WATER_TEMP_F: Record<string, number[]> = {
   TX: [54, 56, 63, 71, 78, 84, 87, 87, 83, 74, 63, 56],
   OK: [45, 48, 56, 64, 72, 80, 84, 84, 78, 67, 55, 47],
+  LA: [57, 60, 66, 74, 80, 86, 88, 88, 85, 76, 65, 59],
+  'TX/LA': [57, 59, 65, 73, 79, 85, 88, 88, 84, 75, 64, 58],
 }
 
 // Estimate water temp when no sensor data is available.

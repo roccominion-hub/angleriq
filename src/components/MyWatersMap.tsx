@@ -11,7 +11,7 @@ export interface FishedLake {
   fish: number
 }
 
-// A lightweight regional map (centered on TX/OK) that drops a pin for every
+// A lightweight regional map (centered on TX/OK/LA) that drops a pin for every
 // lake the angler has logged trips to, with a badge showing how many times
 // they've fished it. Hover/tap a pin to see quick stats.
 export function MyWatersMap({ lakes }: { lakes: FishedLake[] }) {
@@ -61,7 +61,7 @@ export function MyWatersMap({ lakes }: { lakes: FishedLake[] }) {
         const group = L.featureGroup(markers)
         map.fitBounds(group.getBounds().pad(0.3), { maxZoom: 8 })
       } else {
-        map.setView([31.5, -98.5], 6) // TX/OK regional fallback
+        map.setView([31.5, -95.5], 6) // TX/OK/LA regional fallback
       }
     })
 

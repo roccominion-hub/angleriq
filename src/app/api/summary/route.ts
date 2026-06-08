@@ -61,8 +61,8 @@ async function trackUsage(req: NextRequest) {
 function inferSpawnStage(waterTempF: number | null, state: string): string {
   if (waterTempF === null) return ''
   const t = waterTempF
-  // South TX lakes (Falcon, Amistad, Choke Canyon) run 2-4 weeks ahead of north TX/OK
-  // but the temp-based thresholds hold regardless of calendar date or region.
+  // South TX lakes (Falcon, Amistad, Choke Canyon) and south Louisiana lakes run 2–4 weeks
+  // ahead of north TX/OK in spring, but the temp-based thresholds hold regardless of region.
   if (t < 50) return `WINTER PATTERN — ${t}°F water. Bass are lethargic, holding tight to deep main-lake structure: channel swings, submerged points, humps. Slow, subtle presentations essential. Do NOT suggest pre-spawn, spawning, or shallow patterns.`
   if (t < 55) return `LATE WINTER / EARLY PRE-SPAWN — ${t}°F water. Bass beginning first movements toward secondary points and channel edges adjacent to spawning flats, but NOT staging yet. Feeding windows opening on warm afternoons. Slow presentations near transition structure.`
   if (t < 62) return `PRE-SPAWN — ${t}°F water. Bass are actively staging on points, secondary channel swings, bluff ends, and structure leading into spawning flats. They are feeding aggressively before the spawn — this is a prime feeding window. Bass are NOT on beds yet. Do NOT recommend bed fishing or spawning patterns. Recommend staging-area techniques.`
