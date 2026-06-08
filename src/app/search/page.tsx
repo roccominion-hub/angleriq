@@ -1988,10 +1988,6 @@ function SearchPage() {
                         <span className="text-slate-300 mt-0.5">—</span>
                         <span className="leading-relaxed">
                           {r.notes || r.pattern || (r.source_url ? new URL(r.source_url).hostname.replace('www.', '') : 'Source article')}
-                          {r.source_url && (
-                            <a href={r.source_url} target="_blank" rel="noopener noreferrer"
-                              className="ml-1 text-blue-500 hover:text-blue-700">↗</a>
-                          )}
                         </span>
                       </li>
                     ))}
