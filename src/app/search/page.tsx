@@ -17,13 +17,15 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle, Compass, Save
+  MessageCircle, Compass, Save, Map
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 import { NavUserMenu } from '@/components/NavUserMenu'
 import { createClient } from '@/lib/supabase/client'
 import { ChatDrawer } from '@/components/ChatDrawer'
+import dynamic from 'next/dynamic'
+const LakePickerMap = dynamic(() => import('@/components/LakePickerMap').then(m => ({ default: m.LakePickerMap })), { ssr: false })
 import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
 
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
@@ -606,7 +608,7 @@ function addRecentLake(lakeName: string) {
 }
 
 // Hot search combobox for lake selection
-function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; value: string; onChange: (v: string) => void; userCoords: { lat: number; lng: number } | null }) {
+function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lakes: Lake[]; value: string; onChange: (v: string) => void; userCoords: { lat: number; lng: number } | null; onMapClick?: () => void }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
@@ -680,8 +682,13 @@ function LakeSearchBox({ lakes, value, onChange, userCoords }: { lakes: Lake[]; 
 
   return (
     <div ref={containerRef} className="relative flex-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-        <MapPin size={12} /> Body of Water
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between mb-1.5">
+        <span className="flex items-center gap-1.5"><MapPin size={12} /> Body of Water</span>
+        {onMapClick && (
+          <button type="button" onClick={onMapClick} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold normal-case tracking-normal text-[11px] transition-colors">
+            <Map size={11} /> Search on a Map
+          </button>
+        )}
       </label>
       <div className="relative">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -851,6 +858,7 @@ function SearchPage() {
   const searchParams = useSearchParams()
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
+  const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
   // Request geolocation once on page mount
@@ -1332,7 +1340,7 @@ function SearchPage() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
           {/* Top row: lake search + date + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
-            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} userCoords={userCoords} />
+            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} userCoords={userCoords} onMapClick={() => setShowMapPicker(v => !v)} />
             <div className="flex items-end gap-2 shrink-0">
               {/* Date input — always visible, defaults to today */}
               <div className="flex flex-col gap-1.5">
@@ -1480,6 +1488,20 @@ function SearchPage() {
             </div>
           )}
         </div>
+
+        {/* Map-based lake picker */}
+        {showMapPicker && (
+          <div className="mb-6">
+            <LakePickerMap
+              lakes={lakes}
+              onSelect={lake => {
+                setSelectedLake(lake.name)
+                setShowMapPicker(false)
+              }}
+              onClose={() => setShowMapPicker(false)}
+            />
+          </div>
+        )}
 
         {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
 
