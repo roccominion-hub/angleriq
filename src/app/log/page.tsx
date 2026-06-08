@@ -246,6 +246,7 @@ export default function LogPage() {
             <LogEntryForm
               initial={editing ? {
                 id: editing.id, lake_id: editing.lake_id, lake_name: editing.lake_name, lake_state: editing.lake_state,
+                lat: editing.lat, lng: editing.lng,
                 spot: editing.spot, trip_date: editing.trip_date, time_of_day: editing.time_of_day,
                 water_temp_f: editing.water_temp_f, air_temp_f: editing.air_temp_f, sky: editing.sky, wind: editing.wind,
                 water_clarity: editing.water_clarity, water_level: editing.water_level,
