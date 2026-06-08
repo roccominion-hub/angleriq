@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
-import { X, ChevronRight, Search } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { X, ChevronRight, Search, MapPin } from 'lucide-react'
 
 export interface PickerLake {
   id: string
@@ -11,16 +11,46 @@ export interface PickerLake {
   lng?: number | null
 }
 
-// Color a marker by broad region so the map is easier to read at a glance.
-function stateColor(state: string): string {
-  const s = state.toUpperCase()
-  if (s.startsWith('TX') || s === 'OK')             return '#dc2626' // red   — South-Central
-  if (s.startsWith('LA') || s === 'AR' || s === 'MS') return '#d97706' // amber — Deep South
-  if (s === 'TN' || s === 'AL' || s.startsWith('GA') || s === 'FL') return '#16a34a' // green — Southeast
-  if (s === 'MO')                                    return '#7c3aed' // violet — Midwest South
-  if (s === 'CA' || s.startsWith('CA'))              return '#ca8a04' // yellow — West
-  if (s === 'NY' || s.startsWith('NY') || s === 'MI') return '#1d4ed8' // navy — North
-  return '#2563eb' // default blue
+// Color markers by body-of-water type (not region — region colors had accuracy issues)
+function typeColor(type: string): string {
+  switch (type.toLowerCase()) {
+    case 'lake':      return '#2563eb' // blue
+    case 'reservoir': return '#0891b2' // cyan
+    case 'river':     return '#d97706' // amber
+    case 'bay':       return '#7c3aed' // violet
+    case 'coastal':   return '#059669' // emerald
+    default:          return '#64748b' // slate
+  }
+}
+
+// Geocode a free-text location (city, state, zip) via Nominatim.
+// Returns { lat, lng } or null on failure / no result.
+async function geocodeLocation(query: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'AnglerIQ/1.0 (angleriq-app.vercel.app)' },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data[0]) return null
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+  } catch {
+    return null
+  }
+}
+
+// Unique types present in the current lake list — used to build the legend
+function presentTypes(lakes: PickerLake[]): string[] {
+  const seen = new Set<string>()
+  for (const l of lakes) seen.add(l.type.toLowerCase())
+  const order = ['lake', 'reservoir', 'river', 'bay', 'coastal', 'other']
+  return order.filter(t => seen.has(t))
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  lake: 'Lake', reservoir: 'Reservoir', river: 'River',
+  bay: 'Bay', coastal: 'Coastal', other: 'Other',
 }
 
 export function LakePickerMap({
@@ -32,16 +62,20 @@ export function LakePickerMap({
   onSelect: (lake: PickerLake) => void
   onClose: () => void
 }) {
-  const mapDivRef   = useRef<HTMLDivElement>(null)
-  const mapRef      = useRef<any>(null)
-  const markersRef  = useRef<{ lake: PickerLake; marker: any }[]>([])
-  const [picked, setPicked]       = useState<PickerLake | null>(null)
-  const [filter, setFilter]       = useState('')
+  const mapDivRef  = useRef<HTMLDivElement>(null)
+  const mapRef     = useRef<any>(null)
+  const markersRef = useRef<{ lake: PickerLake; marker: any }[]>([])
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [picked, setPicked]         = useState<PickerLake | null>(null)
+  const [filter, setFilter]         = useState('')
   const [matchCount, setMatchCount] = useState(0)
+  const [geocoding, setGeocoding]   = useState(false)
 
   const plottable = lakes.filter(l => l.lat != null && l.lng != null)
+  const types     = presentTypes(plottable)
 
-  // Build map once
+  // Build the Leaflet map once
   useEffect(() => {
     if (mapRef.current || !mapDivRef.current) return
     let cancelled = false
@@ -50,21 +84,27 @@ export function LakePickerMap({
       if (cancelled || !mapDivRef.current) return
       delete (L.Icon.Default.prototype as any)._getIconUrl
 
-      const map = L.map(mapDivRef.current, { zoomControl: true, scrollWheelZoom: true })
+      const map = L.map(mapDivRef.current, {
+        zoomControl: false,       // We add it manually at topright below
+        scrollWheelZoom: true,
+      })
+      L.control.zoom({ position: 'topright' }).addTo(map)
       map.attributionControl.setPrefix('')
+
       L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
         { attribution: '&copy; Esri', maxZoom: 18 }
       ).addTo(map)
+
       map.setView([36.5, -90.5], 5)
       mapRef.current = map
 
       const refs: { lake: PickerLake; marker: any }[] = []
       for (const lake of plottable) {
-        const color = stateColor(lake.state)
+        const color = typeColor(lake.type)
         const icon = L.divIcon({
           className: '',
-          html: `<div data-lake="${lake.id}" style="
+          html: `<div style="
             width:11px;height:11px;background:${color};
             border:2px solid white;border-radius:9999px;
             box-shadow:0 1px 4px rgba(0,0,0,0.35);cursor:pointer;
@@ -85,80 +125,112 @@ export function LakePickerMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plottable.length])
 
-  // Filter markers as user types — dim non-matches, highlight matches
-  useEffect(() => {
-    const q = filter.toLowerCase().trim()
+  // Filter / geocode logic — runs on every filter change
+  const handleFilter = useCallback((q: string) => {
+    setFilter(q)
+
+    const term = q.toLowerCase().trim()
+
+    // --- Lake name / state filter ---
     let shown = 0
+    let firstMatch: PickerLake | null = null
     for (const { lake, marker } of markersRef.current) {
-      const matches = !q
-        || lake.name.toLowerCase().includes(q)
-        || lake.state.toLowerCase().includes(q)
-      marker.setOpacity(matches ? 1 : 0.12)
-      if (matches) shown++
-    }
-    setMatchCount(shown)
-    // If exactly one match after typing 3+ chars, pan to it
-    if (q.length >= 3) {
-      const exact = markersRef.current.find(({ lake }) =>
-        lake.name.toLowerCase().startsWith(q)
-      )
-      if (exact && mapRef.current) {
-        mapRef.current.panTo([exact.lake.lat!, exact.lake.lng!], { animate: true, duration: 0.4 })
+      const matches = !term
+        || lake.name.toLowerCase().includes(term)
+        || lake.state.toLowerCase().includes(term)
+      marker.setOpacity(matches ? 1 : 0.1)
+      if (matches) {
+        shown++
+        if (!firstMatch) firstMatch = lake
       }
     }
-  }, [filter])
+    setMatchCount(shown)
+
+    // Pan to a single exact lake match
+    if (term.length >= 2 && firstMatch && shown <= 3) {
+      mapRef.current?.panTo([firstMatch.lat!, firstMatch.lng!], { animate: true, duration: 0.5 })
+    }
+
+    // --- Location geocode (city / state / zip) ---
+    // Fire only when no lake markers matched and there's a meaningful query.
+    // Debounce by 600ms so we don't spam Nominatim on every keystroke.
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current)
+
+    if (term.length >= 3 && shown === 0) {
+      geocodeTimer.current = setTimeout(async () => {
+        setGeocoding(true)
+        const loc = await geocodeLocation(q.trim())
+        setGeocoding(false)
+        if (loc && mapRef.current) {
+          // Show all markers again when panning to a location
+          for (const { marker } of markersRef.current) marker.setOpacity(1)
+          setMatchCount(markersRef.current.length)
+          mapRef.current.setView([loc.lat, loc.lng], 9, { animate: true })
+        }
+      }, 600)
+    }
+  }, [])
 
   return (
-    <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 shadow-lg bg-slate-100">
-      <div ref={mapDivRef} className="w-full h-[500px]" />
+    <div className="w-full rounded-xl overflow-hidden border border-slate-200 shadow-lg bg-white flex flex-col">
 
-      {/* Search filter overlay — top-left */}
-      <div className="absolute top-3 left-3 z-[500] flex items-center gap-2">
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="Filter lakes…"
-            className="h-8 pl-7 pr-3 text-sm rounded-lg border border-slate-200 bg-white shadow focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
-          />
-        </div>
-        {filter && (
-          <span className="text-xs bg-white/90 border border-slate-200 rounded-full px-2 py-0.5 text-slate-500 shadow">
+      {/* ── Top bar: search + close ────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-slate-200 shrink-0">
+        <Search size={14} className="text-slate-400 shrink-0" />
+        <input
+          type="text"
+          value={filter}
+          onChange={e => handleFilter(e.target.value)}
+          placeholder="Search by lake name, city, state, or zip…"
+          className="flex-1 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none bg-transparent"
+          autoFocus
+        />
+        {filter && !geocoding && (
+          <span className="text-xs text-slate-400 shrink-0">
             {matchCount} lake{matchCount !== 1 ? 's' : ''}
           </span>
         )}
+        {geocoding && (
+          <span className="text-xs text-blue-500 shrink-0 animate-pulse">Locating…</span>
+        )}
+        {/* Type legend — inline in top bar */}
+        <div className="hidden sm:flex items-center gap-3 border-l border-slate-100 pl-3 shrink-0">
+          {types.map(t => (
+            <span key={t} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+              <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ background: typeColor(t) }} />
+              {TYPE_LABELS[t]}
+            </span>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 text-slate-400 hover:text-slate-700 transition-colors p-1 -mr-1"
+          title="Close map"
+        >
+          <X size={16} />
+        </button>
       </div>
 
-      {/* Legend — top-right (before close button) */}
-      <div className="absolute top-3 right-11 z-[500] bg-white/90 backdrop-blur-sm rounded-lg border border-slate-200 shadow px-2.5 py-1.5 hidden sm:flex flex-col gap-0.5 text-[10px] font-semibold leading-tight">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />TX/OK</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block" />LA/AR/MS</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-600 inline-block" />TN/AL/GA/FL</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-600 inline-block" />CA</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-navy-700 inline-block" style={{background:'#1d4ed8'}} />NY/MI</span>
-      </div>
+      {/* ── Map ───────────────────────────────────────────────────── */}
+      <div ref={mapDivRef} className="w-full h-[460px]" />
 
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute top-3 right-3 z-[500] bg-white rounded-full shadow p-1.5 text-slate-500 hover:text-slate-800 transition-colors"
-        title="Close map"
-      >
-        <X size={16} />
-      </button>
-
-      {/* Bottom strip — instruction or selected lake */}
-      <div className="absolute bottom-0 left-0 right-0 z-[500] bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-2.5 flex items-center justify-between gap-3">
+      {/* ── Bottom bar: selected lake or hint ─────────────────────── */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-white border-t border-slate-200 shrink-0">
         {picked ? (
           <>
-            <div className="min-w-0">
+            <div className="min-w-0 flex items-center gap-2">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: typeColor(picked.type) }}
+              />
               <span className="font-bold text-slate-900 truncate">{picked.name}</span>
-              <span className="text-slate-400 text-sm ml-2">{picked.state} · {picked.type}</span>
+              <span className="text-slate-400 text-sm shrink-0">{picked.state} · {picked.type}</span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button onClick={() => setPicked(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded">
+              <button
+                onClick={() => setPicked(null)}
+                className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded transition-colors"
+              >
                 Clear
               </button>
               <button
@@ -170,11 +242,13 @@ export function LakePickerMap({
             </div>
           </>
         ) : (
-          <p className="text-sm text-slate-400 w-full text-center">
-            Click any dot to select a lake · {plottable.length} lakes mapped across 13 states
+          <p className="text-sm text-slate-400 w-full text-center flex items-center justify-center gap-1.5">
+            <MapPin size={13} />
+            Click any dot to select · {plottable.length} bodies of water across 13 states
           </p>
         )}
       </div>
+
     </div>
   )
 }
