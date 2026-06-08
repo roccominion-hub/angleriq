@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateEmbedding } from '@/lib/embeddings'
+import { getUserIdFromRequest, getPersonalIntelSection } from '@/lib/personalIntel'
 
 function getSupabase() {
   return createClient(
@@ -229,6 +230,12 @@ Rules:
 - Do NOT emit markers for lakes you merely mentioned in passing or used as a contrast/comparison without recommending.
 - If the angler asks you to "generate a report", "run a report", or "pull up the intel" for any lake you mentioned — including lakes from earlier in the conversation — emit the [LAKE:...] marker for that lake immediately. Do not say you cannot do it.`
 
+  // Personal Intel — the angler's own logged trips to the lake under discussion.
+  // Only fetched in report mode, where there's a specific lake to match against.
+  const personalIntelSection = context.mode === 'report' && context.lake
+    ? await getPersonalIntelSection(await getUserIdFromRequest(), context.lake)
+    : ''
+
   // ── System prompts ────────────────────────────────────────────────────────
   let systemPrompt: string
 
@@ -263,9 +270,9 @@ Today's date: ${currentDate}
 ${spawnStageSection}
 CURRENT REPORT CONTEXT:
 ${condParts.join('\n')}
-${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${ragSection}${lureSection}
+${context.intel ? `\nTOURNAMENT INTEL FROM REPORT:\n${context.intel}\n` : ''}${context.today ? `\nTODAY'S RECOMMENDATION FROM REPORT:\n${context.today}\n` : ''}${personalIntelSection}${ragSection}${lureSection}
 RULES:
-- SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
+${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INTEL section above is the angler's OWN logged trips to ${context.lake} — real results from their own rod, not generic data. When relevant to their question, lead with what's actually worked for THEM (cite specifics — dates, baits, techniques, conditions) before falling back to generic tournament intel. If they ask something like "what's worked for me here," answer directly from PERSONAL INTEL — don't deflect to generic advice. Never fabricate personal history beyond what's listed there.\n` : ''}- SPAWN STAGE IS MANDATORY: The SPAWN STAGE above is derived from actual water temperature — treat it as ground truth. Never contradict it or soften it with qualifiers like "bass may be spawning."
 - LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).

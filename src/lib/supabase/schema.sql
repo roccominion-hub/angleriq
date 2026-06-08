@@ -65,3 +65,45 @@ create policy if not exists "reports_select_own" on public.saved_reports for sel
 create policy if not exists "reports_insert_own" on public.saved_reports for insert with check (auth.uid() = user_id);
 create policy if not exists "reports_update_own" on public.saved_reports for update using (auth.uid() = user_id);
 create policy if not exists "reports_delete_own" on public.saved_reports for delete using (auth.uid() = user_id);
+
+-- fishing_logs: personal trip log entries — "golf round log" for anglers.
+-- Only user_id, lake_name, trip_date are required; everything else (conditions,
+-- technique, results) is optional so a quick log still has value.
+-- See supabase/migrations/20260608c_fishing_logs.sql for full DDL + RLS + storage policies.
+create table if not exists public.fishing_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  -- Location
+  lake_id uuid references public.body_of_water(id) on delete set null,
+  lake_name text not null,
+  lake_state text,
+  spot text,
+  lat double precision,
+  lng double precision,
+  -- When
+  trip_date date not null default current_date,
+  time_of_day text,                   -- dawn | morning | midday | afternoon | evening | night
+  -- Environment / Conditions
+  water_temp_f numeric,
+  air_temp_f numeric,
+  sky text,                           -- sunny | partly cloudy | overcast | rain
+  wind text,                          -- calm | light | moderate | strong
+  water_clarity text,                 -- clear | stained | muddy
+  water_level text,                   -- low | normal | high | rising | falling
+  -- Technique / Pattern
+  techniques text[] default '{}',
+  baits text[] default '{}',
+  structure text[] default '{}',
+  depth text,
+  pattern_notes text,
+  -- Results
+  fish_count integer,
+  big_fish_lbs numeric,
+  total_weight_lbs numeric,
+  rating integer check (rating between 1 and 5),
+  notes text,
+  photos text[] default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.fishing_logs enable row level security;

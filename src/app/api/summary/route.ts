@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getLakeRagContext, formatRagContextForPrompt } from '@/lib/rag'
 import { generateEmbedding } from '@/lib/embeddings'
+import { getUserIdFromRequest, getPersonalIntelSection } from '@/lib/personalIntel'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -162,6 +163,11 @@ Be direct, specific, and confident. No filler.`
 
   // Track usage — only on real AI calls (cache miss)
   trackUsage(req)
+
+  // Personal Intel — the angler's own logged trips to this lake (if any).
+  // Surfaces what's actually worked for THEM, woven alongside the broader
+  // tournament intel rather than replacing it.
+  const personalIntelSection = await getPersonalIntelSection(await getUserIdFromRequest(), lake)
 
   // Extract all colors from real data
   const colorsFromData: string[] = []
@@ -340,11 +346,11 @@ IMPORTANT RULES — follow these in every response without exception:
 - NO TROLLING. Never recommend trolling as a technique. Trolling is prohibited in competitive bass fishing. Where trolling might otherwise apply (e.g. covering open water), recommend cranking instead.
 - SOURCE HIERARCHY: Weight sources by reliability — tournament results and pro articles are primary; YouTube transcripts are secondary; forum posts are supplemental background only. Never lead a recommendation with forum-only intel. If tournament or article data contradicts a forum claim, trust the tournament data.
 - SPAWN STAGE IS MANDATORY: The SPAWN STAGE line in the conditions above is derived from actual current water temperature — treat it as ground truth for TODAY'S RECOMMENDATION. Do not generalize "spring" as a single pattern. Pre-spawn (staging), active spawn (beds), post-spawn (recovery), and summer require completely different techniques and locations. Never say "bass may be spawning" or "pre-spawn is possible" when the SPAWN STAGE says otherwise — state the phase definitively based on the water temp provided and recommend accordingly.
-- DO NOT MIX HISTORICAL SPAWN-STAGE PATTERNS INTO TODAY'S RECOMMENDATION: Tournament data, VERIFIED TOURNAMENT REPORTS, and curated intel often come from events fished in a DIFFERENT season/spawn stage than today (e.g. a spring tournament describing pre-spawn staging on a lake you're now reporting on in summer). It is fine — even expected — to reference those historical patterns in the TOURNAMENT INTEL section as "what's worked here historically in [season/stage]." But TODAY'S RECOMMENDATION must reflect ONLY the CURRENT SPAWN STAGE above. If the dominant historical pattern is pre-spawn staging but the current water temp says EARLY SUMMER or SUMMER, do not recommend staging/pre-spawn techniques for today — pivot to the technique that matches the current stage, and if useful, briefly note that the historical pattern applies at a different time of year.
+${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INTEL section above contains the angler's OWN logged trips to this lake — real results from their own rod. Weight this above generic tournament data when it's relevant to today's conditions. In TODAY'S RECOMMENDATION, explicitly reference what has worked for THEM specifically when it lines up with current conditions (e.g. "Last time you fished here in similar water temps, your [bait/technique] produced — lean back into that"). If their personal results conflict with the broader tournament data, trust their logged results for their specific spot/approach but note the tournament data as a broader option to try. Never fabricate personal history beyond what's listed in PERSONAL INTEL.\n` : ''}- DO NOT MIX HISTORICAL SPAWN-STAGE PATTERNS INTO TODAY'S RECOMMENDATION: Tournament data, VERIFIED TOURNAMENT REPORTS, and curated intel often come from events fished in a DIFFERENT season/spawn stage than today (e.g. a spring tournament describing pre-spawn staging on a lake you're now reporting on in summer). It is fine — even expected — to reference those historical patterns in the TOURNAMENT INTEL section as "what's worked here historically in [season/stage]." But TODAY'S RECOMMENDATION must reflect ONLY the CURRENT SPAWN STAGE above. If the dominant historical pattern is pre-spawn staging but the current water temp says EARLY SUMMER or SUMMER, do not recommend staging/pre-spawn techniques for today — pivot to the technique that matches the current stage, and if useful, briefly note that the historical pattern applies at a different time of year.
 - BAIT-SPECIFIC COLORS. When recommending colors for frogs (hollow body, swimming toads), use color names frogs actually come in: black, white, natural, olive/orange belly, green/brown, shad, bone — NOT soft plastic names like "Watermelon Red" or "Green Pumpkin." For hard baits (crankbaits, jerkbaits, bladed jigs), use manufacturer color names: sexy shad, chartreuse shad, ghost, chrome/blue back, bone, natural shad, fire tiger — NOT soft plastic colors. Soft plastic colors (Green Pumpkin, Watermelon Red, June Bug, Black/Blue, etc.) apply only to soft plastics.
 NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
 
-${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}
+${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}${personalIntelSection}
 TOURNAMENT DATA SUMMARY (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
 - Top patterns: ${topPatterns.slice(0, 4).map((p: any) => `${p.pattern} (${p.count} reports)`).join(', ')}

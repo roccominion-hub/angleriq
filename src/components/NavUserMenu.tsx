@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LogOut, BookOpen } from 'lucide-react'
+import { LogOut, BookOpen, Compass } from 'lucide-react'
 
 export function NavUserMenu() {
   const supabase = createClient()
@@ -44,6 +44,9 @@ export function NavUserMenu() {
               <p className="text-xs font-semibold text-slate-900 truncate">{user.user_metadata?.full_name || user.email}</p>
               <p className="text-xs text-slate-400 truncate">{user.email}</p>
             </div>
+            <Link href="/log" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+              <Compass size={14} /> My Fishing Log
+            </Link>
             <Link href="/account" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
               <BookOpen size={14} /> My Reports
             </Link>

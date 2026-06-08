@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
-import { LogOut, BookOpen, MessageCircle } from 'lucide-react'
+import { LogOut, BookOpen, MessageCircle, Compass } from 'lucide-react'
 import { ChatDrawer } from '@/components/ChatDrawer'
 
 // ── HomeNav ───────────────────────────────────────────────────────────────
@@ -71,6 +71,9 @@ export function HomeNav() {
                         <p className="text-xs font-semibold text-slate-900 truncate">{user.user_metadata?.full_name || user.email}</p>
                         <p className="text-xs text-slate-400 truncate">{user.email}</p>
                       </div>
+                      <Link href="/log" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                        <Compass size={14} /> My Fishing Log
+                      </Link>
                       <Link href="/account" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                         <BookOpen size={14} /> My Reports
                       </Link>
