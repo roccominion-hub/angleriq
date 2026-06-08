@@ -2004,7 +2004,7 @@ function SearchPage() {
         {!result && !loading && (
           <div className="py-12 px-4 max-w-2xl mx-auto">
             <p className="text-base font-semibold text-slate-500 mb-1">Search for a lake to see what&apos;s working.</p>
-            <p className="text-sm text-slate-400 mb-8">Currently covering TX, OK &amp; LA bass fisheries · More states coming soon.</p>
+            <p className="text-sm text-slate-400 mb-8">Covering TX, OK, LA, AR, TN, MS, MO, CA, AL, GA, FL, NY &amp; MI · More states coming soon.</p>
             {/* Content skeleton preview */}
             <div className="space-y-5 opacity-40 pointer-events-none select-none">
               {/* Map skeleton */}

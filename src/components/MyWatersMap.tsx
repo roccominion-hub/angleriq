@@ -61,7 +61,7 @@ export function MyWatersMap({ lakes }: { lakes: FishedLake[] }) {
         const group = L.featureGroup(markers)
         map.fitBounds(group.getBounds().pad(0.3), { maxZoom: 8 })
       } else {
-        map.setView([31.5, -95.5], 6) // TX/OK/LA regional fallback
+        map.setView([35.0, -90.0], 5) // multi-state US fallback
       }
     })
 

@@ -48,7 +48,7 @@ export default function Home() {
 
           {/* Social proof strip */}
           <div className="flex flex-wrap items-center justify-center gap-6 mt-12 text-slate-300 text-sm font-semibold">
-            <span className="flex items-center gap-2"><MapPin size={15} className="text-blue-400" /> TX, OK & LA Lakes, Expanding Soon</span>
+            <span className="flex items-center gap-2"><MapPin size={15} className="text-blue-400" /> 13 States &amp; Growing</span>
             <span className="text-slate-500">·</span>
             <span className="flex items-center gap-2"><BarChart3 size={15} className="text-blue-400" /> 1000s of Data Sources</span>
             <span className="text-slate-500">·</span>

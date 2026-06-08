@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
   // ── Spawn stage context ───────────────────────────────────────────────────
   // Mirrors inferSpawnStage() in summary/route.ts.
   // In report mode we have actual water temp — use it exactly.
-  // In homepage mode we have the current date — use TX/OK/LA monthly averages to
+  // In homepage mode we have the current date — use regional monthly averages to
   // set hard boundaries so the model can't invent spawning activity in June.
 
   function inferSpawnStageFromTemp(tempF: number): string {
@@ -195,20 +195,24 @@ export async function POST(req: NextRequest) {
     return             `SUMMER — ${tempF}°F water. Full summer mode. Deep on offshore structure and ledges midday. Shade and cover early and late. Low-light windows most productive.`
   }
 
-  // Month-based TX/OK/LA spawn stage for homepage mode (no water temp available).
-  // Uses typical regional averages; explicitly forbids fabricating spawn activity.
-  // LA note: south Louisiana lakes run 2–4 weeks ahead of north TX/OK in spring;
-  // north LA reservoirs (Claiborne, D'Arbonne, Bodcau) track close to central TX.
+  // Month-based regional spawn stage for homepage mode (no water temp available).
+  // Covers the full platform footprint: TX/OK/LA/AR/TN/MS/MO/CA/AL/GA/FL/NY/MI.
+  // Key regional timing notes:
+  //   South FL (Okeechobee, Kissimmee) — nearly year-round; peak spawn Feb–Apr
+  //   Deep South (AL/GA/MS/LA south) — 2–4 weeks ahead of TX/OK in spring
+  //   Southeast (TN/AR) — similar to central TX
+  //   North (NY/MI) — 4–6 weeks behind TX; spawn peaks late May to mid-June
+  //   CA — highly variable: SoCal lakes near TX timing; NorCal 2–4 weeks behind
   function getHomepageSpawnContext(month: number /* 0-indexed */): string {
     // month 0=Jan … 11=Dec
-    if (month <= 1)   return `SEASONAL CONTEXT (TX/OK/LA, ${['January','February'][month]}): Typical water temps 45–60°F (warmer in south LA). WINTER PATTERN — bass deep and lethargic across most lakes. Do NOT describe pre-spawn, spawning, or shallow activity for TX/OK. South Louisiana lakes may begin early pre-spawn movement by mid-February on warm stretches. Slow finesse presentations near deep structure are the story for most waters.`
-    if (month === 2)  return `SEASONAL CONTEXT (TX/OK/LA, March): Typical water temps 54–66°F. PRE-SPAWN beginning in most TX/OK lakes. South Louisiana lakes (Bistineau, Black Lake, Catahoula, oxbow lakes) are likely in SPAWN TRANSITION or early spawn — water temps there run 3–5°F warmer than north TX/OK in March. Bass staging on secondary points and channel edges across most waters; sight fishing possible in south LA. Do NOT say bass are "on beds" in north TX/OK lakes in March.`
-    if (month === 3)  return `SEASONAL CONTEXT (TX/OK/LA, April): Typical water temps 63–74°F. SPAWN TRANSITION — bass actively moving onto flats and beds across most TX/OK and north LA lakes. Sight fishing applicable. South Louisiana lakes are likely in POST-SPAWN or early summer transition. Stage varies by specific lake and latitude.`
-    if (month === 4)  return `SEASONAL CONTEXT (TX/OK/LA, May): Typical water temps 69–80°F. POST-SPAWN / EARLY SUMMER transition. Most bass have completed spawning across TX, OK, and LA. Females recovering near first break lines. Males finishing fry guard duty. Do NOT describe bass as actively spawning or pre-spawn unless the angler confirms colder-than-normal water.`
-    if (month <= 7)   return `SEASONAL CONTEXT (TX/OK/LA, ${['June','July','August'][month-5]}): Typical water temps 75–89°F. SUMMER PATTERN — spawn is long over. Bass are on main lake ledges, offshore humps, and channel structure. In south Louisiana natural lakes and the Atchafalaya Basin, shallow matted grass and lily pad edges hold bass early/late. Low-light topwater windows morning and evening. NEVER describe summer bass as pre-spawn or spawning in TX/OK/LA. This is factually wrong.`
-    if (month === 8)  return `SEASONAL CONTEXT (TX/OK/LA, September): Typical water temps 74–85°F. LATE SUMMER / EARLY FALL — bass beginning fall transition as water cools. Shad schooling in creeks and points. LA shallow lake bass remain active in grass and pads. Reaction baits effective in the morning; ledge patterns still productive midday.`
-    if (month <= 10)  return `SEASONAL CONTEXT (TX/OK/LA, ${['October','November'][month-9]}): Typical water temps 58–76°F. FALL PATTERN — bass following shad schools into creeks and secondary points across TX, OK, and north LA. South Louisiana lakes cool more slowly. Reaction baits, topwater, and moving baits shine. No spawning activity.`
-    return             `SEASONAL CONTEXT (TX/OK/LA, December): Typical water temps 48–59°F. LATE FALL / EARLY WINTER — bass slowing and moving deeper. South LA lakes are warmer than TX/OK in December (55–62°F typical) and can still support active bass near channel edges. Slow presentations near channel drops and main lake structure elsewhere.`
+    if (month <= 1)   return `SEASONAL CONTEXT (${['January','February'][month]}): Southern states (TX/OK/LA/AL/GA/MS) water temps 45–60°F — WINTER PATTERN, bass deep and lethargic; south FL lakes (Okeechobee, Kissimmee) may already be in pre-spawn (water 58–65°F). Northern states (NY/MI) fully locked in winter. CA SoCal lakes mild (55–62°F), NorCal cold. Do NOT describe spawning or pre-spawn for TX/OK except south-most lakes (Falcon, Amistad).`
+    if (month === 2)  return `SEASONAL CONTEXT (March): PRE-SPAWN underway across most Southern states (TX/OK/LA/AR/AL/GA/MS/TN) — water temps 54–66°F, bass staging on secondary points and channel edges. South FL bass in active SPAWN or POST-SPAWN. CA Delta and Clear Lake entering pre-spawn. NY/MI still cold (40–50°F), no spawning activity. Stage varies significantly by latitude — a FL angler and a MI angler are in completely different seasons.`
+    if (month === 3)  return `SEASONAL CONTEXT (April): SPAWN TRANSITION across most of the South — TX/OK/LA/AR/TN/AL/GA/MS water temps 63–74°F, bass moving onto flats and beds. Sight fishing applicable in most of these states. South FL POST-SPAWN. CA warming fast. NY/MI late pre-spawn at best (48–58°F). Confirm the specific lake's region before assuming spawn stage.`
+    if (month === 4)  return `SEASONAL CONTEXT (May): POST-SPAWN / EARLY SUMMER across the deep South (TX/OK/LA/AL/GA/MS/FL). TN/AR/MO in late spawn or post-spawn. CA active spawn in many reservoirs. NY/MI hitting peak SPAWN now (water temps finally reaching 62–68°F). Do NOT describe bass as actively spawning in TX/OK/LA/AL in May — spawn is largely over there.`
+    if (month <= 7)   return `SEASONAL CONTEXT (${['June','July','August'][month-5]}): SUMMER PATTERN across all states — spawn is over everywhere. Southern lakes (TX/OK/LA/AL/FL) 78–89°F, bass deep on ledges and offshore structure; matted grass/pads productive in FL and south LA. Northern states (NY/MI) 67–78°F, offshore humps and rocky points. CA Delta: tules and grass edges. Low-light topwater windows everywhere. NEVER describe summer bass as pre-spawn or spawning anywhere in our coverage. This is factually wrong.`
+    if (month === 8)  return `SEASONAL CONTEXT (September): LATE SUMMER / EARLY FALL. Southern states still warm (74–86°F), shad beginning to school into creeks. FL and south LA bass active in grass flats. Northern states (NY/MI) cooling faster — fall transition well underway, shad in creeks, reaction baits working. CA cooling; ledge and point fishing excellent.`
+    if (month <= 10)  return `SEASONAL CONTEXT (${['October','November'][month-9]}): FALL PATTERN across most states. Southern states (TX/OK/LA/AL/GA) 58–76°F, bass chasing shad into creeks and secondary points — reaction baits shine. FL stays warm longer (70–80°F in south FL). Northern states (NY/MI) cooling quickly into late fall / early winter pattern by November. CA bass moving to main lake points and channel edges.`
+    return             `SEASONAL CONTEXT (December): LATE FALL / EARLY WINTER. TX/OK/AR/TN/AL/GA/MS cooling into winter (48–58°F). South FL still active (65–72°F), arguably the best time for giant FL largemouth. NY/MI in full winter (36–42°F). CA highly variable — SoCal lakes mild, NorCal cold. Slow presentations near deep structure for cold waters; FL and south LA still support active patterns.`
   }
 
   const now = new Date()
@@ -224,7 +228,7 @@ export async function POST(req: NextRequest) {
   const lakeMarkerInstruction = `
 LAKE REPORT MARKERS — MANDATORY: Every lake you recommend must have a [LAKE:Exact Lake Name, State Abbreviation] marker appended at the very end of your response, one per line. There is no limit. If you recommend 4 lakes, emit 4 markers. If you recommend 6, emit 6.
 
-Format: [LAKE:Lake Fork, TX] or [LAKE:Lake Texoma, TX/OK] or [LAKE:Grand Lake, OK] or [LAKE:Toledo Bend Reservoir, TX/LA] or [LAKE:Catahoula Lake, LA]
+Format: [LAKE:Lake Fork, TX] or [LAKE:Lake Guntersville, AL] or [LAKE:Lake Okeechobee, FL] or [LAKE:Clear Lake, CA] or [LAKE:Lake Champlain, NY/VT] or [LAKE:Toledo Bend Reservoir, TX/LA]
 
 Rules:
 - COUNT CAREFULLY: Before finishing your response, count how many lakes you recommended by name. Emit exactly that many markers — one for each, in the same order you mentioned them.
@@ -256,7 +260,7 @@ ${personalIntelSection ? `- PERSONAL FISHING HISTORY — ONE SIGNAL AMONG MANY, 
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
-- Focus recommendations on TX, OK, and LA fisheries.
+- Focus recommendations on the covered fisheries: TX, OK, LA, AR, TN, MS, MO, CA, AL, GA, FL, NY, MI.
 - Keep answers concise and direct (3-6 sentences unless the angler asks for more detail).
 - If you lack data for a specific lake, say so and offer the best guidance you can.
 - Never recommend trolling.

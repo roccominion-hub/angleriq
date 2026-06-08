@@ -240,16 +240,40 @@ async function fetchInflows(lat: number, lng: number): Promise<InflowGauge[]> {
   } catch { return [] }
 }
 
-// Monthly average surface water temps (°F) for TX, OK, and LA reservoirs.
-// TX = central TX baseline (~lat 32–33°N); OK = central OK (~lat 35°N).
-// LA = central LA baseline (~lat 31°N) — slightly warmer than TX year-round;
-//      south LA lakes (below ~30.5°N) run another 1–2°F warmer still.
-// Source: long-term USGS reservoir averages.
+// Monthly average surface water temps (°F) by state/region.
+// Source: long-term USGS reservoir averages. Used as a fallback when no
+// live sensor data is available — blended 75/25 with current air temp.
 const MONTHLY_WATER_TEMP_F: Record<string, number[]> = {
-  TX: [54, 56, 63, 71, 78, 84, 87, 87, 83, 74, 63, 56],
-  OK: [45, 48, 56, 64, 72, 80, 84, 84, 78, 67, 55, 47],
-  LA: [57, 60, 66, 74, 80, 86, 88, 88, 85, 76, 65, 59],
-  'TX/LA': [57, 59, 65, 73, 79, 85, 88, 88, 84, 75, 64, 58],
+  // Southern-central
+  TX:    [54, 56, 63, 71, 78, 84, 87, 87, 83, 74, 63, 56],
+  OK:    [45, 48, 56, 64, 72, 80, 84, 84, 78, 67, 55, 47],
+  LA:    [57, 60, 66, 74, 80, 86, 88, 88, 85, 76, 65, 59],
+  AR:    [50, 53, 61, 69, 76, 82, 85, 85, 80, 70, 59, 52],
+  MS:    [55, 58, 64, 72, 78, 84, 87, 87, 83, 73, 62, 56],
+  MO:    [42, 45, 53, 62, 70, 78, 82, 82, 76, 65, 52, 44],
+  // Southeast
+  TN:    [46, 49, 57, 65, 73, 80, 84, 84, 78, 68, 57, 49],
+  AL:    [52, 55, 62, 70, 77, 83, 86, 86, 82, 72, 61, 54],
+  GA:    [52, 55, 62, 70, 77, 83, 86, 86, 81, 71, 61, 54],
+  FL:    [64, 66, 70, 76, 82, 86, 88, 88, 86, 78, 70, 65],
+  // Northeast / Great Lakes
+  NY:    [38, 40, 48, 58, 67, 74, 78, 77, 70, 60, 50, 41],
+  MI:    [36, 37, 42, 52, 62, 71, 75, 74, 67, 56, 46, 39],
+  // California — central CA reservoir average (~lat 37–38°N)
+  CA:    [52, 54, 59, 65, 72, 78, 82, 82, 77, 68, 58, 52],
+  // Border lakes — interpolated between their states
+  'TX/LA':  [57, 59, 65, 73, 79, 85, 88, 88, 84, 75, 64, 58],
+  'AR/MO':  [46, 49, 57, 65, 73, 80, 84, 83, 78, 67, 55, 48],
+  'TN/KY':  [44, 47, 55, 63, 71, 79, 83, 83, 77, 66, 55, 47],
+  'TN/AL':  [49, 52, 59, 67, 74, 81, 85, 85, 80, 70, 59, 51],
+  'AL/GA':  [52, 55, 62, 70, 77, 83, 86, 86, 81, 71, 61, 54],
+  'GA/SC':  [51, 54, 61, 69, 76, 82, 85, 85, 80, 70, 60, 53],
+  'GA/FL':  [58, 61, 66, 73, 79, 84, 87, 87, 84, 75, 65, 59],
+  'GA/AL':  [52, 55, 62, 70, 77, 83, 86, 86, 81, 71, 61, 54],
+  'MO/AR':  [46, 49, 57, 65, 73, 80, 84, 83, 78, 67, 55, 48],
+  'CA/AZ':  [58, 61, 66, 72, 79, 85, 88, 87, 83, 74, 63, 58],
+  'NY/VT':  [38, 40, 48, 58, 67, 74, 78, 77, 70, 60, 50, 41],
+  'NY/PA/OH/MI': [36, 38, 44, 54, 63, 71, 75, 74, 68, 57, 47, 39],
 }
 
 // Estimate water temp when no sensor data is available.
