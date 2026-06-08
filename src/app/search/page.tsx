@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle, Compass
+  MessageCircle, Compass, Save
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
@@ -757,12 +757,12 @@ const NOW_FILTER_LABELS: Record<string, Record<string, string>> = {
   locationType: { shoreline: 'Shoreline', nearshore: 'Near Shore', offshore: 'Offshore' },
   structure: { grass: 'Grass', dock: 'Docks', laydown: 'Laydowns', point: 'Points', hump: 'Humps', channel: 'Channel', timber: 'Timber', rock: 'Rock' },
   waterClarity: { clear: 'Clear Water', stained: 'Stained', muddy: 'Muddy' },
-  style: { power: '💪 Power Fishing', finesse: '🪶 Finesse' },
+  style: { power: 'Power Fishing', finesse: 'Finesse' },
 }
 const SCENARIO_FILTER_LABELS: Record<string, Record<string, string>> = {
-  season: { spring: '🌱 Spring', summer: '☀️ Summer', fall: '🍂 Fall', winter: '❄️ Winter' },
-  timeOfDay: { morning: '🌅 Morning', midday: '☀️ Midday', evening: '🌇 Evening', night: '🌙 Night' },
-  weatherConditions: { sunny: '☀️ Sunny', overcast: '☁️ Overcast', rainy: '🌧️ Rainy', windy: '💨 Windy', 'cold-front': '🥶 Cold Front' },
+  season: { spring: 'Spring', summer: 'Summer', fall: 'Fall', winter: 'Winter' },
+  timeOfDay: { morning: 'Morning', midday: 'Midday', evening: 'Evening', night: 'Night' },
+  weatherConditions: { sunny: 'Sunny', overcast: 'Overcast', rainy: 'Rainy', windy: 'Windy', 'cold-front': 'Cold Front' },
   airTemp: { cold: 'Air: Cold', cool: 'Air: Cool', mild: 'Air: Mild', warm: 'Air: Warm', hot: 'Air: Hot' },
   wind: { calm: 'Wind: Calm', light: 'Wind: Light', moderate: 'Wind: Moderate', heavy: 'Wind: Heavy' },
   waterTemp: { cold: 'Water: Cold', cool: 'Water: Cool', warm: 'Water: Warm', hot: 'Water: Hot' },
@@ -785,7 +785,7 @@ function FilterBreadcrumbs({
   onRemoveScenario: (key: string) => void
   onClearAll: () => void
 }) {
-  const chips: { label: string; onRemove: () => void; auto?: boolean }[] = []
+  const chips: { label: ReactNode; onRemove: () => void; auto?: boolean }[] = []
 
   Object.entries(nowFilters).forEach(([key, val]) => {
     if (val === 'all' || !val) return
@@ -803,7 +803,7 @@ function FilterBreadcrumbs({
   })
 
   if (tripDate && tripDate !== TODAY) {
-    chips.push({ label: `📅 ${tripDate}`, onRemove: () => onRemoveScenario('_tripDate') })
+    chips.push({ label: <span className="inline-flex items-center gap-1"><Calendar size={11} />{tripDate}</span>, onRemove: () => onRemoveScenario('_tripDate') })
   }
 
   Object.entries(scenarioFilters).forEach(([key, val]) => {
@@ -1382,7 +1382,7 @@ function SearchPage() {
                     <MultiFilterSelect label="Structure" icon={<Layers size={12} />} value={nowFilters.structure} onToggle={v => toggleMultiFilter(setNowFilters, 'structure', v)} placeholder="Any structure" options={STRUCTURE_OPTIONS} />
                     <FilterSelect label="Water Clarity" icon={<Droplets size={12} />} value={nowFilters.waterClarity} onValueChange={v => setNowFilter('waterClarity', v)} placeholder="Any clarity" options={CLARITY_OPTIONS} />
                     <FilterSelect label="Style" icon={<Feather size={12} />} value={nowFilters.style} onValueChange={v => setNowFilter('style', v)} placeholder="Any style"
-                      options={[{ value: 'power', label: '💪 Power Fishing' }, { value: 'finesse', label: '🪶 Finesse Fishing' }]} />
+                      options={[{ value: 'power', label: 'Power Fishing' }, { value: 'finesse', label: 'Finesse Fishing' }]} />
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -1559,7 +1559,7 @@ function SearchPage() {
                     size="sm"
                     className="border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold text-xs h-8 gap-1.5"
                   >
-                    {saving ? 'Saving...' : '💾 Save Report'}
+                    {saving ? 'Saving...' : <span className="inline-flex items-center gap-1.5"><Save size={13} /> Save Report</span>}
                   </Button>
                 )}
               </div>

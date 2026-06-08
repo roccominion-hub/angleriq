@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Fish } from 'lucide-react'
 
 function SignupForm() {
   const supabase = createClient()
@@ -61,7 +61,7 @@ function SignupForm() {
         <div className="flex justify-center mb-8"><Link href="/"><Logo className="h-8 w-auto" /></Link></div>
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
           <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3 mb-6">
-            <p className="text-green-800 text-sm font-semibold text-center">🎣 7-day free trial — no credit card required</p>
+            <p className="text-green-800 text-sm font-semibold text-center inline-flex items-center justify-center gap-1.5 w-full"><Fish size={15} /> 7-day free trial — no credit card required</p>
           </div>
           <h1 className="text-xl font-extrabold text-slate-900 mb-1">Create your account</h1>
           <p className="text-slate-500 text-sm mb-6">Get access to tournament-proven fishing intel</p>

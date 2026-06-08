@@ -16,7 +16,7 @@ import {
 
 const MyWatersMap = dynamic(() => import('@/components/MyWatersMap').then(m => m.MyWatersMap), { ssr: false })
 
-const TIME_LABELS: Record<string, string> = { dawn: '🌅 Dawn', morning: '🌤️ Morning', midday: '☀️ Midday', afternoon: '🌇 Afternoon', evening: '🌆 Evening', night: '🌙 Night' }
+const TIME_LABELS: Record<string, string> = { dawn: 'Dawn', morning: 'Morning', midday: 'Midday', afternoon: 'Afternoon', evening: 'Evening', night: 'Night' }
 
 function StarRow({ value }: { value: number | null }) {
   if (value == null) return null

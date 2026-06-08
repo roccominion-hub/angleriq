@@ -12,19 +12,20 @@ import { Input } from '@/components/ui/input'
 import {
   Fish, Bookmark, BookmarkCheck, Trash2, Download, Crown,
   Pencil, Camera, KeyRound, ShieldCheck, MapPin, Compass, AlertTriangle, Check, X, Loader2,
+  Zap, Feather, Scale, Sailboat, Waves, Anchor, PartyPopper, Pin,
 } from 'lucide-react'
 
 const STATES = ['TX', 'OK']
 const BAIT_TYPE_OPTIONS = ['soft plastic', 'jig', 'crankbait', 'jerkbait', 'topwater', 'swimbait', 'bladed jig', 'spinnerbait', 'spoon', 'drop shot', 'ned rig']
 const FISHING_STYLES = [
-  { value: 'power', label: '💪 Power Fishing' },
-  { value: 'finesse', label: '🪶 Finesse' },
-  { value: 'balanced', label: '⚖️ Balanced' },
+  { value: 'power', label: 'Power Fishing', icon: Zap },
+  { value: 'finesse', label: 'Finesse', icon: Feather },
+  { value: 'balanced', label: 'Balanced', icon: Scale },
 ]
 const BOAT_ACCESS_OPTIONS = [
-  { value: 'boat', label: '🚤 Boat' },
-  { value: 'kayak', label: '🛶 Kayak' },
-  { value: 'bank', label: '🚶 Bank / Dock' },
+  { value: 'boat', label: 'Boat', icon: Sailboat },
+  { value: 'kayak', label: 'Kayak', icon: Waves },
+  { value: 'bank', label: 'Bank / Dock', icon: Anchor },
 ]
 
 function AccountPageInner() {
@@ -397,7 +398,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
         {/* Upgrade success banner */}
         {justUpgraded && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-            <span className="text-green-600 text-xl">🎉</span>
+            <span className="text-green-600"><PartyPopper size={20} /></span>
             <div>
               <p className="font-bold text-green-800 text-sm">You&apos;re now a Pro member!</p>
               <p className="text-green-700 text-xs mt-0.5">Full access to all AnglerIQ features is now unlocked.</p>
@@ -551,8 +552,9 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                   <button
                     key={fs.value}
                     onClick={() => setPrefStyle(prev => prev === fs.value ? '' : fs.value)}
-                    className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefStyle === fs.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefStyle === fs.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
                   >
+                    <fs.icon size={14} />
                     {fs.label}
                   </button>
                 ))}
@@ -566,8 +568,9 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                   <button
                     key={b.value}
                     onClick={() => setPrefBoat(prev => prev === b.value ? '' : b.value)}
-                    className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefBoat === b.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefBoat === b.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
                   >
+                    <b.icon size={14} />
                     {b.label}
                   </button>
                 ))}
@@ -609,7 +612,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                   <div key={report.id} className={`bg-white border rounded-xl p-4 flex flex-col sm:flex-row gap-4 ${report.pinned ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 flex-wrap">
-                        {report.pinned && <span title="Pinned" className="text-amber-500">📌</span>}
+                        {report.pinned && <span title="Pinned" className="text-amber-500"><Pin size={14} /></span>}
                         <div>
                           <p className="font-bold text-slate-900">{report.lake_name}</p>
                           <p className="text-slate-400 text-xs">{report.lake_state} · {report.trip_date ? `Trip: ${report.trip_date}` : 'Right Now report'} · Saved {new Date(report.created_at).toLocaleDateString()}</p>
