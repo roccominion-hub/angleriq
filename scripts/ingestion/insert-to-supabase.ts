@@ -13,39 +13,46 @@ export function getSupabaseAdmin() {
 }
 
 export async function insertTechniqueReport(params: {
-  bodyOfWaterName: string
-  state: string
+  bodyOfWaterName: string | null   // null = generic article not tied to a lake
+  state: string | null
   sourceType: 'tournament' | 'youtube' | 'forum' | 'article' | 'other'
   sourceUrl: string
   reportedDate: string | null
   tournamentName?: string
   organization?: string
+  isGeneric?: boolean
   extracted: any[]
 }) {
   const supabase = getSupabaseAdmin()
 
-  // Look up body of water
-  const { data: water, error: waterError } = await supabase
-    .from('body_of_water')
-    .select('id')
-    .ilike('name', `%${params.bodyOfWaterName}%`)
-    .eq('state', params.state)
-    .single()
+  // Look up body of water (null for generic articles)
+  let waterId: string | null = null
+  if (params.bodyOfWaterName && params.state) {
+    const { data: water, error: waterError } = await supabase
+      .from('body_of_water')
+      .select('id')
+      .ilike('name', `%${params.bodyOfWaterName}%`)
+      .eq('state', params.state)
+      .single()
 
-  if (waterError || !water) {
-    console.error(`Body of water not found: ${params.bodyOfWaterName}, ${params.state}`)
-    return
+    if (waterError || !water) {
+      console.error(`Body of water not found: ${params.bodyOfWaterName}, ${params.state}`)
+      return
+    }
+    waterId = water.id
   }
+
+  const isGeneric = params.isGeneric ?? !waterId
 
   // Insert tournament if provided
   let tournamentResultId: string | null = null
-  if (params.tournamentName && params.organization) {
+  if (params.tournamentName && params.organization && waterId) {
     const { data: tournament } = await supabase
       .from('tournament')
       .upsert({
         name: params.tournamentName,
         organization: params.organization,
-        body_of_water_id: water.id,
+        body_of_water_id: waterId,
         start_date: params.reportedDate || new Date().toISOString().split('T')[0],
         source_url: params.sourceUrl,
       }, { onConflict: 'name' })
@@ -76,7 +83,7 @@ export async function insertTechniqueReport(params: {
     const { data: report, error: reportError } = await supabase
       .from('technique_report')
       .insert({
-        body_of_water_id: water.id,
+        body_of_water_id: waterId,           // null for generic articles
         tournament_result_id: tournamentResultId,
         source_type: params.sourceType,
         source_url: params.sourceUrl,
@@ -86,6 +93,8 @@ export async function insertTechniqueReport(params: {
         structure: item.structure,
         depth_range_ft: item.depth_range_ft,
         notes: item.notes,
+        is_generic: isGeneric,
+        applicable_structures: item.applicable_structures ?? [],
         confidence: params.sourceType === 'tournament' ? 0.95
           : params.sourceType === 'article' ? 0.80
           : params.sourceType === 'youtube' ? 0.65

@@ -9,6 +9,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+async function getLakeStructureTags(lakeId: string): Promise<string[] | null> {
+  const { data } = await supabase
+    .from('body_of_water')
+    .select('structure_tags')
+    .eq('id', lakeId)
+    .single()
+  return data?.structure_tags ?? null
+}
+
 async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<string[]> {
   const seasonStr = weather?.season || season || ''
   const timeOfDay = weather?.timeOfDay || ''
@@ -26,10 +35,14 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   const embedding = await generateEmbedding(queryText)
   if (!embedding) return []
 
+  // Fetch structure tags so the SQL function can blend in matching generic articles
+  const structureTags = lakeId ? await getLakeStructureTags(lakeId) : null
+
   const { data: chunks, error } = await supabase.rpc('match_technique_embeddings', {
     query_embedding: embedding,
-    match_count: 8,
+    match_count: 12,  // slightly higher to allow room for generic blending
     ...(lakeId ? { filter_lake_id: lakeId } : {}),
+    ...(structureTags?.length ? { structure_tags: structureTags } : {}),
   })
 
   if (error || !chunks) return []

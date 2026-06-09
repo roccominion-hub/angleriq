@@ -84,17 +84,20 @@ async function processItem(item: any): Promise<void> {
 
   extracted.forEach((r: any, i: number) => {
     const baits = r.baits?.map((b: any) => b.bait_name || b.bait_type).filter(Boolean).join(', ') || '—'
-    console.log(`     [${i+1}] ${r.angler_name || 'Unknown'} | ${r.pattern || '?'} | ${baits}`)
+    const structs = r.applicable_structures?.length ? ` | [${r.applicable_structures.join(',')}]` : ''
+    console.log(`     [${i+1}] ${r.angler_name || 'Unknown'} | ${r.pattern || '?'} | ${baits}${structs}`)
   })
 
+  const isGeneric = !item.lake_name  // queue rows with null lake_name are generic articles
   await insertTechniqueReport({
-    bodyOfWaterName: item.lake_name,
-    state:           item.state,
+    bodyOfWaterName: item.lake_name ?? null,
+    state:           item.state ?? null,
     sourceType:      item.source_type as any,
     sourceUrl:       item.url || 'curated',
     reportedDate:    item.reported_date || null,
     tournamentName:  item.tournament,
     organization:    item.organization,
+    isGeneric,
     extracted,
   })
 

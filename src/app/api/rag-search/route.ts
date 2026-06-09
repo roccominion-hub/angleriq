@@ -31,7 +31,7 @@ async function generateQueryEmbedding(text: string): Promise<number[] | null> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { queryText, matchCount = 10 } = await req.json()
+    const { queryText, matchCount = 10, lakeId } = await req.json()
 
     if (!queryText) {
       return NextResponse.json({ error: 'queryText required' }, { status: 400 })
@@ -42,9 +42,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ chunks: [], error: 'Embedding failed' })
     }
 
+    // If a lakeId is provided, fetch the lake's structure_tags so the SQL
+    // function can blend in matching generic technique articles.
+    let structureTags: string[] | null = null
+    if (lakeId) {
+      const { data: lake } = await supabase
+        .from('body_of_water')
+        .select('structure_tags')
+        .eq('id', lakeId)
+        .single()
+      structureTags = lake?.structure_tags ?? null
+    }
+
     const { data: chunks, error } = await supabase.rpc('match_technique_embeddings', {
       query_embedding: embedding,
       match_count: matchCount,
+      filter_lake_id: lakeId ?? null,
+      structure_tags: structureTags,
     })
 
     if (error) {

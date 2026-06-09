@@ -37,7 +37,13 @@ Return a JSON array of technique objects. Each object should have these fields (
   ],
   "water_temp_f": number | null,
   "water_clarity": string | null,     // clear/stained/muddy
-  "notes": string | null              // any additional context worth capturing
+  "notes": string | null,             // any additional context worth capturing
+  "applicable_structures": string[] | null  // canonical structure tags this technique applies to.
+      // Use ONLY these exact values (include all that apply):
+      // timber, brush, stumps, rock, riprap, bluffs, grass, pads, cypress,
+      // docks, marina, bridges, dam, ledges, points, flats, coves,
+      // creek_channels, offshore, spawning_flats, clay, sand, current,
+      // tributary, deep_water, laydowns, vegetation
 }
 
 Return ONLY valid JSON array. No explanation. If no fishing technique data found, return [].`
