@@ -84,13 +84,13 @@ Return ONLY the JSON array, no explanation. Example: ["timber","ledges","points"
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 256 },
+          generationConfig: { temperature: 0, maxOutputTokens: 4096, responseMimeType: 'application/json' },
         }),
         signal: AbortSignal.timeout(20000),
       }
@@ -120,9 +120,11 @@ async function main() {
   if (stateFilter) console.log(`   State: ${stateFilter}`)
 
   // Fetch all lakes that have at least one technique report with a structure value
+  const forceRetag = args.includes('--force')
+
   let query = supabase
     .from('body_of_water')
-    .select('id, name, state')
+    .select('id, name, state, structure_tags')
     .order('state', { ascending: true })
     .order('name',  { ascending: true })
 
@@ -140,6 +142,13 @@ async function main() {
   let tagged = 0, empty = 0, errors = 0
 
   for (const lake of lakes) {
+    // Skip already-tagged lakes unless --force
+    if (!forceRetag && (lake as any).structure_tags?.length > 0) {
+      console.log(`  ⏭  ${lake.name} (${lake.state}) — already tagged [${(lake as any).structure_tags.join(', ')}]`)
+      tagged++
+      continue
+    }
+
     // Pull all non-null structure strings for this lake
     const { data: reports } = await supabase
       .from('technique_report')
@@ -148,7 +157,7 @@ async function main() {
       .not('structure', 'is', null)
 
     const rawStructures = (reports ?? [])
-      .map((r: any) => r.structure?.trim())
+      .map((r: any) => r.structure?.trim()?.slice(0, 300))
       .filter(Boolean)
 
     if (!rawStructures.length) {
@@ -180,8 +189,8 @@ async function main() {
     }
 
     tagged++
-    // Brief pause — Gemini flash-lite is generous but stay polite
-    await new Promise(r => setTimeout(r, 500))
+    // 3s delay — stay comfortably under Gemini 2.5 Flash rate limits
+    await new Promise(r => setTimeout(r, 3000))
   }
 
   console.log(`\n${'─'.repeat(50)}`)

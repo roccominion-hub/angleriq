@@ -35,6 +35,7 @@ const BAIT_MAP: { file: string; matches: string[] }[] = [
     'cue bomb', 'geecrack cue',
     'pompom', 'pom pom', 'squarepom',
     'cube bait', 'fuzzy bait',
+    'coike', 'urchin', 'spiky ball', 'prickly pear bait',
   ] },
   { file: 'default',            matches: [] },
 ]
