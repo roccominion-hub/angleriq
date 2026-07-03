@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getLakeRagContext, formatRagContextForPrompt } from '@/lib/rag'
 import { generateEmbedding } from '@/lib/embeddings'
 import { getUserIdFromRequest, getPersonalIntelSection, getMyIntelData } from '@/lib/personalIntel'
 
@@ -18,7 +17,7 @@ async function getLakeStructureTags(lakeId: string): Promise<string[] | null> {
   return data?.structure_tags ?? null
 }
 
-async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<string[]> {
+async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<{ chunks: string[]; similarLakes: string[] }> {
   const seasonStr = weather?.season || season || ''
   const timeOfDay = weather?.timeOfDay || ''
   const conditions = weather ? `${weather.tempF}°F, ${weather.skyCondition}` : ''
@@ -33,20 +32,49 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   const queryText = queryParts.join(', ')
 
   const embedding = await generateEmbedding(queryText)
-  if (!embedding) return []
+  if (!embedding) return { chunks: [], similarLakes: [] }
 
   // Fetch structure tags so the SQL function can blend in matching generic articles
   const structureTags = lakeId ? await getLakeStructureTags(lakeId) : null
 
-  const { data: chunks, error } = await supabase.rpc('match_technique_embeddings', {
+  const { data: rows, error } = await supabase.rpc('match_technique_embeddings', {
     query_embedding: embedding,
     match_count: 12,  // slightly higher to allow room for generic blending
     ...(lakeId ? { filter_lake_id: lakeId } : {}),
     ...(structureTags?.length ? { structure_tags: structureTags } : {}),
   })
 
-  if (error || !chunks) return []
-  return (chunks as any[]).map((c: any) => c.content)
+  if (error || !rows) return { chunks: [], similarLakes: [] }
+
+  const chunks = (rows as any[]).map((c: any) => c.content)
+
+  // Fallback: if this lake has thin first-hand coverage of its own, borrow
+  // reports from the most structurally-similar fisheries (by structure_tags
+  // overlap). Keeps thin/new lakes from returning near-empty intel.
+  const lakeSpecific = lakeId
+    ? (rows as any[]).filter((r: any) => !r.is_generic && r.body_of_water_id === lakeId).length
+    : 0
+  const similarLakes: string[] = []
+  if (lakeId && lakeSpecific < 3) {
+    const { data: sims } = await supabase.rpc('get_similar_lakes_by_structure', {
+      target_lake_id: lakeId,
+      limit_count: 3,
+    })
+    for (const sim of (sims as any[]) ?? []) {
+      const { data: simRows } = await supabase.rpc('match_technique_embeddings', {
+        query_embedding: embedding,
+        match_count: 4,
+        filter_lake_id: sim.lake_id,
+      })
+      if (simRows?.length) {
+        chunks.push(...(simRows as any[]).map((r: any) => `[From similar fishery: ${sim.lake_name}] ${r.content}`))
+        similarLakes.push(sim.lake_name)
+      }
+      if (similarLakes.length >= 2) break
+    }
+  }
+
+  return { chunks, similarLakes }
 }
 
 function buildFilterString(filters: Record<string, string> = {}) {
@@ -259,18 +287,16 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
     ? `Known winning colors from tournament data:\n${[...new Set(colorsFromData)].slice(0, 10).join('\n')}`
     : 'No specific color data available from tournament records — recommend colors based on conditions.'
 
-  // Fetch curated RAG context (fishing articles/guides)
-  const rag = lakeId ? await getLakeRagContext(lakeId, lake, state, season, filters) : { chunks: [], sourceCount: 0, usedSimilarLakes: [] }
-  const ragContext = formatRagContextForPrompt(rag, lake)
-
-  // Fetch tournament technique embeddings (RAG from actual tournament data)
-  const techniqueChunks = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
+  // Fetch tournament technique embeddings (RAG from actual tournament data),
+  // with a structure-similarity fallback to comparable fisheries for thin lakes.
+  const { chunks: techniqueChunks, similarLakes } = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
   const hasTechniqueRag = techniqueChunks.length > 0
-  const techniqueRagContext = hasTechniqueRag
-    ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports):\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
+  const similarNote = similarLakes.length > 0
+    ? ` (includes comparable reports from structurally-similar fisheries: ${similarLakes.join(', ')})`
     : ''
-
-  const hasRag = rag.chunks.length > 0 || hasTechniqueRag
+  const techniqueRagContext = hasTechniqueRag
+    ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports)${similarNote}:\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
+    : ''
 
   // --- Filter-aware prompt sections ---
   const prefLines: string[] = []
@@ -361,9 +387,7 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
     : ''
 
   const intelInstruction = hasTechniqueRag
-    ? `Use the VERIFIED TOURNAMENT REPORTS above as your PRIMARY source for the TOURNAMENT INTEL section. These are real tournament results from this fishery. Be specific — cite actual baits, techniques, structure, and depths from the reports. Do not add generic information not grounded in these sources.`
-    : hasRag
-    ? `Use the CURATED FISHING INTELLIGENCE above as your PRIMARY source for the TOURNAMENT INTEL section. Synthesize it with the tournament data. Be specific — cite baits, structure, depths, presentations from the curated content. Do not add generic information not grounded in these sources.`
+    ? `Use the VERIFIED TOURNAMENT REPORTS above as your PRIMARY source for the TOURNAMENT INTEL section. These are real tournament results from this fishery (and, where noted, from structurally-similar fisheries). Be specific — cite actual baits, techniques, structure, and depths from the reports. Do not add generic information not grounded in these sources.`
     : `Write based on the tournament data and your knowledge of this specific fishery. Be specific — name bait types, structure, depths, presentations. Write like a seasoned guide who knows this lake.`
 
   const prompt = `You are an expert bass fishing guide and tournament analyst with deep knowledge of ${lake}, ${state}.
@@ -378,7 +402,7 @@ ${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INT
 - BAIT-SPECIFIC COLORS. When recommending colors for frogs (hollow body, swimming toads), use color names frogs actually come in: black, white, natural, olive/orange belly, green/brown, shad, bone — NOT soft plastic names like "Watermelon Red" or "Green Pumpkin." For hard baits (crankbaits, jerkbaits, bladed jigs), use manufacturer color names: sexy shad, chartreuse shad, ghost, chrome/blue back, bone, natural shad, fire tiger — NOT soft plastic colors. Soft plastic colors (Green Pumpkin, Watermelon Red, June Bug, Black/Blue, etc.) apply only to soft plastics.
 NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
 
-${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${ragContext ? '\n' + ragContext + '\n' : ''}${personalIntelSection}
+${techniqueRagContext ? '\n' + techniqueRagContext + '\n' : ''}${personalIntelSection}
 TOURNAMENT DATA SUMMARY (${sampleSize} reports):
 - Top baits: ${topBaits.slice(0, 6).map((b: any) => `${b.name} (${b.count} reports)`).join(', ')}
 - Top patterns: ${topPatterns.slice(0, 4).map((p: any) => `${p.pattern} (${p.count} reports)`).join(', ')}
