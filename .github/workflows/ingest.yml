@@ -7,7 +7,7 @@ on:
     inputs:
       batch:
         description: 'Number of items to process'
-        default: '10'
+        default: '60'
         required: false
       state:
         description: 'Filter by state (e.g. OK, TX) — leave blank for all'
@@ -38,7 +38,7 @@ jobs:
 
       - name: Run ingest queue
         run: |
-          BATCH="${{ github.event.inputs.batch || '10' }}"
+          BATCH="${{ github.event.inputs.batch || '60' }}"
           STATE="${{ github.event.inputs.state || '' }}"
           RETRY="${{ github.event.inputs.retry || 'false' }}"
 
