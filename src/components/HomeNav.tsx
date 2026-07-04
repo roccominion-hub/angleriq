@@ -8,6 +8,21 @@ import { Button } from '@/components/ui/button'
 import { LogOut, BookOpen, MessageCircle, Compass } from 'lucide-react'
 import { ChatDrawer } from '@/components/ChatDrawer'
 
+// Load the signed-in user's home state so Ask AnglerIQ can tailor its
+// starter prompts to where they fish. Empty string when logged out / unset.
+function useHomeState(): string {
+  const [homeState, setHomeState] = useState('')
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('profiles').select('home_state').eq('id', user.id).maybeSingle()
+        .then(({ data }) => { if (data?.home_state) setHomeState(data.home_state) })
+    })
+  }, [])
+  return homeState
+}
+
 // ── HomeNav ───────────────────────────────────────────────────────────────
 
 export function HomeNav() {
@@ -16,6 +31,7 @@ export function HomeNav() {
   const [user, setUser] = useState<any>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const homeState = useHomeState()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
@@ -106,7 +122,7 @@ export function HomeNav() {
       <ChatDrawer
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={{ mode: 'homepage' }}
+        context={{ mode: 'homepage', homeState }}
       />
     </>
   )
@@ -119,6 +135,7 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
   const router = useRouter()
   const [user, setUser] = useState<any>(isLoggedIn ? true : null)
   const [chatOpen, setChatOpen] = useState(false)
+  const homeState = useHomeState()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
@@ -158,7 +175,7 @@ export function HomeCTA({ isLoggedIn, variant = 'dark' }: { isLoggedIn?: boolean
       <ChatDrawer
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={{ mode: 'homepage' }}
+        context={{ mode: 'homepage', homeState }}
       />
     </>
   )

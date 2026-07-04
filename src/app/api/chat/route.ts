@@ -21,6 +21,7 @@ export interface ChatContext {
   topPatterns?: { pattern: string; count: number }[]
   intel?: string
   today?: string
+  homeState?: string
 }
 
 export interface ChatMessage {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   const ragQueryText =
     context.mode === 'report' && context.lake
       ? `${message} bass fishing ${context.lake} ${context.state ?? ''}`
-      : `${message} bass fishing Texas Oklahoma lakes`
+      : `${message} bass fishing lakes ${context.homeState ?? ''}`.trim()
 
   const embedding = await generateEmbedding(ragQueryText)
   let ragChunks: string[] = []
@@ -196,7 +197,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Month-based regional spawn stage for homepage mode (no water temp available).
-  // Covers the full platform footprint: TX/OK/LA/AR/TN/MS/MO/CA/AL/GA/FL/NY/MI.
+  // Named lakes below anchor the timing; the REGIONAL MAP appended after this
+  // context extends the same latitude logic to all other covered states.
   // Key regional timing notes:
   //   South FL (Okeechobee, Kissimmee) — nearly year-round; peak spawn Feb–Apr
   //   Deep South (AL/GA/MS/LA south) — 2–4 weeks ahead of TX/OK in spring
@@ -219,7 +221,7 @@ export async function POST(req: NextRequest) {
   const spawnStageSection = context.mode === 'report' && context.waterTempF != null
     ? `\nSPAWN STAGE (from measured/estimated water temperature — treat as ground truth):\n${inferSpawnStageFromTemp(context.waterTempF)}\n`
     : context.mode === 'homepage'
-    ? `\n${getHomepageSpawnContext(now.getMonth())}\n`
+    ? `\n${getHomepageSpawnContext(now.getMonth())}\nREGIONAL MAP for states not named above — apply the same latitude logic: Mid-Atlantic / Southeast (VA, NC, SC) track close to TN and northern GA; Ohio Valley (KY, WV) run slightly behind TN; Midwest / Great Lakes (OH, IN, IL, PA) fall between TN and NY/MI — spawn typically late April to May, summer offshore bite by late June. Border waters: Havasu (AZ) tracks southern-CA / south-TX timing; Champlain (VT) tracks NY.\n`
     : ''
 
   // ── Lake suggestion marker instruction ───────────────────────────────────
@@ -247,20 +249,32 @@ Rules:
     : ''
 
   // ── System prompts ────────────────────────────────────────────────────────
+  const STATE_NAMES: Record<string, string> = {
+    AL: 'Alabama', AR: 'Arkansas', AZ: 'Arizona', CA: 'California', FL: 'Florida', GA: 'Georgia',
+    IL: 'Illinois', IN: 'Indiana', KY: 'Kentucky', LA: 'Louisiana', MI: 'Michigan', MO: 'Missouri',
+    MS: 'Mississippi', NC: 'North Carolina', NY: 'New York', OH: 'Ohio', OK: 'Oklahoma',
+    PA: 'Pennsylvania', SC: 'South Carolina', TN: 'Tennessee', TX: 'Texas', VA: 'Virginia',
+    VT: 'Vermont', WV: 'West Virginia',
+  }
+  const homeStateName = context.homeState ? (STATE_NAMES[context.homeState.toUpperCase()] ?? context.homeState) : null
+  const homeStateSection = homeStateName
+    ? `\nANGLER'S HOME STATE: ${homeStateName}. For general "where should I go / what's fishing best right now" questions, prioritize fisheries in and around ${homeStateName} and neighboring states unless the angler names a different lake or region. Never default to Texas/Oklahoma when the angler is based elsewhere.\n`
+    : ''
+
   let systemPrompt: string
 
   if (context.mode === 'homepage') {
-    systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of Texas and Oklahoma lakes. Help anglers decide where to fish and what patterns to target for their next trip.
+    systemPrompt = `You are AnglerIQ, an expert bass fishing AI assistant with deep knowledge of bass fisheries across the United States. Help anglers decide where to fish and what patterns to target for their next trip.
 
 Today's date: ${currentDate}
-${spawnStageSection}${personalIntelSection}${ragSection}${lureSection}
+${spawnStageSection}${homeStateSection}${personalIntelSection}${ragSection}${lureSection}
 RULES:
-${personalIntelSection ? `- PERSONAL FISHING HISTORY — ONE SIGNAL AMONG MANY, NOT THE WHOLE ANSWER: The PERSONAL FISHING HISTORY section above is the angler's own logged trip data. When they ask DIRECTLY about their own track record — "where have I had the most success," "what's worked for me," "what's my history" — lead with specifics from this data: name the lakes, the numbers, the techniques that produced for THEM. But for general planning questions — "where should I go this weekend," "where's good for a big bass," "what lake should I fish" — answer the way you normally would, drawing on your full TX/OK fishery knowledge, current conditions, and tournament intel. The angler's logged lakes are NOT the only valid answers to a general question and must not crowd out a better recommendation elsewhere — recommend whatever fishery genuinely fits, whether or not they've logged it. You may add a logged lake as a supporting data point ("you've also done well at X in similar conditions") when it strengthens the answer, but do not narrow a general recommendation down to only the lakes in their log. Never fabricate history beyond what's listed there.\n- LOGGED ≠ ONLY DATA YOU HAVE: If the angler asks about a lake they haven't personally logged, you still have full TX/OK fishery knowledge for it — answer normally and confidently. Never say "I don't have data on that lake" just because it's absent from PERSONAL FISHING HISTORY; that section only reflects their personal log, not the limits of your knowledge.\n` : ''}- SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase for TX/OK based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
+${personalIntelSection ? `- PERSONAL FISHING HISTORY — ONE SIGNAL AMONG MANY, NOT THE WHOLE ANSWER: The PERSONAL FISHING HISTORY section above is the angler's own logged trip data. When they ask DIRECTLY about their own track record — "where have I had the most success," "what's worked for me," "what's my history" — lead with specifics from this data: name the lakes, the numbers, the techniques that produced for THEM. But for general planning questions — "where should I go this weekend," "where's good for a big bass," "what lake should I fish" — answer the way you normally would, drawing on your full nationwide fishery knowledge, current conditions, and tournament intel. The angler's logged lakes are NOT the only valid answers to a general question and must not crowd out a better recommendation elsewhere — recommend whatever fishery genuinely fits, whether or not they've logged it. You may add a logged lake as a supporting data point ("you've also done well at X in similar conditions") when it strengthens the answer, but do not narrow a general recommendation down to only the lakes in their log. Never fabricate history beyond what's listed there.\n- LOGGED ≠ ONLY DATA YOU HAVE: If the angler asks about a lake they haven't personally logged, you still have full nationwide fishery knowledge for it — answer normally and confidently. Never say "I don't have data on that lake" just because it's absent from PERSONAL FISHING HISTORY; that section only reflects their personal log, not the limits of your knowledge.\n` : ''}- SPAWN STAGE IS MANDATORY: The SEASONAL CONTEXT above defines the current bass lifecycle phase by region based on actual date and typical regional water temperatures. Treat it as ground truth. Never contradict it. Do not use calendar generalizations ("it's spring so bass are spawning") — use the stage defined above.
 - LURE ACCURACY: When the LURE / BAIT CATALOG section contains data about a specific bait, use those facts exactly — diving depth, technique, colors, material, rigging. Never invent specs for a named lure; if you don't have catalog data for it, describe only what you know for certain.
 - Artificial lures only. Never recommend live bait, cut bait, or natural bait of any kind.
 - Bass species only (largemouth, smallmouth, spotted, Guadalupe).
 - Be specific: name lakes, patterns, baits, structure, depths.
-- Focus recommendations on the covered fisheries: TX, OK, LA, AR, TN, MS, MO, CA, AL, GA, FL, NY, MI.
+- Focus recommendations on the covered fisheries: TX, OK, LA, AR, TN, MS, MO, CA, AL, GA, FL, NY, MI, SC, NC, VA, OH, WV, KY, PA, IN, IL (plus border waters like Lake Havasu AZ/CA and Lake Champlain NY/VT).
 - Keep answers concise and direct (3-6 sentences unless the angler asks for more detail).
 - If you lack data for a specific lake, say so and offer the best guidance you can.
 - Never recommend trolling.

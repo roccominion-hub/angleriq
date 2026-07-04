@@ -17,6 +17,7 @@ export interface ChatContext {
   topPatterns?: { pattern: string; count: number }[]
   intel?: string
   today?: string
+  homeState?: string  // user's home state (2-letter) — tailors homepage prompts
 }
 
 interface Message {
@@ -27,12 +28,32 @@ interface Message {
 
 // ── Starter prompts ────────────────────────────────────────────────────────
 
-const HOMEPAGE_PROMPTS = [
-  'Which TX lake is fishing best right now?',
-  'Where should I go for big bass this weekend?',
-  'What Oklahoma lakes are producing this time of year?',
-  'Where have I had the most success?',
-]
+const STATE_NAMES: Record<string, string> = {
+  AL: 'Alabama', AR: 'Arkansas', AZ: 'Arizona', CA: 'California', FL: 'Florida', GA: 'Georgia',
+  IL: 'Illinois', IN: 'Indiana', KY: 'Kentucky', LA: 'Louisiana', MI: 'Michigan', MO: 'Missouri',
+  MS: 'Mississippi', NC: 'North Carolina', NY: 'New York', OH: 'Ohio', OK: 'Oklahoma',
+  PA: 'Pennsylvania', SC: 'South Carolina', TN: 'Tennessee', TX: 'Texas', VA: 'Virginia',
+  VT: 'Vermont', WV: 'West Virginia',
+}
+
+function getHomepagePrompts(homeState?: string): string[] {
+  const name = homeState ? STATE_NAMES[homeState.toUpperCase()] : null
+  if (name) {
+    return [
+      `Which ${name} lake is fishing best right now?`,
+      `Where should I go for big bass in ${name} this weekend?`,
+      `What's producing in ${name} this time of year?`,
+      'Where have I had the most success?',
+    ]
+  }
+  // No home state set (logged out, or not chosen yet) — stay location-agnostic.
+  return [
+    'Which lake is fishing best right now?',
+    'Where should I go for big bass this weekend?',
+    'What technique fits these conditions?',
+    'Where have I had the most success?',
+  ]
+}
 
 function getReportPrompts(lake: string): string[] {
   return [
@@ -127,7 +148,7 @@ export function ChatDrawer({ open, onClose, context }: ChatDrawerProps) {
   const starterPrompts =
     context.mode === 'report' && context.lake
       ? getReportPrompts(context.lake)
-      : HOMEPAGE_PROMPTS
+      : getHomepagePrompts(context.homeState)
 
   async function sendMessage(text: string) {
     const trimmed = text.trim()
