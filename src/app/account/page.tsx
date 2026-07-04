@@ -194,11 +194,13 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
         avatarUrl = `${pub.publicUrl}?t=${Date.now()}`
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ full_name: nameDraft.trim(), avatar_url: avatarUrl, updated_at: new Date().toISOString() })
         .eq('id', user.id)
+        .select('id')
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('Could not save — profile not found. Please reload and try again.')
 
       setProfile((p: any) => ({ ...p, full_name: nameDraft.trim(), avatar_url: avatarUrl }))
       setAvatarFile(null)
@@ -246,7 +248,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
     setSavingPrefs(true)
     setPrefsMsg('')
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({
           home_state: prefHomeState || null,
@@ -256,7 +258,11 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id)
+        .select('id')
       if (error) throw error
+      // A matched-zero-rows update returns no error — surface it instead of
+      // falsely reporting success (e.g. if the profile row is missing).
+      if (!data || data.length === 0) throw new Error('Could not save — profile not found. Please reload and try again.')
       setProfile((p: any) => ({ ...p, home_state: prefHomeState || null, preferred_bait_types: prefBaitTypes, fishing_style: prefStyle || null, boat_access: prefBoat || null }))
       setPrefsMsg('Preferences saved.')
       setTimeout(() => setPrefsMsg(''), 3000)
