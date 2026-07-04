@@ -241,38 +241,54 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
   }
 
   // ── Preferences ───────────────────────────────────────────────────────────
-  function toggleBaitType(bt: string) {
-    setPrefBaitTypes(prev => prev.includes(bt) ? prev.filter(b => b !== bt) : [...prev, bt])
-  }
-
-  async function savePreferences() {
+  // Preferences auto-save: each selection persists immediately, so a choice
+  // is never lost by navigating away without clicking a Save button.
+  async function persistPrefs(next: Partial<{ home_state: string | null; preferred_bait_types: string[]; fishing_style: string | null; boat_access: string | null }>) {
     if (!user) return
     setSavingPrefs(true)
     setPrefsMsg('')
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .update({
-          home_state: prefHomeState || null,
-          preferred_bait_types: prefBaitTypes,
-          fishing_style: prefStyle || null,
-          boat_access: prefBoat || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ ...next, updated_at: new Date().toISOString() })
         .eq('id', user.id)
         .select('id')
       if (error) throw error
       // A matched-zero-rows update returns no error — surface it instead of
       // falsely reporting success (e.g. if the profile row is missing).
       if (!data || data.length === 0) throw new Error('Could not save — profile not found. Please reload and try again.')
-      setProfile((p: any) => ({ ...p, home_state: prefHomeState || null, preferred_bait_types: prefBaitTypes, fishing_style: prefStyle || null, boat_access: prefBoat || null }))
-      setPrefsMsg('Preferences saved.')
-      setTimeout(() => setPrefsMsg(''), 3000)
+      setProfile((p: any) => ({ ...p, ...next }))
+      setPrefsMsg('Saved')
+      setTimeout(() => setPrefsMsg(''), 2000)
     } catch (err: any) {
       setPrefsMsg(err.message || 'Something went wrong saving your preferences.')
     } finally {
       setSavingPrefs(false)
     }
+  }
+
+  function selectHomeState(s: string) {
+    const nextVal = prefHomeState === s ? '' : s
+    setPrefHomeState(nextVal)
+    persistPrefs({ home_state: nextVal || null })
+  }
+
+  function toggleBaitType(bt: string) {
+    const nextVal = prefBaitTypes.includes(bt) ? prefBaitTypes.filter(b => b !== bt) : [...prefBaitTypes, bt]
+    setPrefBaitTypes(nextVal)
+    persistPrefs({ preferred_bait_types: nextVal })
+  }
+
+  function selectStyle(v: string) {
+    const nextVal = prefStyle === v ? '' : v
+    setPrefStyle(nextVal)
+    persistPrefs({ fishing_style: nextVal || null })
+  }
+
+  function selectBoat(v: string) {
+    const nextVal = prefBoat === v ? '' : v
+    setPrefBoat(nextVal)
+    persistPrefs({ boat_access: nextVal || null })
   }
 
   // ── Billing portal ────────────────────────────────────────────────────────
@@ -539,7 +555,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                 {STATES.map(s => (
                   <button
                     key={s}
-                    onClick={() => setPrefHomeState(prev => prev === s ? '' : s)}
+                    onClick={() => selectHomeState(s)}
                     className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefHomeState === s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
                   >
                     {s}
@@ -570,7 +586,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                 {FISHING_STYLES.map(fs => (
                   <button
                     key={fs.value}
-                    onClick={() => setPrefStyle(prev => prev === fs.value ? '' : fs.value)}
+                    onClick={() => selectStyle(fs.value)}
                     className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefStyle === fs.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
                   >
                     <fs.icon size={14} />
@@ -586,7 +602,7 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                 {BOAT_ACCESS_OPTIONS.map(b => (
                   <button
                     key={b.value}
-                    onClick={() => setPrefBoat(prev => prev === b.value ? '' : b.value)}
+                    onClick={() => selectBoat(b.value)}
                     className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${prefBoat === b.value ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
                   >
                     <b.icon size={14} />
@@ -596,12 +612,17 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
               </div>
             </div>
 
-            {prefsMsg && <p className={`text-xs font-medium ${prefsMsg.includes('saved') ? 'text-green-600' : 'text-red-500'}`}>{prefsMsg}</p>}
-
-            <Button onClick={savePreferences} disabled={savingPrefs} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm h-9">
-              {savingPrefs ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Save Preferences
-            </Button>
+            <p className="text-xs font-medium flex items-center gap-1.5 h-5">
+              {savingPrefs ? (
+                <span className="text-slate-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Saving…</span>
+              ) : prefsMsg === 'Saved' ? (
+                <span className="text-green-600 flex items-center gap-1.5"><Check size={12} /> Saved automatically</span>
+              ) : prefsMsg ? (
+                <span className="text-red-500">{prefsMsg}</span>
+              ) : (
+                <span className="text-slate-400">Changes save automatically</span>
+              )}
+            </p>
           </div>
         </div>
 
