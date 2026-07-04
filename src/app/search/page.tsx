@@ -17,7 +17,7 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle, Compass, Save, Map
+  MessageCircle, Compass, Save, Map, FileText
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
@@ -51,6 +51,7 @@ interface SearchResult {
   coords?: { lat: number; lng: number }
 }
 interface MilkRunPattern { number: number; name: string; why: string; how: string; where: string }
+interface IntelSources { tournamentReports: number; techniqueArticles: number; similarFisheries: string[] }
 interface MyIntelTrip {
   trip_date: string
   fish_count: number | null
@@ -902,7 +903,7 @@ function SearchPage() {
   const [weather, setWeather] = useState<Weather | null>(null)
   const [waterTempF, setWaterTempF] = useState<number | null>(null)
   const [waterTempSource, setWaterTempSource] = useState<'measured' | 'estimated' | null>(null)
-  const [summary, setSummary] = useState<{ intel: string; today: string; myIntel?: MyIntelData | null }>({ intel: '', today: '' })
+  const [summary, setSummary] = useState<{ intel: string; today: string; myIntel?: MyIntelData | null; sources?: IntelSources | null }>({ intel: '', today: '' })
   const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -1103,7 +1104,7 @@ function SearchPage() {
     setSummaryLoading(true)
     setError('')
     setResult(null)
-    setSummary({ intel: '', today: '' })
+    setSummary({ intel: '', today: '', sources: null })
     setSecondaryRec('')
     setMilkRun(null)
     setWeather(null)
@@ -1180,7 +1181,7 @@ function SearchPage() {
         })
       }).then(r => r.json()).then(async d => {
         const intel = d.intel || ''
-        setSummary({ intel, today: '', myIntel: d.myIntel ?? null })
+        setSummary({ intel, today: '', myIntel: d.myIntel ?? null, sources: d.sources ?? null })
         setSummaryLoading(false)
         // Auto-trigger Recommended Plan
         if (intel) {
@@ -1615,9 +1616,91 @@ function SearchPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Recommended Plan (auto-generated) — the hero: the actionable call for right now */}
+                    {milkRunLoading && !milkRun && (
+                      <div className="space-y-3 pt-1">
+                        {[1,2,3].map(n => (
+                          <div key={n} className="flex gap-3 items-start">
+                            <Skeleton className="w-7 h-7 rounded-full shrink-0 skeleton-shimmer" />
+                            <div className="flex-1 space-y-1.5">
+                              <Skeleton className="h-3.5 w-3/4 skeleton-shimmer" />
+                              <Skeleton className="h-3 w-full skeleton-shimmer" />
+                              <Skeleton className="h-3 w-5/6 skeleton-shimmer" />
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-slate-400 animate-pulse pt-1">Building your plan…</p>
+                      </div>
+                    )}
+                    {milkRun && milkRun.patterns.length > 0 && (
+                      <div className="border-2 border-blue-500 rounded-xl overflow-hidden">
+                        <div className="bg-slate-900 px-4 py-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Route size={15} className="text-white" />
+                            <span className="text-white font-bold text-sm">Today's Plan</span>
+                          </div>
+                          <button onClick={() => setMilkRun(null)} className="text-slate-400 hover:text-white text-xs">
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="divide-y divide-slate-100 bg-white">
+                          {milkRun.patterns.map(p => (
+                            <div key={p.number} className="px-4 py-3 flex gap-3">
+                              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-extrabold">{p.number}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-slate-900 text-sm leading-snug mb-1">{p.name}</p>
+                                <div className="space-y-0.5 text-xs text-slate-600">
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Why</span><span>{p.why}</span></div>
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">How</span><span>{p.how}</span></div>
+                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Where</span><span>{p.where}</span></div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {milkRun.proTip && (
+                            <div className="px-4 py-3 bg-amber-50 flex items-start gap-2">
+                              <Sparkles size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                              <p className="text-xs text-amber-800"><span className="font-bold">Pro Tip:</span> {milkRun.proTip}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200">
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={handleMilkRun}
+                            disabled={milkRunLoading}
+                            className="text-slate-500 hover:text-slate-700 text-xs h-7 gap-1"
+                          >
+                            <RefreshCw size={11} className={milkRunLoading ? 'animate-spin' : ''} />
+                            {milkRunLoading ? 'Rebuilding...' : 'Regenerate Plan'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament Intel</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament &amp; technique intel</p>
                       <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
+                      {summary.sources && (summary.sources.tournamentReports > 0 || summary.sources.techniqueArticles > 0 || summary.sources.similarFisheries.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                          <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Drawn from</span>
+                          {summary.sources.tournamentReports > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 rounded-full px-2.5 py-0.5 font-semibold">
+                              <Trophy size={11} /> {summary.sources.tournamentReports} tournament report{summary.sources.tournamentReports === 1 ? '' : 's'}
+                            </span>
+                          )}
+                          {summary.sources.techniqueArticles > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 rounded-full px-2.5 py-0.5 font-semibold">
+                              <FileText size={11} /> {summary.sources.techniqueArticles} technique article{summary.sources.techniqueArticles === 1 ? '' : 's'}
+                            </span>
+                          )}
+                          {summary.sources.similarFisheries.map(name => (
+                            <span key={name} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 rounded-full px-2.5 py-0.5 font-semibold">
+                              <MapPin size={11} /> comparable: {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* My Intel — the angler's own logged history on this lake */}
@@ -1686,74 +1769,13 @@ function SearchPage() {
 
                           {summary.myIntel.similarCount > 0 && (
                             <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2 leading-relaxed">
-                              <span className="font-bold">Worth noting:</span> conditions today look similar to {summary.myIntel.similarCount} of your past trip{summary.myIntel.similarCount === 1 ? '' : 's'} here — the Recommended Plan below leans on what's worked for you in the past when it lines up with today.
+                              <span className="font-bold">Worth noting:</span> conditions today look similar to {summary.myIntel.similarCount} of your past trip{summary.myIntel.similarCount === 1 ? '' : 's'} here — Today's Plan above leans on what's worked for you in the past when it lines up with today.
                             </p>
                           )}
                         </div>
                       </div>
                     )}
 
-                    {/* Recommended Plan (auto-generated) */}
-                    {milkRunLoading && !milkRun && (
-                      <div className="space-y-3 pt-1">
-                        {[1,2,3].map(n => (
-                          <div key={n} className="flex gap-3 items-start">
-                            <Skeleton className="w-7 h-7 rounded-full shrink-0 skeleton-shimmer" />
-                            <div className="flex-1 space-y-1.5">
-                              <Skeleton className="h-3.5 w-3/4 skeleton-shimmer" />
-                              <Skeleton className="h-3 w-full skeleton-shimmer" />
-                              <Skeleton className="h-3 w-5/6 skeleton-shimmer" />
-                            </div>
-                          </div>
-                        ))}
-                        <p className="text-xs text-slate-400 animate-pulse pt-1">Building your plan…</p>
-                      </div>
-                    )}
-                    {milkRun && milkRun.patterns.length > 0 && (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden mt-2">
-                        <div className="bg-slate-900 px-4 py-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Route size={15} className="text-white" />
-                            <span className="text-white font-bold text-sm">Recommended Plan</span>
-                          </div>
-                          <button onClick={() => setMilkRun(null)} className="text-slate-400 hover:text-white text-xs">
-                            <X size={14} />
-                          </button>
-                        </div>
-                        <div className="divide-y divide-slate-100 bg-white">
-                          {milkRun.patterns.map(p => (
-                            <div key={p.number} className="px-4 py-3 flex gap-3">
-                              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-extrabold">{p.number}</div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-slate-900 text-sm leading-snug mb-1">{p.name}</p>
-                                <div className="space-y-0.5 text-xs text-slate-600">
-                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Why</span><span>{p.why}</span></div>
-                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">How</span><span>{p.how}</span></div>
-                                  <div className="flex gap-2"><span className="text-slate-400 font-semibold uppercase tracking-wide w-14 shrink-0">Where</span><span>{p.where}</span></div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                          {milkRun.proTip && (
-                            <div className="px-4 py-3 bg-amber-50 flex items-start gap-2">
-                              <Sparkles size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                              <p className="text-xs text-amber-800"><span className="font-bold">Pro Tip:</span> {milkRun.proTip}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200">
-                          <Button
-                            variant="ghost" size="sm"
-                            onClick={handleMilkRun}
-                            disabled={milkRunLoading}
-                            className="text-slate-500 hover:text-slate-700 text-xs h-7 gap-1"
-                          >
-                            <RefreshCw size={11} className={milkRunLoading ? 'animate-spin' : ''} />
-                            {milkRunLoading ? 'Rebuilding...' : 'Regenerate Plan'}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </CardContent>

@@ -17,7 +17,7 @@ async function getLakeStructureTags(lakeId: string): Promise<string[] | null> {
   return data?.structure_tags ?? null
 }
 
-async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<{ chunks: string[]; similarLakes: string[] }> {
+async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<{ chunks: string[]; similarLakes: string[]; tournamentReports: number; techniqueArticles: number }> {
   const seasonStr = weather?.season || season || ''
   const timeOfDay = weather?.timeOfDay || ''
   const conditions = weather ? `${weather.tempF}°F, ${weather.skyCondition}` : ''
@@ -32,7 +32,7 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   const queryText = queryParts.join(', ')
 
   const embedding = await generateEmbedding(queryText)
-  if (!embedding) return { chunks: [], similarLakes: [] }
+  if (!embedding) return { chunks: [], similarLakes: [], tournamentReports: 0, techniqueArticles: 0 }
 
   // Fetch structure tags so the SQL function can blend in matching generic articles
   const structureTags = lakeId ? await getLakeStructureTags(lakeId) : null
@@ -44,9 +44,15 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
     ...(structureTags?.length ? { structure_tags: structureTags } : {}),
   })
 
-  if (error || !rows) return { chunks: [], similarLakes: [] }
+  if (error || !rows) return { chunks: [], similarLakes: [], tournamentReports: 0, techniqueArticles: 0 }
 
   const chunks = (rows as any[]).map((c: any) => c.content)
+
+  // Provenance breakdown for the "Drawn from" UI strip: how many of the
+  // retrieved chunks are first-hand tournament reports vs. structure-matched
+  // generic technique articles.
+  const tournamentReports = (rows as any[]).filter((r: any) => !r.is_generic).length
+  const techniqueArticles = (rows as any[]).filter((r: any) => r.is_generic).length
 
   // Fallback: if this lake has thin first-hand coverage of its own, borrow
   // reports from the most structurally-similar fisheries (by structure_tags
@@ -74,7 +80,7 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
     }
   }
 
-  return { chunks, similarLakes }
+  return { chunks, similarLakes, tournamentReports, techniqueArticles }
 }
 
 function buildFilterString(filters: Record<string, string> = {}) {
@@ -177,40 +183,28 @@ Be direct, specific, and confident. No filler.`
     return NextResponse.json({ today: altData.content?.[0]?.text?.trim() || '', intel: '' })
   }
 
-  // Build cache keys
+  // Build cache key. The TOURNAMENT INTEL section is condition-independent
+  // (it summarizes the fishery's history), so it's keyed only on lake+filters
+  // with a long TTL. Today's actionable plan is generated separately by
+  // /api/milk-run, so this route no longer produces a "today" section.
   const filterStr = buildFilterString(filters)
   const lakePart = lake.toLowerCase().replace(/\s+/g, '-')
   const intelKey = `intel:${lakePart}:${filterStr}`
-  const tempBucket = weather ? Math.round(weather.tempF / 5) * 5 : 0
-  const todayKey = `today:${lakePart}:${filterStr}:${tempBucket}:${weather?.timeOfDay || ''}:${weather?.skyCondition || ''}:${weather?.season || season || ''}`
 
   const now = new Date().toISOString()
 
-  // Check caches
-  let cachedIntel: string | null = null
-  let cachedToday: string | null = null
-
+  // Check cache
   const { data: intelCache } = await supabase
     .from('summary_cache')
-    .select('intel')
+    .select('intel, sources')
     .eq('cache_key', intelKey)
     .gt('expires_at', now)
     .maybeSingle()
 
-  if (intelCache) cachedIntel = intelCache.intel
-
-  const { data: todayCache } = await supabase
-    .from('summary_cache')
-    .select('today')
-    .eq('cache_key', todayKey)
-    .gt('expires_at', now)
-    .maybeSingle()
-
-  if (todayCache) cachedToday = todayCache.today
-
-  // If both cached, return immediately (no usage charge)
-  if (cachedIntel && cachedToday) {
-    return NextResponse.json({ intel: cachedIntel, today: cachedToday, myIntel, cached: true })
+  // Cached intel → return immediately (no usage charge). myIntel is per-user
+  // so it's always computed fresh above.
+  if (intelCache?.intel) {
+    return NextResponse.json({ intel: intelCache.intel, myIntel, sources: intelCache.sources ?? null, cached: true })
   }
 
   // Track usage — only on real AI calls (cache miss)
@@ -289,7 +283,7 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
 
   // Fetch tournament technique embeddings (RAG from actual tournament data),
   // with a structure-similarity fallback to comparable fisheries for thin lakes.
-  const { chunks: techniqueChunks, similarLakes } = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
+  const { chunks: techniqueChunks, similarLakes, tournamentReports, techniqueArticles } = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
   const hasTechniqueRag = techniqueChunks.length > 0
   const similarNote = similarLakes.length > 0
     ? ` (includes comparable reports from structurally-similar fisheries: ${similarLakes.join(', ')})`
@@ -297,6 +291,13 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
   const techniqueRagContext = hasTechniqueRag
     ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports)${similarNote}:\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
     : ''
+
+  // Provenance breakdown for the client's "Drawn from" strip.
+  const sources = {
+    tournamentReports,
+    techniqueArticles,
+    similarFisheries: similarLakes,
+  }
 
   // --- Filter-aware prompt sections ---
   const prefLines: string[] = []
@@ -397,8 +398,7 @@ IMPORTANT RULES — follow these in every response without exception:
 - BASS ONLY. This app targets largemouth, smallmouth, spotted, and Guadalupe bass. If you reference other species (crappie, white bass, striper, chain pickerel), only mention them in the context of habitat they share with bass — always clarify you're describing where bass can also be found ("bass relate to the same brush piles that hold crappie," not "target crappie").
 - NO TROLLING. Never recommend trolling as a technique. Trolling is prohibited in competitive bass fishing. Where trolling might otherwise apply (e.g. covering open water), recommend cranking instead.
 - SOURCE HIERARCHY: Weight sources by reliability — tournament results and pro articles are primary; YouTube transcripts are secondary; forum posts are supplemental background only. Never lead a recommendation with forum-only intel. If tournament or article data contradicts a forum claim, trust the tournament data.
-- SPAWN STAGE IS MANDATORY: The SPAWN STAGE line in the conditions above is derived from actual current water temperature — treat it as ground truth for TODAY'S RECOMMENDATION. Do not generalize "spring" as a single pattern. Pre-spawn (staging), active spawn (beds), post-spawn (recovery), and summer require completely different techniques and locations. Never say "bass may be spawning" or "pre-spawn is possible" when the SPAWN STAGE says otherwise — state the phase definitively based on the water temp provided and recommend accordingly.
-${personalIntelSection ? `- PERSONAL INTEL IS PRIORITY CONTEXT: The PERSONAL INTEL section above contains the angler's OWN logged trips to this lake — real results from their own rod. Weight this above generic tournament data when it's relevant to today's conditions. In TODAY'S RECOMMENDATION, explicitly reference what has worked for THEM specifically when it lines up with current conditions (e.g. "Last time you fished here in similar water temps, your [bait/technique] produced — lean back into that"). If their personal results conflict with the broader tournament data, trust their logged results for their specific spot/approach but note the tournament data as a broader option to try. Never fabricate personal history beyond what's listed in PERSONAL INTEL.\n` : ''}- DO NOT MIX HISTORICAL SPAWN-STAGE PATTERNS INTO TODAY'S RECOMMENDATION: Tournament data, VERIFIED TOURNAMENT REPORTS, and curated intel often come from events fished in a DIFFERENT season/spawn stage than today (e.g. a spring tournament describing pre-spawn staging on a lake you're now reporting on in summer). It is fine — even expected — to reference those historical patterns in the TOURNAMENT INTEL section as "what's worked here historically in [season/stage]." But TODAY'S RECOMMENDATION must reflect ONLY the CURRENT SPAWN STAGE above. If the dominant historical pattern is pre-spawn staging but the current water temp says EARLY SUMMER or SUMMER, do not recommend staging/pre-spawn techniques for today — pivot to the technique that matches the current stage, and if useful, briefly note that the historical pattern applies at a different time of year.
+- SEASONAL FRAMING: When the intel describes seasonal tendencies, be specific about spawn phases (pre-spawn staging, active spawn, post-spawn recovery, summer offshore) rather than generalizing "spring" or "summer" as a single pattern. Frame these as what has historically worked here in each phase.
 - BAIT-SPECIFIC COLORS. When recommending colors for frogs (hollow body, swimming toads), use color names frogs actually come in: black, white, natural, olive/orange belly, green/brown, shad, bone — NOT soft plastic names like "Watermelon Red" or "Green Pumpkin." For hard baits (crankbaits, jerkbaits, bladed jigs), use manufacturer color names: sexy shad, chartreuse shad, ghost, chrome/blue back, bone, natural shad, fire tiger — NOT soft plastic colors. Soft plastic colors (Green Pumpkin, Watermelon Red, June Bug, Black/Blue, etc.) apply only to soft plastics.
 NOTE: "Dice baits" or "fuzzy dice baits" are a newer tournament-winning bait category (2023–present) — compact cube/sphere-shaped soft plastics with rubber tentacles, fished on finesse setups. Examples: Strike King Tumbleweed, Yamamoto Fuzzy Nuki, Geecrack Cue Bomb. Treat them as a legitimate finesse technique when relevant.
 
@@ -414,30 +414,12 @@ ${colorContext}
 ${prefFilterSection}${condFilterSection}
 ${intelInstruction}
 
-Write a detailed fishing intelligence report in TWO clearly labeled sections:
+Write a detailed fishing intelligence report as a single section:
 
 **TOURNAMENT INTEL**
-Write 4-5 sentences covering: the dominant historical patterns on this fishery, the top artificial lures and why they work here, key structure and depth ranges, and any seasonal tendencies. Be specific — name the lure types, the structure, the depths, the presentations. Only reference largemouth, smallmouth, spotted, or Guadalupe bass.
+Write 5-6 sentences covering: the dominant historical patterns on this fishery, the top artificial lures and why they work here, key structure and depth ranges, and seasonal tendencies across the year (pre-spawn, spawn, post-spawn, summer, fall, winter). Be specific — name the lure types, the structure, the depths, the presentations. Where the intel draws on structurally-similar fisheries, weave that in naturally. Only reference largemouth, smallmouth, spotted, or Guadalupe bass.
 
-**TODAY'S RECOMMENDATION**
-Write a detailed, actionable recommendation for fishing RIGHT NOW with artificial lures based on the current conditions. Cover:
-
-1. The primary technique and presentation you'd start with, and why it fits these conditions.
-
-2. Top lure color recommendations (use colors appropriate to each lure category — frog colors for frogs, manufacturer hard bait colors for crankbaits/jerkbaits, soft plastic colors for soft plastics):
-- [Color 1]: [why it works right now — sky conditions, water clarity, light penetration]
-- [Color 2]: [why it works right now]
-- [Color 3]: [why it works right now]
-
-3. Key adjustments for current conditions (one per line):
-- [Adjustment based on temperature/season]
-- [Adjustment based on time of day/light]
-- [Solunar/moon phase note if relevant — mention major bite windows if solunar activity is good]
-- [Any other relevant condition note]
-
-Be direct and confident. Write like a knowledgeable local guide giving advice to a serious tournament angler, not a generic fishing article. Avoid filler phrases.
-
-If ANGLER PREFERENCES were specified above, your recommendation MUST directly address them — either confirming tournament support for that approach or clearly noting the gap and offering a proven alternative. Never silently ignore specified preferences.`
+Be direct and confident. Write like a knowledgeable local guide describing the fishery to a serious tournament angler, not a generic fishing article. Avoid filler phrases. Do NOT write a "today's recommendation" or current-conditions action plan — that is generated separately. Focus only on the fishery's historical intel.`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -448,8 +430,8 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
-      max_tokens: 1500,
-      system: 'You are an expert bass fishing guide. Always respond with exactly two sections labeled **TOURNAMENT INTEL** and **TODAY\'S RECOMMENDATION**. Never omit either section. Use newlines to separate ideas within each section.',
+      max_tokens: 700,
+      system: 'You are an expert bass fishing guide. Respond with a single section labeled **TOURNAMENT INTEL** summarizing the fishery. Do not write a today\'s recommendation. Use newlines to separate ideas.',
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -457,39 +439,19 @@ If ANGLER PREFERENCES were specified above, your recommendation MUST directly ad
   const data = await res.json() as any
   const summary = data.content?.[0]?.text?.trim() || ''
 
-  // Parse into sections for caching
-  const todayMatch = summary.match(/\*{0,2}TODAY['']S RECOMMENDATION\*{0,2}[:\s]*([\s\S]*?)$/im)
-  const intelMatch = summary.match(/\*{0,2}TOURNAMENT INTEL\*{0,2}[:\s]*([\s\S]*?)(?=\*{0,2}TODAY|$)/im)
-  const intelText = intelMatch ? intelMatch[1].trim() : summary
-  const todayText = todayMatch ? todayMatch[1].trim() : ''
+  // Strip the section header if present; the body is the intel.
+  const intelMatch = summary.match(/\*{0,2}TOURNAMENT INTEL\*{0,2}[:\s]*([\s\S]*)$/im)
+  const intelText = (intelMatch ? intelMatch[1] : summary).trim()
 
-  // Cache each section separately
-  const intelExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-  const todayExpiry = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
-
-  if (!cachedIntel && intelText && intelText.length > 50) {
+  // Cache intel + provenance together (condition-independent, 7-day TTL).
+  if (intelText && intelText.length > 50) {
     await supabase.from('summary_cache').upsert({
       cache_key: intelKey,
       intel: intelText,
-      today: todayText || '',
-      expires_at: intelExpiry,
+      sources,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
   }
 
-  // Safeguard: Today's Recommendation must have all 3 numbered sections to be usable
-  const todayIsComplete = todayText.length > 100
-    && /1\./.test(todayText)
-    && /2\./.test(todayText)
-    && /3\./.test(todayText)
-
-  if (!cachedToday && todayIsComplete) {
-    await supabase.from('summary_cache').upsert({
-      cache_key: todayKey,
-      intel: intelText || '',
-      today: todayText,
-      expires_at: todayExpiry,
-    })
-  }
-
-  return NextResponse.json({ intel: intelText, today: todayText, myIntel, cached: false })
+  return NextResponse.json({ intel: intelText, myIntel, sources, cached: false })
 }
