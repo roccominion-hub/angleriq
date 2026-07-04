@@ -43,6 +43,15 @@ const STATE_AGENCY_DOMAINS: Record<string, string> = {
   LA: 'wlf.louisiana.gov',
   OK: 'wildlifedepartment.com',
   TX: 'tpwd.texas.gov',
+  SC: 'dnr.sc.gov',
+  NC: 'ncwildlife.org',
+  VA: 'dwr.virginia.gov',
+  OH: 'ohiodnr.gov',
+  WV: 'wvdnr.gov',
+  KY: 'fw.ky.gov',
+  PA: 'fishandboat.com',
+  IN: 'in.gov/dnr',
+  IL: 'dnr.illinois.gov',
 }
 
 // Domains with real technique content
