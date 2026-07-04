@@ -442,15 +442,26 @@ ${summary.milkRun.proTip ? `<div style="background:#fffbeb;border:1px solid #fde
                 <p className="text-slate-500 text-sm">Pro plan · Full access</p>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {profile?.subscription_status === 'active' && profile?.stripe_customer_id && (
-                <Button
-                  onClick={handleManageBilling}
-                  disabled={managingBilling}
-                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-sm"
-                >
-                  {managingBilling ? 'Redirecting...' : 'Manage Billing'}
-                </Button>
+                <>
+                  <Button
+                    onClick={handleManageBilling}
+                    disabled={managingBilling}
+                    className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-sm"
+                  >
+                    {managingBilling ? 'Redirecting...' : 'Manage Billing'}
+                  </Button>
+                  {/* Explicit cancel affordance — routes to the same Stripe portal
+                      (where cancellation lives) so the intent is unmistakable. */}
+                  <button
+                    onClick={handleManageBilling}
+                    disabled={managingBilling}
+                    className="text-slate-500 hover:text-slate-800 underline underline-offset-2 text-sm font-medium disabled:opacity-50"
+                  >
+                    Cancel subscription
+                  </button>
+                </>
               )}
               {profile?.subscription_status !== 'active' && (
                 <Button
