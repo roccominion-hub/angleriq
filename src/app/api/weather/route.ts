@@ -30,6 +30,19 @@ export async function GET(req: NextRequest) {
   const latF = parseFloat(lat)
   const lngF = parseFloat(lng)
 
+  // TEMP DIAGNOSTIC: surface exactly what the Open-Meteo call returns from
+  // this environment. Remove once the weather outage is diagnosed.
+  if (searchParams.get('debug') === '1') {
+    const testUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m&temperature_unit=fahrenheit&timezone=auto`
+    try {
+      const r = await fetch(testUrl)
+      const body = await r.text()
+      return NextResponse.json({ debug: true, status: r.status, ok: r.ok, body: body.slice(0, 600) })
+    } catch (e: any) {
+      return NextResponse.json({ debug: true, fetchError: e?.message || String(e), name: e?.name, cause: String(e?.cause ?? '') })
+    }
+  }
+
   // Determine target date
   const now = new Date()
   const targetDate = dateParam ? new Date(dateParam + 'T12:00:00Z') : now
