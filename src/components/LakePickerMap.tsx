@@ -244,7 +244,7 @@ export function LakePickerMap({
         ) : (
           <p className="text-sm text-slate-400 w-full text-center flex items-center justify-center gap-1.5">
             <MapPin size={13} />
-            Click any dot to select · {plottable.length} bodies of water across 13 states
+            Click any dot to select · {plottable.length} bodies of water across {new Set(plottable.flatMap(l => l.state.split('/'))).size} states
           </p>
         )}
       </div>

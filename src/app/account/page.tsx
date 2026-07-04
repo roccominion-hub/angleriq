@@ -15,7 +15,9 @@ import {
   Zap, Feather, Scale, Sailboat, Waves, Anchor, PartyPopper, Pin,
 } from 'lucide-react'
 
-const STATES = ['TX', 'OK', 'LA', 'AR', 'TN', 'MS', 'MO', 'CA', 'AL', 'GA', 'FL', 'NY', 'MI']
+// Every state with lake coverage (individual codes derived from body_of_water,
+// including marquee border fisheries: Havasu CA/AZ, Champlain NY/VT).
+const STATES = ['AL', 'AR', 'AZ', 'CA', 'FL', 'GA', 'IL', 'IN', 'KY', 'LA', 'MI', 'MO', 'MS', 'NC', 'NY', 'OH', 'OK', 'PA', 'SC', 'TN', 'TX', 'VA', 'VT', 'WV']
 const BAIT_TYPE_OPTIONS = ['soft plastic', 'jig', 'crankbait', 'jerkbait', 'topwater', 'swimbait', 'bladed jig', 'spinnerbait', 'spoon', 'drop shot', 'ned rig']
 const FISHING_STYLES = [
   { value: 'power', label: 'Power Fishing', icon: Zap },
