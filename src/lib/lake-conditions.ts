@@ -1,7 +1,9 @@
 /**
  * Lake conditions — water level via waterdatafortexas.org,
- * inflows via USGS NWIS, wind via Open-Meteo
+ * inflows via USGS NWIS, wind + air temp via NWS (src/lib/weather-nws.ts)
  */
+
+import { getNwsCurrent } from './weather-nws'
 
 export interface WaterLevel {
   valueFt: number
@@ -37,7 +39,6 @@ export interface LakeConditions {
   waterTempSource: 'measured' | 'estimated' | null
 }
 
-const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast'
 const WDFT_BASE  = 'https://www.waterdatafortexas.org/reservoirs/individual'
 const USGS_IV    = 'https://waterservices.usgs.gov/nwis/iv'
 const CWMS_BASE  = 'https://cwms-data.usace.army.mil/cwms-data'
@@ -285,21 +286,19 @@ function estimateWaterTempF(airTempF: number, month: number, state: string): num
   return Math.round(base * 0.75 + airTempF * 0.25)
 }
 
-// Fetch wind + air temp from Open-Meteo in a single request
+// Fetch wind + air temp from the shared NWS helper (cache-backed).
 async function fetchWeatherData(lat: number, lng: number): Promise<{ wind: WindData | null; airTempF: number | null }> {
   try {
-    const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=mph&temperature_unit=fahrenheit`
-    const data = await fetch(url, { next: { revalidate: 900 } }).then(r => r.ok ? r.json() : null)
-    if (!data?.current) return { wind: null, airTempF: null }
-    const { wind_speed_10m: spd, wind_direction_10m: dir, wind_gusts_10m: gust, temperature_2m: airTemp } = data.current
+    const cur = await getNwsCurrent(lat, lng)
+    if (!cur) return { wind: null, airTempF: null }
     return {
       wind: {
-        speedMph: Math.round(spd),
-        directionDeg: dir,
-        directionLabel: toCompass(dir),
-        gustsMph: Math.round(gust),
+        speedMph: cur.windMph,
+        directionDeg: cur.windDirection,
+        directionLabel: toCompass(cur.windDirection),
+        gustsMph: cur.windMph, // NWS hourly does not report gusts separately
       },
-      airTempF: airTemp != null ? Math.round(airTemp) : null,
+      airTempF: cur.tempF,
     }
   } catch { return { wind: null, airTempF: null } }
 }
