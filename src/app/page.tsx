@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { MapPin, Trophy, Sparkles, Fish, Target, BarChart3 } from 'lucide-react'
 import { HomeNav, HomeCTA } from '@/components/HomeNav'
 import { HowItWorks } from '@/components/HowItWorks'
@@ -106,6 +107,10 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-slate-100 text-center py-6 text-slate-400 text-sm font-medium">
+        <div className="flex justify-center gap-4 mb-2">
+          <Link href="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
+          <Link href="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
+        </div>
         © 2026 AnglerIQ · getangleriq.com
       </footer>
     </main>
