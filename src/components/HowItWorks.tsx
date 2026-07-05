@@ -1,16 +1,32 @@
 'use client'
 import { useState } from 'react'
-import { Search, SlidersHorizontal, Brain, FileText, MapPin, BarChart3, Target } from 'lucide-react'
+import { Search, SlidersHorizontal, Brain, FileText, MapPin, BarChart3, Target, MessageCircle, History, Map, Sparkles } from 'lucide-react'
 
 // ── Step mockups ─────────────────────────────────────────────────────────────
 
 function LakeSearchMockup() {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-5 text-left space-y-4">
+      {/* Three ways in: search, map, or ask the AI */}
+      <div className="flex items-center gap-1.5">
+        {[
+          { icon: <Search size={12} />, label: 'Search', active: true },
+          { icon: <Map size={12} />, label: 'Map', active: false },
+          { icon: <MessageCircle size={12} />, label: 'Ask AI', active: false },
+        ].map(t => (
+          <span key={t.label} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border ${t.active ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-500'}`}>
+            {t.icon}{t.label}
+          </span>
+        ))}
+      </div>
       <div className="flex items-center gap-2 border border-blue-300 rounded-lg px-3 py-2.5 bg-blue-50">
         <Search size={15} className="text-blue-400 shrink-0" />
         <span className="text-sm font-semibold text-slate-700">Lake Fork, TX</span>
         <span className="ml-auto w-2 h-4 bg-blue-400 rounded-sm animate-pulse" />
+      </div>
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-slate-50 border border-slate-100">
+        <History size={13} className="text-blue-500 shrink-0" />
+        <span className="text-[11px] font-semibold text-slate-500">From your log: <span className="text-slate-700">Caddo Lake · 14 fish last trip</span></span>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <SlidersHorizontal size={13} className="text-slate-400" />
@@ -39,11 +55,11 @@ function LakeSearchMockup() {
 
 function DataCrunchMockup() {
   const sources = [
-    { label: 'Pro Tournament Results', active: true },
-    { label: 'Elite Series Data', active: true },
+    { label: 'Tournament Results', active: true },
+    { label: 'Pro Tips & Techniques', active: true },
+    { label: 'Winning Patterns', active: true },
     { label: 'Local Circuit Data', active: true },
-    { label: 'Forum Reports', active: true },
-    { label: 'Weather Conditions', active: false },
+    { label: 'Weather & Water Temp', active: false },
     { label: 'Moon Phase / Solunar', active: false },
   ]
   return (
@@ -122,6 +138,36 @@ function ReportMockup() {
   )
 }
 
+function ChatLogMockup() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-5 text-left space-y-3">
+      {/* Ask AnglerIQ exchange */}
+      <div className="flex justify-end">
+        <div className="bg-blue-600 text-white text-xs font-semibold rounded-2xl rounded-br-sm px-3 py-2 max-w-[80%]">
+          Where should I go this weekend near me?
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 flex items-center justify-center shrink-0">
+          <MessageCircle size={12} className="text-white" />
+        </div>
+        <div className="bg-slate-50 border border-slate-100 text-slate-600 text-xs leading-relaxed rounded-2xl rounded-bl-sm px-3 py-2 max-w-[85%]">
+          Falls Lake is turning on — squarebill the clay points early. You crushed it there last May in similar water.
+        </div>
+      </div>
+
+      {/* Personalization from your log */}
+      <div className="border border-blue-100 bg-blue-50 rounded-xl px-3 py-2.5 flex items-center gap-2">
+        <History size={14} className="text-blue-600 shrink-0" />
+        <span className="text-[11px] font-semibold text-blue-800 leading-tight">Logged: 12 fish · Falls Lake</span>
+        <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-white border border-blue-100 rounded-full px-2 py-0.5">
+          <Sparkles size={9} /> Learning your patterns
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const STEPS = [
@@ -129,14 +175,14 @@ const STEPS = [
     num: '01',
     icon: <MapPin size={16} className="text-blue-600" />,
     title: 'Pick Your Lake',
-    desc: 'Search any named bass fishery. AnglerIQ pulls every tournament result, technique report, and winning pattern on record for that water.',
+    desc: 'Search by name, tap the map, or just ask the AI — then get every tournament result, technique report, and winning pattern on record for that water, alongside your own logged history.',
     mockup: <LakeSearchMockup />,
   },
   {
     num: '02',
     icon: <BarChart3 size={16} className="text-blue-600" />,
     title: 'We Crunch the Data',
-    desc: 'Pro tournament results and local circuit data are cross-referenced against real conditions — temp, sky, season, and moon phase.',
+    desc: 'Tournament results, pro tips, and winning patterns get cross-referenced against real conditions — water temp, sky, season, and moon phase.',
     mockup: <DataCrunchMockup />,
   },
   {
@@ -145,6 +191,13 @@ const STEPS = [
     title: 'Get Your Game Plan',
     desc: 'A clear, AI-generated fishing report tells you exactly what to throw, where to fish it, what color, and why it works right now.',
     mockup: <ReportMockup />,
+  },
+  {
+    num: '04',
+    icon: <MessageCircle size={16} className="text-blue-600" />,
+    title: 'Ask & Personalize',
+    desc: 'Ask AnglerIQ follow-ups in plain English, and log your own trips. Your results feed back in — every recommendation gets sharper and more personal over time.',
+    mockup: <ChatLogMockup />,
   },
 ]
 

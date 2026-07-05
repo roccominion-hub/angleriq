@@ -48,7 +48,7 @@ export default function Home() {
 
           {/* Social proof strip */}
           <div className="flex flex-wrap items-center justify-center gap-6 mt-12 text-slate-300 text-sm font-semibold">
-            <span className="flex items-center gap-2"><MapPin size={15} className="text-blue-400" /> 13 States &amp; Growing</span>
+            <span className="flex items-center gap-2"><MapPin size={15} className="text-blue-400" /> 24 States &amp; Growing</span>
             <span className="text-slate-500">·</span>
             <span className="flex items-center gap-2"><BarChart3 size={15} className="text-blue-400" /> 1000s of Data Sources</span>
             <span className="text-slate-500">·</span>
@@ -67,17 +67,17 @@ export default function Home() {
             {
               icon: <Fish size={22} className="text-blue-600" />,
               title: 'Lake-Specific Patterns',
-              desc: 'Not generic advice — patterns proven on your exact fishery, filtered by season, conditions, and structure type.',
+              desc: 'Not generic advice — patterns proven on your exact fishery across 24 states, filtered by season, conditions, and structure type.',
             },
             {
               icon: <Trophy size={22} className="text-blue-600" />,
-              title: 'Real Tournament Data',
-              desc: 'Every report comes from actual tournament results. Real pros, real places, real winning baits.',
+              title: 'Tournament + Technique Data',
+              desc: 'Built from thousands of real tournament results, pro technique reports, and winning patterns — cross-referenced with the conditions they were caught in.',
             },
             {
               icon: <Sparkles size={22} className="text-blue-600" />,
-              title: 'AI Fishing Reports',
-              desc: 'Raw data becomes a clear action plan. What to throw, what color, what depth — built for today\'s conditions.',
+              title: 'AI Reports That Learn',
+              desc: 'Raw data becomes a clear action plan — what to throw, what color, what depth, and why. Ask follow-ups and log your trips, and it sharpens to how you fish.',
             },
           ].map((f) => (
             <div key={f.title} className="border border-slate-100 rounded-xl p-6 flex flex-col gap-3 bg-white shadow-sm hover:shadow-md hover:border-blue-100 transition-all">
@@ -92,12 +92,12 @@ export default function Home() {
       </section>
 
       {/* Bottom CTA */}
-      <section className="bg-blue-600 px-6 py-16 text-center">
+      <section className="bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-500 px-6 py-16 text-center">
         <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3 tracking-tight">
           Ready to fish smarter?
         </h2>
-        <p className="text-blue-100 font-medium mb-8 text-lg">
-          Search your lake. Get your game plan. Win more.
+        <p className="text-blue-50 font-medium mb-8 text-lg">
+          Search your lake. Get your game plan. Catch more.
         </p>
         <div className="flex flex-wrap gap-3 justify-center">
           <HomeCTA variant="light" />
