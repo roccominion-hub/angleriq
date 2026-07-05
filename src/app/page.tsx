@@ -92,7 +92,7 @@ export default function Home() {
       </section>
 
       {/* Bottom CTA */}
-      <section className="bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-500 px-6 py-16 text-center">
+      <section className="bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-900 px-6 py-16 text-center">
         <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3 tracking-tight">
           Ready to fish smarter?
         </h2>
