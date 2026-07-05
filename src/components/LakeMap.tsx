@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { Navigation, Droplets } from 'lucide-react'
 
 interface LakeMapProps {
@@ -160,6 +160,71 @@ function classifyFlowline(coords: number[][], rings: number[][][]): null | {
   return { point: crossing, kind: endInside ? 'inflow' : 'outflow' }
 }
 
+// ── Stream network via NHD topology (no polygon dependency) ──────────────────
+// NHD models the water course through a lake as ftype-558 "artificial paths",
+// each noded to the ftype-460 rivers that feed/drain it. We union flowlines by
+// shared endpoints, take the 558 network component at the lake center as "the
+// lake", then the true mouths are where 460 rivers touch that network.
+type Flow = { coords: number[][]; ftype: number; flowdir: number; name: string | null; size: number }
+type Junction = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
+
+function nodeKey(pt: number[]): string { return `${pt[0].toFixed(6)},${pt[1].toFixed(6)}` }
+
+function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[] } {
+  const paths = flows.filter(f => f.ftype === 558)
+  const streams = flows.filter(f => f.ftype === 460)
+  if (!paths.length) return { drawStreams: streams, junctions: [] }
+
+  // Union-find over every flowline's two endpoints.
+  const parent = new Map<string, string>()
+  const find = (x: string): string => {
+    let p = parent.get(x) ?? x
+    if (p !== x) { p = find(p); parent.set(x, p) }
+    return p
+  }
+  const union = (a: string, b: string) => { parent.set(find(a), find(b)) }
+  const ends = (f: Flow): [string, string] => [nodeKey(f.coords[0]), nodeKey(f.coords[f.coords.length - 1])]
+  for (const f of flows) {
+    const [a, b] = ends(f)
+    if (!parent.has(a)) parent.set(a, a)
+    if (!parent.has(b)) parent.set(b, b)
+    union(a, b)
+  }
+
+  // The lake's component = the one whose 558 path passes nearest the center.
+  let bestRoot: string | null = null, bestD = Infinity
+  for (const f of paths) {
+    for (const c of f.coords) {
+      const d = Math.hypot(c[0] - cLng, c[1] - cLat)
+      if (d < bestD) { bestD = d; bestRoot = find(nodeKey(f.coords[0])) }
+    }
+  }
+  if (!bestRoot) return { drawStreams: streams, junctions: [] }
+
+  // Nodes of the lake's 558 network (the shoreline transition points).
+  const lakeNodes = new Set<string>()
+  for (const f of paths) {
+    const [a, b] = ends(f)
+    if (find(a) === bestRoot) { lakeNodes.add(a); lakeNodes.add(b) }
+  }
+
+  // Draw only 460 rivers connected to this lake's network.
+  const drawStreams = streams.filter(f => find(ends(f)[0]) === bestRoot)
+
+  // Mouths: a 460 river whose downstream end touches a lake node is an inflow;
+  // whose upstream end touches one is the outflow.
+  const junctions: Junction[] = []
+  for (const f of streams) {
+    const [a, b] = ends(f)
+    if (lakeNodes.has(b) && !lakeNodes.has(a)) {
+      const p = f.coords[f.coords.length - 1]; junctions.push({ lng: p[0], lat: p[1], kind: 'inflow', size: f.size })
+    } else if (lakeNodes.has(a) && !lakeNodes.has(b)) {
+      const p = f.coords[0]; junctions.push({ lng: p[0], lat: p[1], kind: 'outflow', size: f.size })
+    }
+  }
+  return { drawStreams, junctions }
+}
+
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const mapRef = useRef<any>(null)
   const mapDivRef = useRef<HTMLDivElement>(null)
@@ -206,14 +271,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     const wb = features?.waterwayBbox
     if (!wb) return
     const bbox = `${wb.minLng},${wb.minLat},${wb.maxLng},${wb.maxLat}`
-    // Named StreamRiver segments only: skips the thousands of unnamed capillary
-    // ditches (clutter + hits the 2000-row cap) and keeps the meaningful named
-    // creeks and rivers. gnis_name is used only for ranking, never displayed.
-    const where = encodeURIComponent("gnis_name IS NOT NULL AND ftype=460")
+    // Named rivers/creeks (ftype 460) for display, plus the ftype-558 artificial
+    // paths that trace the water course through the lake — needed to compute the
+    // stream network topology. Unnamed capillary 460 ditches are excluded (clutter
+    // + row cap). gnis_name is used only for ranking, never displayed.
+    const where = encodeURIComponent("(ftype=460 AND gnis_name IS NOT NULL) OR ftype=558")
     const url = `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query`
       + `?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326`
       + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name`
-      + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
+      + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=4000`
     fetch(url, { signal: AbortSignal.timeout(20000) })
       .then(r => r.json())
       .then(fc => {
@@ -240,6 +306,12 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       })
       .catch(() => setFlowlines([]))
   }, [features])
+
+  // Derive the lake's connected stream network + true mouths from NHD topology.
+  const streamNetwork = useMemo(
+    () => (flowlines?.length ? buildStreamNetwork(flowlines as Flow[], lng, lat) : { drawStreams: [], junctions: [] }),
+    [flowlines, lng, lat]
+  )
 
   // Init map + waterbody fill
   useEffect(() => {
@@ -281,22 +353,18 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   }, [lat, lng, features])
 
   // Streams overlay — label-free NHD flowlines drawn as vector polylines.
-  // Replaces the old USGS raster tile layer, which baked in GNIS/legacy names
-  // (e.g. Caddo's "Clear Lake" sub-basin) that didn't match the searched lake.
+  // Only rivers connected to this lake's network are drawn (no unrelated creeks
+  // draining elsewhere), and never the 558 paths that run through open water.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
     const map = mapRef.current
     import('leaflet').then(L => {
       streamLayerRef.current?.remove()
       streamLayerRef.current = null
-      if (!overlays.has('flowlines') || !flowlines?.length) return
+      if (!overlays.has('flowlines') || !streamNetwork.drawStreams.length) return
 
       const group = L.layerGroup()
-      for (const fl of flowlines) {
-        // ftype 460 = StreamRiver (real tributaries). 558 = ArtificialPath, the
-        // connector drawn through the lake itself — skip so we don't draw lines
-        // across open water.
-        if (fl.ftype !== 460) continue
+      for (const fl of streamNetwork.drawStreams) {
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
         // Heavier for longer (bigger) named streams; thin for small creeks.
         const big = fl.size >= 20, mid = fl.size >= 6
@@ -305,7 +373,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       }
       streamLayerRef.current = group.addTo(map)
     })
-  }, [overlays, mapReady, flowlines])
+  }, [overlays, mapReady, streamNetwork])
 
   // Wind arrows
   useEffect(() => {
@@ -370,34 +438,36 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions, features, overlays, baseLayer, zoom, mapReady])
 
-  // Stream entry/exit circles — soft area indicators placed at the true points
-  // where NHD flowlines cross the shoreline (major tributaries + the outflow),
-  // rather than projecting sparse USGS gauges onto the bank. Where a gauge sits
-  // near an inflow, its live cfs and flow rating carry through.
+  // Stream entry/exit circles — soft area indicators at the true mouths where
+  // named rivers meet the lake's NHD network (major tributaries + the outflow).
+  // Falls back to polygon-boundary crossings for lakes lacking artificial paths.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !features || !flowlines?.length) return
+    if (!mapReady || !mapRef.current) return
     const map = mapRef.current
 
-    // Lake polygon rings
-    const rings: number[][][] = []
-    if (features?.waterbodies?.features) {
+    type Cross = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
+    let crossings: Cross[] = streamNetwork.junctions
+
+    if (!crossings.length && flowlines?.length && features?.waterbodies?.features) {
+      const rings: number[][][] = []
       for (const f of features.waterbodies.features) {
         const geom = f.geometry
         if (geom?.type === 'Polygon') rings.push(geom.coordinates[0])
         if (geom?.type === 'MultiPolygon') for (const poly of geom.coordinates) rings.push(poly[0])
       }
+      if (rings.length) {
+        const fb: Cross[] = []
+        for (const fl of flowlines) {
+          if (fl.ftype !== 460) continue
+          const cls = classifyFlowline(fl.coords, rings)
+          if (cls) fb.push({ lng: cls.point[0], lat: cls.point[1], kind: cls.kind, size: fl.size || 0 })
+        }
+        crossings = fb
+      }
     }
-    if (!rings.length) return
-
-    // Classify each real stream (ftype 460) into inflow/outflow shoreline crossings.
-    type Cross = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
-    const crossings: Cross[] = []
-    for (const fl of flowlines) {
-      if (fl.ftype !== 460) continue
-      const cls = classifyFlowline(fl.coords, rings)
-      if (cls) crossings.push({ lng: cls.point[0], lat: cls.point[1], kind: cls.kind, size: fl.size || 0 })
+    if (!crossings.length) {
+      inflowMarkersRef.current.forEach(m => m.remove()); inflowMarkersRef.current.clear(); return
     }
-    if (!crossings.length) return
 
     // Merge near-duplicate crossings (several flowlines meeting at one mouth).
     const merged: Cross[] = []
@@ -442,7 +512,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         inflowMarkersRef.current.set(`x${i}`, circle)
       })
     })
-  }, [conditions, mapReady, features, flowlines])
+  }, [conditions, mapReady, features, flowlines, streamNetwork])
 
   // Handle inflow selection — place a pulsing marker at the lake-edge entry
   // point and zoom to it. No external API call — uses the lake polygon only.
