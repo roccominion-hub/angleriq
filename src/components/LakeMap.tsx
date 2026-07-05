@@ -161,66 +161,61 @@ function classifyFlowline(coords: number[][], rings: number[][][]): null | {
 }
 
 // ── Stream network via NHD topology (no polygon dependency) ──────────────────
-// NHD models the water course through a lake as ftype-558 "artificial paths",
-// each noded to the ftype-460 rivers that feed/drain it. We union flowlines by
-// shared endpoints, take the 558 network component at the lake center as "the
-// lake", then the true mouths are where 460 rivers touch that network.
-type Flow = { coords: number[][]; ftype: number; flowdir: number; name: string | null; size: number }
+// NHD ties the ftype-558 "artificial paths" that trace a lake's water course to
+// the lake's waterbody via wbarea_permanent_identifier. We take the dominant
+// wbarea near the center as "the lake"; its 558 endpoints are the shoreline
+// nodes. A named river (460) or a differently-identified 558 (an impounded
+// river) touching one of those nodes is a mouth — inflow if its downstream end
+// touches, outflow if its upstream end does.
+type Flow = { coords: number[][]; ftype: number; flowdir: number; name: string | null; wb: string | null; size: number }
 type Junction = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
 
 function nodeKey(pt: number[]): string { return `${pt[0].toFixed(6)},${pt[1].toFixed(6)}` }
+function ends(f: Flow): [string, string] { return [nodeKey(f.coords[0]), nodeKey(f.coords[f.coords.length - 1])] }
 
 function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[] } {
   const paths = flows.filter(f => f.ftype === 558)
   const streams = flows.filter(f => f.ftype === 460)
   if (!paths.length) return { drawStreams: streams, junctions: [] }
 
-  // Union-find over every flowline's two endpoints.
-  const parent = new Map<string, string>()
-  const find = (x: string): string => {
-    let p = parent.get(x) ?? x
-    if (p !== x) { p = find(p); parent.set(x, p) }
-    return p
+  // The lake = the wbarea shared by the most 558 paths passing near the center.
+  const nearCounts = new Map<string, number>()
+  for (const f of paths) {
+    if (!f.wb) continue
+    if (f.coords.some(c => Math.hypot(c[0] - cLng, c[1] - cLat) < 0.05)) {
+      nearCounts.set(f.wb, (nearCounts.get(f.wb) ?? 0) + 1)
+    }
   }
-  const union = (a: string, b: string) => { parent.set(find(a), find(b)) }
-  const ends = (f: Flow): [string, string] => [nodeKey(f.coords[0]), nodeKey(f.coords[f.coords.length - 1])]
-  for (const f of flows) {
+  let lakeWb: string | null = null, bestN = 0
+  for (const [wb, n] of nearCounts) if (n > bestN) { bestN = n; lakeWb = wb }
+  if (!lakeWb) return { drawStreams: streams, junctions: [] }
+
+  // Shoreline nodes = endpoints of the lake's own 558 network.
+  const lakeNodes = new Set<string>()
+  for (const f of paths) if (f.wb === lakeWb) { const [a, b] = ends(f); lakeNodes.add(a); lakeNodes.add(b) }
+
+  // Draw the 460 rivers wired into the lake (directly, or via connected creeks).
+  const parent = new Map<string, string>()
+  const find = (x: string): string => { let p = parent.get(x) ?? x; if (p !== x) { p = find(p); parent.set(x, p) } return p }
+  for (const f of streams) {
     const [a, b] = ends(f)
     if (!parent.has(a)) parent.set(a, a)
     if (!parent.has(b)) parent.set(b, b)
-    union(a, b)
+    parent.set(find(a), find(b))
   }
+  const lakeRoots = new Set<string>()
+  for (const f of streams) for (const n of ends(f)) if (lakeNodes.has(n)) lakeRoots.add(find(n))
+  const drawStreams = streams.filter(f => lakeRoots.has(find(ends(f)[0])))
 
-  // The lake's component = the one whose 558 path passes nearest the center.
-  let bestRoot: string | null = null, bestD = Infinity
-  for (const f of paths) {
-    for (const c of f.coords) {
-      const d = Math.hypot(c[0] - cLng, c[1] - cLat)
-      if (d < bestD) { bestD = d; bestRoot = find(nodeKey(f.coords[0])) }
-    }
-  }
-  if (!bestRoot) return { drawStreams: streams, junctions: [] }
-
-  // Nodes of the lake's 558 network (the shoreline transition points).
-  const lakeNodes = new Set<string>()
-  for (const f of paths) {
-    const [a, b] = ends(f)
-    if (find(a) === bestRoot) { lakeNodes.add(a); lakeNodes.add(b) }
-  }
-
-  // Draw only 460 rivers connected to this lake's network.
-  const drawStreams = streams.filter(f => find(ends(f)[0]) === bestRoot)
-
-  // Mouths: a 460 river whose downstream end touches a lake node is an inflow;
-  // whose upstream end touches one is the outflow.
+  // Mouths: named rivers (460) and impounded rivers (558 with a different
+  // wbarea) that touch the lake's network at exactly one end.
   const junctions: Junction[] = []
-  for (const f of streams) {
+  for (const f of [...streams, ...paths.filter(p => p.wb !== lakeWb)]) {
     const [a, b] = ends(f)
-    if (lakeNodes.has(b) && !lakeNodes.has(a)) {
-      const p = f.coords[f.coords.length - 1]; junctions.push({ lng: p[0], lat: p[1], kind: 'inflow', size: f.size })
-    } else if (lakeNodes.has(a) && !lakeNodes.has(b)) {
-      const p = f.coords[0]; junctions.push({ lng: p[0], lat: p[1], kind: 'outflow', size: f.size })
-    }
+    const aIn = lakeNodes.has(a), bIn = lakeNodes.has(b)
+    if (aIn === bIn) continue
+    const p = bIn ? f.coords[f.coords.length - 1] : f.coords[0]
+    junctions.push({ lng: p[0], lat: p[1], kind: bIn ? 'inflow' : 'outflow', size: f.size })
   }
   return { drawStreams, junctions }
 }
@@ -278,15 +273,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     const where = encodeURIComponent("(ftype=460 AND gnis_name IS NOT NULL) OR ftype=558")
     const url = `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query`
       + `?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326`
-      + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name`
+      + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name,wbarea_permanent_identifier`
       + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=4000`
     fetch(url, { signal: AbortSignal.timeout(20000) })
       .then(r => r.json())
       .then(fc => {
         const feats = (fc?.features ?? [])
           .filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
-        // Total length per named stream — so a long river (Brazos) outranks a
-        // short creek even where its crossing segment is small.
+        // Total length per named stream — so a long river outranks a short creek
+        // even where its crossing segment is small.
         const lenByName: Record<string, number> = {}
         for (const f of feats) {
           const n = f.properties?.gnis_name
@@ -299,6 +294,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
             ftype: f.properties?.ftype,
             flowdir: f.properties?.flowdir,
             name,
+            wb: f.properties?.wbarea_permanent_identifier ?? null,
             size: name ? (lenByName[name] ?? 0) : (f.properties?.lengthkm ?? 0),
           }
         })
