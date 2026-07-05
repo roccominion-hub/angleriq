@@ -89,7 +89,11 @@ function SignupForm() {
           <p className="text-center text-sm text-slate-500 mt-4">
             Already have an account? <Link href="/auth/login" className="text-blue-600 font-semibold hover:underline">Sign in</Link>
           </p>
-          <p className="text-center text-xs text-slate-400 mt-3">By signing up you agree to our Terms of Service</p>
+          <p className="text-center text-xs text-slate-400 mt-3">
+            By continuing you agree to our{' '}
+            <Link href="/terms" className="text-blue-500 hover:underline">Terms of Service</Link>{' '}and{' '}
+            <Link href="/privacy" className="text-blue-500 hover:underline">Privacy Policy</Link>.
+          </p>
         </div>
       </div>
     </div>
