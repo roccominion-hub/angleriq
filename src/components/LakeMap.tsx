@@ -206,21 +206,36 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     const wb = features?.waterwayBbox
     if (!wb) return
     const bbox = `${wb.minLng},${wb.minLat},${wb.maxLng},${wb.maxLat}`
+    // Named StreamRiver segments only: skips the thousands of unnamed capillary
+    // ditches (clutter + hits the 2000-row cap) and keeps the meaningful named
+    // creeks and rivers. gnis_name is used only for ranking, never displayed.
+    const where = encodeURIComponent("gnis_name IS NOT NULL AND ftype=460")
     const url = `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query`
       + `?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326`
-      + `&spatialRel=esriSpatialRelIntersects&outFields=ftype,flowdir,lengthkm,streamorde`
+      + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name`
       + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
     fetch(url, { signal: AbortSignal.timeout(20000) })
       .then(r => r.json())
       .then(fc => {
-        const lines = (fc?.features ?? [])
+        const feats = (fc?.features ?? [])
           .filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
-          .map((f: any) => ({
+        // Total length per named stream — so a long river (Brazos) outranks a
+        // short creek even where its crossing segment is small.
+        const lenByName: Record<string, number> = {}
+        for (const f of feats) {
+          const n = f.properties?.gnis_name
+          if (n) lenByName[n] = (lenByName[n] ?? 0) + (f.properties?.lengthkm ?? 0)
+        }
+        const lines = feats.map((f: any) => {
+          const name = f.properties?.gnis_name ?? null
+          return {
             coords: f.geometry.coordinates as number[][],
             ftype: f.properties?.ftype,
             flowdir: f.properties?.flowdir,
-            size: f.properties?.streamorde ?? f.properties?.lengthkm ?? 0,
-          }))
+            name,
+            size: name ? (lenByName[name] ?? 0) : (f.properties?.lengthkm ?? 0),
+          }
+        })
         setFlowlines(lines)
       })
       .catch(() => setFlowlines([]))
@@ -283,9 +298,10 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
         // across open water.
         if (fl.ftype !== 460) continue
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
-        // Slightly heavier line for larger streams (Strahler order / length proxy).
-        const weight = fl.size >= 4 ? 2.4 : fl.size >= 2 ? 1.8 : 1.2
-        L.polyline(latlngs, { color: '#2563eb', weight, opacity: 0.55, interactive: false }).addTo(group)
+        // Heavier for longer (bigger) named streams; thin for small creeks.
+        const big = fl.size >= 20, mid = fl.size >= 6
+        const weight = big ? 2.6 : mid ? 1.8 : 1.2
+        L.polyline(latlngs, { color: '#2563eb', weight, opacity: big ? 0.7 : 0.5, interactive: false }).addTo(group)
       }
       streamLayerRef.current = group.addTo(map)
     })
