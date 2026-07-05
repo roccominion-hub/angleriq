@@ -17,7 +17,7 @@ async function getLakeStructureTags(lakeId: string): Promise<string[] | null> {
   return data?.structure_tags ?? null
 }
 
-async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<{ chunks: string[]; similarLakes: string[]; tournamentReports: number; techniqueArticles: number }> {
+async function getTechniqueRagChunks(lake: string, state: string, season: string, weather: any, filters: Record<string, string> = {}, lakeId?: string): Promise<{ chunks: string[]; similarLakes: string[] }> {
   const seasonStr = weather?.season || season || ''
   const timeOfDay = weather?.timeOfDay || ''
   const conditions = weather ? `${weather.tempF}°F, ${weather.skyCondition}` : ''
@@ -32,7 +32,7 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
   const queryText = queryParts.join(', ')
 
   const embedding = await generateEmbedding(queryText)
-  if (!embedding) return { chunks: [], similarLakes: [], tournamentReports: 0, techniqueArticles: 0 }
+  if (!embedding) return { chunks: [], similarLakes: [] }
 
   // Fetch structure tags so the SQL function can blend in matching generic articles
   const structureTags = lakeId ? await getLakeStructureTags(lakeId) : null
@@ -44,15 +44,9 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
     ...(structureTags?.length ? { structure_tags: structureTags } : {}),
   })
 
-  if (error || !rows) return { chunks: [], similarLakes: [], tournamentReports: 0, techniqueArticles: 0 }
+  if (error || !rows) return { chunks: [], similarLakes: [] }
 
   const chunks = (rows as any[]).map((c: any) => c.content)
-
-  // Provenance breakdown for the "Drawn from" UI strip: how many of the
-  // retrieved chunks are first-hand tournament reports vs. structure-matched
-  // generic technique articles.
-  const tournamentReports = (rows as any[]).filter((r: any) => !r.is_generic).length
-  const techniqueArticles = (rows as any[]).filter((r: any) => r.is_generic).length
 
   // Fallback: if this lake has thin first-hand coverage of its own, borrow
   // reports from the most structurally-similar fisheries (by structure_tags
@@ -80,7 +74,7 @@ async function getTechniqueRagChunks(lake: string, state: string, season: string
     }
   }
 
-  return { chunks, similarLakes, tournamentReports, techniqueArticles }
+  return { chunks, similarLakes }
 }
 
 function buildFilterString(filters: Record<string, string> = {}) {
@@ -196,7 +190,7 @@ Be direct, specific, and confident. No filler.`
   // Check cache
   const { data: intelCache } = await supabase
     .from('summary_cache')
-    .select('intel, sources')
+    .select('intel')
     .eq('cache_key', intelKey)
     .gt('expires_at', now)
     .maybeSingle()
@@ -204,7 +198,7 @@ Be direct, specific, and confident. No filler.`
   // Cached intel → return immediately (no usage charge). myIntel is per-user
   // so it's always computed fresh above.
   if (intelCache?.intel) {
-    return NextResponse.json({ intel: intelCache.intel, myIntel, sources: intelCache.sources ?? null, cached: true })
+    return NextResponse.json({ intel: intelCache.intel, myIntel, cached: true })
   }
 
   // Track usage — only on real AI calls (cache miss)
@@ -283,7 +277,7 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
 
   // Fetch tournament technique embeddings (RAG from actual tournament data),
   // with a structure-similarity fallback to comparable fisheries for thin lakes.
-  const { chunks: techniqueChunks, similarLakes, tournamentReports, techniqueArticles } = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
+  const { chunks: techniqueChunks, similarLakes } = await getTechniqueRagChunks(lake, state, season, weather, filters, lakeId)
   const hasTechniqueRag = techniqueChunks.length > 0
   const similarNote = similarLakes.length > 0
     ? ` (includes comparable reports from structurally-similar fisheries: ${similarLakes.join(', ')})`
@@ -291,13 +285,6 @@ ${moonContext}` : `Current season: ${season || 'unknown'}${spawnStage ? `\nSPAWN
   const techniqueRagContext = hasTechniqueRag
     ? `VERIFIED TOURNAMENT REPORTS (${techniqueChunks.length} relevant reports)${similarNote}:\n---\n${techniqueChunks.map((c, i) => `[Report ${i + 1}]\n${c}`).join('\n\n')}\n---`
     : ''
-
-  // Provenance breakdown for the client's "Drawn from" strip.
-  const sources = {
-    tournamentReports,
-    techniqueArticles,
-    similarFisheries: similarLakes,
-  }
 
   // --- Filter-aware prompt sections ---
   const prefLines: string[] = []
@@ -443,15 +430,14 @@ Be direct and confident. Write like a knowledgeable local guide describing the f
   const intelMatch = summary.match(/\*{0,2}TOURNAMENT INTEL\*{0,2}[:\s]*([\s\S]*)$/im)
   const intelText = (intelMatch ? intelMatch[1] : summary).trim()
 
-  // Cache intel + provenance together (condition-independent, 7-day TTL).
+  // Cache intel (condition-independent, 7-day TTL).
   if (intelText && intelText.length > 50) {
     await supabase.from('summary_cache').upsert({
       cache_key: intelKey,
       intel: intelText,
-      sources,
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
   }
 
-  return NextResponse.json({ intel: intelText, myIntel, sources, cached: false })
+  return NextResponse.json({ intel: intelText, myIntel, cached: false })
 }

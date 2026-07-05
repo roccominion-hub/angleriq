@@ -17,7 +17,7 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle, Compass, Save, Map, FileText
+  MessageCircle, Compass, Save, Map
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
@@ -51,7 +51,6 @@ interface SearchResult {
   coords?: { lat: number; lng: number }
 }
 interface MilkRunPattern { number: number; name: string; why: string; how: string; where: string }
-interface IntelSources { tournamentReports: number; techniqueArticles: number; similarFisheries: string[] }
 interface MyIntelTrip {
   trip_date: string
   fish_count: number | null
@@ -903,7 +902,7 @@ function SearchPage() {
   const [weather, setWeather] = useState<Weather | null>(null)
   const [waterTempF, setWaterTempF] = useState<number | null>(null)
   const [waterTempSource, setWaterTempSource] = useState<'measured' | 'estimated' | null>(null)
-  const [summary, setSummary] = useState<{ intel: string; today: string; myIntel?: MyIntelData | null; sources?: IntelSources | null }>({ intel: '', today: '' })
+  const [summary, setSummary] = useState<{ intel: string; today: string; myIntel?: MyIntelData | null }>({ intel: '', today: '' })
   const [secondaryRec, setSecondaryRec] = useState('')
   const [loading, setLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -1104,7 +1103,7 @@ function SearchPage() {
     setSummaryLoading(true)
     setError('')
     setResult(null)
-    setSummary({ intel: '', today: '', sources: null })
+    setSummary({ intel: '', today: '' })
     setSecondaryRec('')
     setMilkRun(null)
     setWeather(null)
@@ -1181,7 +1180,7 @@ function SearchPage() {
         })
       }).then(r => r.json()).then(async d => {
         const intel = d.intel || ''
-        setSummary({ intel, today: '', myIntel: d.myIntel ?? null, sources: d.sources ?? null })
+        setSummary({ intel, today: '', myIntel: d.myIntel ?? null })
         setSummaryLoading(false)
         // Auto-trigger Recommended Plan
         if (intel) {
@@ -1681,26 +1680,6 @@ function SearchPage() {
                     <div>
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tournament &amp; technique intel</p>
                       <p className="text-slate-700 text-sm leading-relaxed">{summary.intel}</p>
-                      {summary.sources && (summary.sources.tournamentReports > 0 || summary.sources.techniqueArticles > 0 || summary.sources.similarFisheries.length > 0) && (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-                          <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Drawn from</span>
-                          {summary.sources.tournamentReports > 0 && (
-                            <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 rounded-full px-2.5 py-0.5 font-semibold">
-                              <Trophy size={11} /> {summary.sources.tournamentReports} tournament report{summary.sources.tournamentReports === 1 ? '' : 's'}
-                            </span>
-                          )}
-                          {summary.sources.techniqueArticles > 0 && (
-                            <span className="inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 rounded-full px-2.5 py-0.5 font-semibold">
-                              <FileText size={11} /> {summary.sources.techniqueArticles} technique article{summary.sources.techniqueArticles === 1 ? '' : 's'}
-                            </span>
-                          )}
-                          {summary.sources.similarFisheries.map(name => (
-                            <span key={name} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 rounded-full px-2.5 py-0.5 font-semibold">
-                              <MapPin size={11} /> comparable: {name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     {/* My Intel — the angler's own logged history on this lake */}
