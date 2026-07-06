@@ -47,7 +47,7 @@ async function fetchFlowlines(bbox: string): Promise<Flow[]> {
     + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
   const feats: any[] = []
   for (let offset = 0; offset < 12000; offset += 2000) {
-    const r = await fetch(`${base}&resultOffset=${offset}`, { signal: AbortSignal.timeout(30000) })
+    const r = await fetch(`${base}&resultOffset=${offset}`, { signal: AbortSignal.timeout(60000) })
     const fc = await r.json() as any
     const page = (fc?.features ?? []).filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
     feats.push(...page)
