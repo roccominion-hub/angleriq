@@ -243,10 +243,27 @@ function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawSt
   }
   const mainSegs = new Set<number>()
   if (riverPaths.length) {
-    const { far: u } = bfs(ends(riverPaths[0])[0])
-    const { far: v, prev } = bfs(u)
-    let node = v
-    while (prev.has(node)) { const [p, idx] = prev.get(node)!; mainSegs.add(idx); node = p }
+    // Start from the largest connected component so the diameter traces the main
+    // network rather than a stray fragment.
+    const seen = new Set<string>()
+    let bestStart: string | null = null, bestW = -1
+    for (const startKey of adj.keys()) {
+      if (seen.has(startKey)) continue
+      const stack = [startKey]; let compW = 0
+      while (stack.length) {
+        const u = stack.pop()!
+        if (seen.has(u)) continue
+        seen.add(u)
+        for (const e of adj.get(u) ?? []) { compW += e.w; if (!seen.has(e.to)) stack.push(e.to) }
+      }
+      if (compW > bestW) { bestW = compW; bestStart = startKey }
+    }
+    if (bestStart) {
+      const { far: u } = bfs(bestStart)
+      const { far: v, prev } = bfs(u)
+      let node = v
+      while (prev.has(node)) { const [p, idx] = prev.get(node)!; mainSegs.add(idx); node = p }
+    }
   }
   const mainChannel = riverPaths.filter((_, i) => mainSegs.has(i))
   const minorChannels = riverPaths.filter((_, i) => !mainSegs.has(i))
@@ -304,17 +321,25 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     // stream network topology. Unnamed capillary 460 ditches are excluded (clutter
     // + row cap). gnis_name is used only for ranking, never displayed.
     const where = encodeURIComponent("(ftype=460 AND gnis_name IS NOT NULL) OR ftype=558")
-    const url = `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query`
+    const base = `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query`
       + `?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326`
       + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name,wbarea_permanent_identifier`
-      + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=4000`
-    fetch(url, { signal: AbortSignal.timeout(20000) })
-      .then(r => r.json())
-      .then(fc => {
-        const feats = (fc?.features ?? [])
-          .filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
-        // Total length per named stream — so a long river outranks a short creek
-        // even where its crossing segment is small.
+      + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        // Page through — a big reservoir's bbox exceeds the 2000-row cap, and a
+        // truncated result fragments the channel network (broken main channel).
+        const feats: any[] = []
+        for (let offset = 0; offset < 10000; offset += 2000) {
+          const r = await fetch(`${base}&resultOffset=${offset}`, { signal: AbortSignal.timeout(20000) })
+          const fc = await r.json()
+          const page = (fc?.features ?? []).filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
+          feats.push(...page)
+          if (!fc?.exceededTransferLimit || page.length === 0) break
+        }
+        if (cancelled) return
         const lenByName: Record<string, number> = {}
         for (const f of feats) {
           const n = f.properties?.gnis_name
@@ -332,8 +357,9 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           }
         })
         setFlowlines(lines)
-      })
-      .catch(() => setFlowlines([]))
+      } catch { if (!cancelled) setFlowlines([]) }
+    })()
+    return () => { cancelled = true }
   }, [features])
 
   // Derive the lake's connected stream network + true mouths from NHD topology.
