@@ -173,10 +173,10 @@ type Junction = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: nu
 function nodeKey(pt: number[]): string { return `${pt[0].toFixed(6)},${pt[1].toFixed(6)}` }
 function ends(f: Flow): [string, string] { return [nodeKey(f.coords[0]), nodeKey(f.coords[f.coords.length - 1])] }
 
-function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[]; riverPaths: Flow[] } {
+function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[]; mainChannel: Flow[]; minorChannels: Flow[] } {
   const paths = flows.filter(f => f.ftype === 558)
   const streams = flows.filter(f => f.ftype === 460)
-  const empty = { drawStreams: streams, junctions: [] as Junction[], riverPaths: [] as Flow[] }
+  const empty = { drawStreams: streams, junctions: [] as Junction[], mainChannel: [] as Flow[], minorChannels: [] as Flow[] }
   if (!paths.length) return empty
 
   // The lake = the wbarea shared by the most 558 paths passing near the center.
@@ -217,7 +217,40 @@ function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawSt
   // Draw whole named creeks that connect (all their segments — not just the
   // mouth), so streams look complete rather than short stubs.
   const drawStreams = streams.filter(f => f.name && connectedNames.has(f.name))
-  return { drawStreams, junctions, riverPaths }
+
+  // Main channel = the longest continuous path (graph diameter) through the
+  // lake's 558 network. Defined by geometry, not per-segment names, so it's
+  // continuous even where NHD leaves segments unnamed. The rest are minor
+  // cove/arm connectors.
+  const segLen = (f: Flow) => { let w = 0; for (let j = 0; j < f.coords.length - 1; j++) w += Math.hypot(f.coords[j + 1][0] - f.coords[j][0], f.coords[j + 1][1] - f.coords[j][1]); return w }
+  const adj = new Map<string, { to: string; idx: number; w: number }[]>()
+  riverPaths.forEach((f, idx) => {
+    const [a, b] = ends(f); const w = segLen(f)
+    if (!adj.has(a)) adj.set(a, []); if (!adj.has(b)) adj.set(b, [])
+    adj.get(a)!.push({ to: b, idx, w }); adj.get(b)!.push({ to: a, idx, w })
+  })
+  const bfs = (src: string) => {
+    const dist = new Map<string, number>([[src, 0]])
+    const prev = new Map<string, [string, number]>()
+    const q = [src]; let qi = 0
+    while (qi < q.length) {
+      const u = q[qi++]
+      for (const e of adj.get(u) ?? []) if (!dist.has(e.to)) { dist.set(e.to, (dist.get(u) ?? 0) + e.w); prev.set(e.to, [u, e.idx]); q.push(e.to) }
+    }
+    let far = src, fd = -1
+    for (const [n, d] of dist) if (d > fd) { fd = d; far = n }
+    return { far, prev }
+  }
+  const mainSegs = new Set<number>()
+  if (riverPaths.length) {
+    const { far: u } = bfs(ends(riverPaths[0])[0])
+    const { far: v, prev } = bfs(u)
+    let node = v
+    while (prev.has(node)) { const [p, idx] = prev.get(node)!; mainSegs.add(idx); node = p }
+  }
+  const mainChannel = riverPaths.filter((_, i) => mainSegs.has(i))
+  const minorChannels = riverPaths.filter((_, i) => !mainSegs.has(i))
+  return { drawStreams, junctions, mainChannel, minorChannels }
 }
 
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
@@ -305,7 +338,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
   // Derive the lake's connected stream network + true mouths from NHD topology.
   const streamNetwork = useMemo(
-    () => (flowlines?.length ? buildStreamNetwork(flowlines as Flow[], lng, lat) : { drawStreams: [], junctions: [], riverPaths: [] }),
+    () => (flowlines?.length ? buildStreamNetwork(flowlines as Flow[], lng, lat) : { drawStreams: [], junctions: [], mainChannel: [], minorChannels: [] }),
     [flowlines, lng, lat]
   )
 
@@ -361,27 +394,25 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       const group = L.layerGroup()
 
-      // In-lake channels only (the submerged creek/river beds through the lake).
-      // Named channels are "major" (the main river + named feeders) — drawn
-      // heavier/darker; unnamed cove connectors are "minor" — thin and light.
-      // Nothing outside the shoreline is drawn, which removes the clutter.
-      const majors = streamNetwork.riverPaths.filter(f => f.name)
-      const minors = streamNetwork.riverPaths.filter(f => !f.name)
+      // In-lake channels only (the submerged beds through the lake). The main
+      // channel (longest continuous path) is heavy and unbroken; the minor
+      // cove/arm connectors are thin and light. Nothing outside the shoreline.
+      const minors = streamNetwork.minorChannels
+      const mains = streamNetwork.mainChannel
 
       for (const fl of minors) {
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
         L.polyline(latlngs, { color: '#93c5fd', weight: 1, opacity: 0.5, interactive: false }).addTo(group)
       }
-      for (const fl of majors) {
+      for (const fl of mains) {
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
-        const weight = fl.size >= 20 ? 3 : 2  // main stem heavier than named feeders
-        L.polyline(latlngs, { color: '#1d4ed8', weight, opacity: 0.75, interactive: false }).addTo(group)
+        L.polyline(latlngs, { color: '#1d4ed8', weight: 2.2, opacity: 0.75, interactive: false }).addTo(group)
       }
 
-      // Tiny, widely-spaced flow arrows on the major channels only, downstream.
+      // Tiny, widely-spaced flow arrows on the main channel only, downstream.
       let acc = 0
       const STEP = 0.012  // ~1.3 km between arrows
-      for (const rp of majors) {
+      for (const rp of mains) {
         const c = rp.coords
         for (let i = 0; i < c.length - 1; i++) {
           const seg = Math.hypot(c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1])
