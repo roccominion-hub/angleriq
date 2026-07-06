@@ -168,15 +168,16 @@ function classifyFlowline(coords: number[][], rings: number[][][]): null | {
 // river) touching one of those nodes is a mouth — inflow if its downstream end
 // touches, outflow if its upstream end does.
 type Flow = { coords: number[][]; ftype: number; flowdir: number; name: string | null; wb: string | null; size: number }
-type Junction = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
+type Junction = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number; name: string }
 
 function nodeKey(pt: number[]): string { return `${pt[0].toFixed(6)},${pt[1].toFixed(6)}` }
 function ends(f: Flow): [string, string] { return [nodeKey(f.coords[0]), nodeKey(f.coords[f.coords.length - 1])] }
 
-function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[] } {
+function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawStreams: Flow[]; junctions: Junction[]; riverPaths: Flow[] } {
   const paths = flows.filter(f => f.ftype === 558)
   const streams = flows.filter(f => f.ftype === 460)
-  if (!paths.length) return { drawStreams: streams, junctions: [] }
+  const empty = { drawStreams: streams, junctions: [] as Junction[], riverPaths: [] as Flow[] }
+  if (!paths.length) return empty
 
   // The lake = the wbarea shared by the most 558 paths passing near the center.
   const nearCounts = new Map<string, number>()
@@ -188,36 +189,35 @@ function buildStreamNetwork(flows: Flow[], cLng: number, cLat: number): { drawSt
   }
   let lakeWb: string | null = null, bestN = 0
   for (const [wb, n] of nearCounts) if (n > bestN) { bestN = n; lakeWb = wb }
-  if (!lakeWb) return { drawStreams: streams, junctions: [] }
+  if (!lakeWb) return empty
 
-  // Shoreline nodes = endpoints of the lake's own 558 network.
+  // The lake's own 558 network: its endpoints are the shoreline nodes, and the
+  // paths themselves are the river bed through the lake (for flow arrows).
+  const riverPaths = paths.filter(f => f.wb === lakeWb)
   const lakeNodes = new Set<string>()
-  for (const f of paths) if (f.wb === lakeWb) { const [a, b] = ends(f); lakeNodes.add(a); lakeNodes.add(b) }
+  for (const f of riverPaths) { const [a, b] = ends(f); lakeNodes.add(a); lakeNodes.add(b) }
 
-  // Draw the 460 rivers wired into the lake (directly, or via connected creeks).
-  const parent = new Map<string, string>()
-  const find = (x: string): string => { let p = parent.get(x) ?? x; if (p !== x) { p = find(p); parent.set(x, p) } return p }
-  for (const f of streams) {
-    const [a, b] = ends(f)
-    if (!parent.has(a)) parent.set(a, a)
-    if (!parent.has(b)) parent.set(b, b)
-    parent.set(find(a), find(b))
-  }
-  const lakeRoots = new Set<string>()
-  for (const f of streams) for (const n of ends(f)) if (lakeNodes.has(n)) lakeRoots.add(find(n))
-  const drawStreams = streams.filter(f => lakeRoots.has(find(ends(f)[0])))
-
-  // Mouths: named rivers (460) and impounded rivers (558 with a different
-  // wbarea) that touch the lake's network at exactly one end.
-  const junctions: Junction[] = []
+  // One mouth per named river/creek that touches the lake network — inflow if
+  // its downstream end touches, outflow if its upstream end does. Keeps the
+  // largest-size mouth per name so a river isn't listed several times.
+  const mouthByName = new Map<string, Junction>()
   for (const f of [...streams, ...paths.filter(p => p.wb !== lakeWb)]) {
+    if (!f.name) continue
     const [a, b] = ends(f)
     const aIn = lakeNodes.has(a), bIn = lakeNodes.has(b)
     if (aIn === bIn) continue
     const p = bIn ? f.coords[f.coords.length - 1] : f.coords[0]
-    junctions.push({ lng: p[0], lat: p[1], kind: bIn ? 'inflow' : 'outflow', size: f.size })
+    const j: Junction = { lng: p[0], lat: p[1], kind: bIn ? 'inflow' : 'outflow', size: f.size, name: f.name }
+    const prev = mouthByName.get(f.name)
+    if (!prev || j.size > prev.size) mouthByName.set(f.name, j)
   }
-  return { drawStreams, junctions }
+  const junctions = [...mouthByName.values()]
+  const connectedNames = new Set(junctions.map(j => j.name))
+
+  // Draw whole named creeks that connect (all their segments — not just the
+  // mouth), so streams look complete rather than short stubs.
+  const drawStreams = streams.filter(f => f.name && connectedNames.has(f.name))
+  return { drawStreams, junctions, riverPaths }
 }
 
 export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
@@ -305,7 +305,7 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
   // Derive the lake's connected stream network + true mouths from NHD topology.
   const streamNetwork = useMemo(
-    () => (flowlines?.length ? buildStreamNetwork(flowlines as Flow[], lng, lat) : { drawStreams: [], junctions: [] }),
+    () => (flowlines?.length ? buildStreamNetwork(flowlines as Flow[], lng, lat) : { drawStreams: [], junctions: [], riverPaths: [] }),
     [flowlines, lng, lat]
   )
 
@@ -357,16 +357,41 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     import('leaflet').then(L => {
       streamLayerRef.current?.remove()
       streamLayerRef.current = null
-      if (!overlays.has('flowlines') || !streamNetwork.drawStreams.length) return
+      if (!overlays.has('flowlines')) return
 
       const group = L.layerGroup()
+
+      // Tributary creeks — full named lines.
       for (const fl of streamNetwork.drawStreams) {
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
-        // Heavier for longer (bigger) named streams; thin for small creeks.
         const big = fl.size >= 20, mid = fl.size >= 6
         const weight = big ? 2.6 : mid ? 1.8 : 1.2
         L.polyline(latlngs, { color: '#2563eb', weight, opacity: big ? 0.7 : 0.5, interactive: false }).addTo(group)
       }
+
+      // Main river through the lake — not a solid line, but small flow arrows
+      // spaced along the bed, oriented downstream.
+      let acc = 0
+      const STEP = 0.006  // ~600m between arrows
+      for (const rp of streamNetwork.riverPaths) {
+        const c = rp.coords
+        for (let i = 0; i < c.length - 1; i++) {
+          const seg = Math.hypot(c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1])
+          acc += seg
+          if (acc < STEP || seg === 0) continue
+          acc = 0
+          const midLat = (c[i][1] + c[i + 1][1]) / 2, midLng = (c[i][0] + c[i + 1][0]) / 2
+          // Screen bearing for a right-pointing glyph rotated toward downstream.
+          const deg = -Math.atan2(c[i + 1][1] - c[i][1], c[i + 1][0] - c[i][0]) * 180 / Math.PI
+          const icon = L.divIcon({
+            className: '',
+            html: `<div style="transform:rotate(${deg}deg);color:#1d4ed8;font-size:12px;line-height:12px;opacity:0.75">➤</div>`,
+            iconSize: [12, 12], iconAnchor: [6, 6],
+          })
+          L.marker([midLat, midLng], { icon, interactive: false, keyboard: false }).addTo(group)
+        }
+      }
+
       streamLayerRef.current = group.addTo(map)
     })
   }, [overlays, mapReady, streamNetwork])
@@ -650,8 +675,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const waterTempF: number | null = cond?.waterTempF ?? null
   const waterTempSource: string | null = cond?.waterTempSource ?? null
 
-  // Compute ratings for the strip
-  const inflows: any[] = cond?.inflows?.slice(0, 6) ?? []
+  // Compute ratings for the strip. Dedupe by stream name (a river can have
+  // several USGS gauges — keep the highest-flow one so it isn't listed 3×).
+  const inflowByName = new Map<string, any>()
+  for (const f of (cond?.inflows ?? [])) {
+    const key = shortName(f.siteName)
+    const prev = inflowByName.get(key)
+    if (!prev || f.flowCfs > prev.flowCfs) inflowByName.set(key, f)
+  }
+  const inflows: any[] = [...inflowByName.values()].sort((a, b) => b.flowCfs - a.flowCfs).slice(0, 6)
   const maxCfs = inflows.length ? Math.max(...inflows.map((f: any) => f.flowCfs)) : 0
 
   return (
