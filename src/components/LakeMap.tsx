@@ -361,19 +361,27 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
 
       const group = L.layerGroup()
 
-      // Tributary creeks — full named lines.
-      for (const fl of streamNetwork.drawStreams) {
+      // In-lake channels only (the submerged creek/river beds through the lake).
+      // Named channels are "major" (the main river + named feeders) — drawn
+      // heavier/darker; unnamed cove connectors are "minor" — thin and light.
+      // Nothing outside the shoreline is drawn, which removes the clutter.
+      const majors = streamNetwork.riverPaths.filter(f => f.name)
+      const minors = streamNetwork.riverPaths.filter(f => !f.name)
+
+      for (const fl of minors) {
         const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
-        const big = fl.size >= 20, mid = fl.size >= 6
-        const weight = big ? 2.6 : mid ? 1.8 : 1.2
-        L.polyline(latlngs, { color: '#2563eb', weight, opacity: big ? 0.7 : 0.5, interactive: false }).addTo(group)
+        L.polyline(latlngs, { color: '#93c5fd', weight: 1, opacity: 0.5, interactive: false }).addTo(group)
+      }
+      for (const fl of majors) {
+        const latlngs = fl.coords.map((c: number[]) => [c[1], c[0]] as [number, number])
+        const weight = fl.size >= 20 ? 3 : 2  // main stem heavier than named feeders
+        L.polyline(latlngs, { color: '#1d4ed8', weight, opacity: 0.75, interactive: false }).addTo(group)
       }
 
-      // Main river through the lake — not a solid line, but small flow arrows
-      // spaced along the bed, oriented downstream.
+      // Tiny, widely-spaced flow arrows on the major channels only, downstream.
       let acc = 0
-      const STEP = 0.006  // ~600m between arrows
-      for (const rp of streamNetwork.riverPaths) {
+      const STEP = 0.012  // ~1.3 km between arrows
+      for (const rp of majors) {
         const c = rp.coords
         for (let i = 0; i < c.length - 1; i++) {
           const seg = Math.hypot(c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1])
@@ -381,12 +389,11 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           if (acc < STEP || seg === 0) continue
           acc = 0
           const midLat = (c[i][1] + c[i + 1][1]) / 2, midLng = (c[i][0] + c[i + 1][0]) / 2
-          // Screen bearing for a right-pointing glyph rotated toward downstream.
           const deg = -Math.atan2(c[i + 1][1] - c[i][1], c[i + 1][0] - c[i][0]) * 180 / Math.PI
           const icon = L.divIcon({
             className: '',
-            html: `<div style="transform:rotate(${deg}deg);color:#1d4ed8;font-size:12px;line-height:12px;opacity:0.75">➤</div>`,
-            iconSize: [12, 12], iconAnchor: [6, 6],
+            html: `<div style="transform:rotate(${deg}deg);color:#1e40af;font-size:9px;line-height:9px;opacity:0.8">➤</div>`,
+            iconSize: [9, 9], iconAnchor: [4.5, 4.5],
           })
           L.marker([midLat, midLng], { icon, interactive: false, keyboard: false }).addTo(group)
         }
@@ -556,19 +563,31 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     inflowStreamLayerRef.current?.remove()
     inflowStreamLayerRef.current = null
 
-    // Extract lake polygon rings
-    const lakePolygons: number[][][] = []
-    if (features?.waterbodies?.features) {
-      for (const f of features.waterbodies.features) {
-        const geom = f.geometry
-        if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
-        if (geom?.type === 'MultiPolygon') {
-          for (const poly of geom.coordinates) lakePolygons.push(poly[0])
+    // Snap the highlight to the nearest stream inlet (topology junction) so it
+    // lands on the same on-map inlet circle, instead of projecting the gauge to
+    // an unrelated shoreline point. Fall back to shoreline projection only if
+    // no stream inlets were derived.
+    let eLat = lat, eLng = lng
+    const nearJ = streamNetwork.junctions.reduce(
+      (best: { j: any; d: number }, j) => {
+        const d = Math.hypot(j.lng - inflow.lng, j.lat - inflow.lat)
+        return d < best.d ? { j, d } : best
+      },
+      { j: null, d: Infinity }
+    )
+    if (nearJ.j) {
+      eLat = nearJ.j.lat; eLng = nearJ.j.lng
+    } else {
+      const rings: number[][][] = []
+      if (features?.waterbodies?.features) {
+        for (const f of features.waterbodies.features) {
+          const geom = f.geometry
+          if (geom?.type === 'Polygon') rings.push(geom.coordinates[0])
+          if (geom?.type === 'MultiPolygon') for (const poly of geom.coordinates) rings.push(poly[0])
         }
       }
+      ;[eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, rings, lat, lng)
     }
-
-    const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
     const rating = rateInflow(inflow.flowCfs, maxCfs)
     const c = RATING_COLORS[rating]
 
