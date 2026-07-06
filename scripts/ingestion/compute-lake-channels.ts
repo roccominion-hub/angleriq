@@ -46,7 +46,7 @@ async function fetchFlowlines(bbox: string): Promise<Flow[]> {
     + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name,wbarea_permanent_identifier`
     + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
   const feats: any[] = []
-  for (let offset = 0; offset < 12000; offset += 2000) {
+  for (let offset = 0; offset < 30000; offset += 2000) {
     const r = await fetch(`${base}&resultOffset=${offset}`, { signal: AbortSignal.timeout(60000) })
     const fc = await r.json() as any
     const page = (fc?.features ?? []).filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
@@ -187,14 +187,26 @@ async function main() {
     try {
       const feat = await getLakeFeatures(lake.lat, lake.lng, lake.name, lake.state)
       const wb = feat?.waterwayBbox
-      if (!wb) { console.log(`  ⚠️  ${lake.name} — no bbox`); empty++; continue }
-      const bbox = `${wb.minLng},${wb.minLat},${wb.maxLng},${wb.maxLat}`
       const rings: number[][][] = []
       for (const f of (feat?.waterbodies?.features ?? [])) {
         const g = f.geometry
         if (g?.type === 'Polygon') rings.push(g.coordinates[0])
         if (g?.type === 'MultiPolygon') for (const poly of g.coordinates) rings.push(poly[0])
       }
+
+      // Query bbox must cover the whole waterbody. The stored waterwayBbox can be
+      // undersized (e.g. Toledo Bend's clipped its southern half), which starves
+      // the NHD query of the lake's far reaches — so union it with the polygon
+      // extent and pad slightly. Fall back to a box around the center if neither.
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity
+      if (wb) { minLng = wb.minLng; minLat = wb.minLat; maxLng = wb.maxLng; maxLat = wb.maxLat }
+      for (const r of rings) for (const c of r) {
+        minLng = Math.min(minLng, c[0]); minLat = Math.min(minLat, c[1])
+        maxLng = Math.max(maxLng, c[0]); maxLat = Math.max(maxLat, c[1])
+      }
+      if (!isFinite(minLng)) { console.log(`  ⚠️  ${lake.name} — no bbox`); empty++; continue }
+      const pad = 0.02
+      const bbox = `${minLng - pad},${minLat - pad},${maxLng + pad},${maxLat + pad}`
       const flows = await fetchFlowlines(bbox)
       const net = buildNetwork(flows, rings, lake.lng, lake.lat)
       if (!net.mainChannel.length && !net.minorChannels.length) {
