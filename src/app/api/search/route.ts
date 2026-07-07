@@ -9,6 +9,7 @@ const supabase = createClient(
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lake = searchParams.get('lake')
+  const lakeId = searchParams.get('lakeId')
   const season = searchParams.get('season')
   const timeOfDay = searchParams.get('timeOfDay')
   const fishDepth = searchParams.get('fishDepth')
@@ -23,12 +24,15 @@ export async function GET(req: NextRequest) {
 
   if (!lake) return NextResponse.json({ error: 'lake is required' }, { status: 400 })
 
-  // Get body of water
-  const { data: water } = await supabase
+  // Get body of water. Prefer the explicit lakeId (lake names aren't unique across
+  // states, e.g. Lake Murray in OK and SC); fall back to a name match otherwise.
+  // maybeSingle() avoids a hard error when a bare name matches more than one row.
+  const baseSelect = () => supabase
     .from('body_of_water')
     .select('id, name, state, type, species, lat, lng, usgs_site_no, wdft_slug')
-    .ilike('name', `%${lake}%`)
-    .single()
+  const { data: water } = lakeId
+    ? await baseSelect().eq('id', lakeId).maybeSingle()
+    : await baseSelect().ilike('name', `%${lake}%`).limit(1).maybeSingle()
 
   if (!water) return NextResponse.json({ error: 'Lake not found' }, { status: 404 })
 

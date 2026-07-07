@@ -608,7 +608,7 @@ function addRecentLake(lakeName: string) {
 }
 
 // Hot search combobox for lake selection
-function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lakes: Lake[]; value: string; onChange: (v: string) => void; userCoords: { lat: number; lng: number } | null; onMapClick?: () => void }) {
+function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lakes: Lake[]; value: string; onChange: (lake: Lake | null) => void; userCoords: { lat: number; lng: number } | null; onMapClick?: () => void }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
@@ -642,7 +642,8 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
     ? visibleLakes.filter(l => lakeLabel(l).toLowerCase().includes(query.toLowerCase())).slice(0, 12)
     : null
 
-  const selectedLake = lakes.find(l => l.name === value)
+  // `value` is the selected lake's id (names aren't unique across states, e.g. Lake Murray OK/SC).
+  const selectedLake = lakes.find(l => l.id === value)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -657,13 +658,13 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
   function selectLake(lake: Lake) {
     addRecentLake(lake.name)
     setRecentNames(getRecentLakes())
-    onChange(lake.name)
+    onChange(lake)
     setQuery('')
     setOpen(false)
   }
 
   function clearSelection() {
-    onChange('')
+    onChange(null)
     setQuery('')
     inputRef.current?.focus()
   }
@@ -714,7 +715,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
             filtered.length === 0 ? (
               <div className="px-3 py-2 text-sm text-slate-400">No lakes found</div>
             ) : (
-              filtered.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
+              filtered.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.id} />)
             )
           ) : (
             // Empty state — show recent + nearby sections
@@ -724,7 +725,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
                   <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     <History size={11} /> Recently Searched
                   </div>
-                  {recentLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)}
+                  {recentLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.id} />)}
                   <div className="border-t border-slate-100 my-1" />
                 </>
               )}
@@ -732,7 +733,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
                 <Navigation size={11} /> Near You
               </div>
               {nearbyLakes.length > 0
-                ? nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.name} />)
+                ? nearbyLakes.map(l => <LakeRow key={l.id} lake={l} isSelected={value === l.id} />)
                 : <div className="px-3 py-2 text-sm text-slate-400">{userCoords ? 'No nearby lakes found' : 'Allow location for nearby suggestions'}</div>
               }
             </>
@@ -858,6 +859,7 @@ function SearchPage() {
   const searchParams = useSearchParams()
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
+  const [selectedLakeId, setSelectedLakeId] = useState('')
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -924,7 +926,7 @@ function SearchPage() {
     const param = searchParams.get('lake')
     if (!param) return
     const matched = findMatchingLake(lakes, param)
-    if (matched) setSelectedLake(matched.name)
+    if (matched) { setSelectedLake(matched.name); setSelectedLakeId(matched.id) }
   }, [lakes, searchParams])
 
   useEffect(() => {
@@ -1111,6 +1113,7 @@ function SearchPage() {
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
+      if (selectedLakeId) params.set('lakeId', selectedLakeId)
       const apiFilters = buildApiFilters()
       Object.entries(apiFilters).forEach(([k, v]) => { if (v !== 'all') params.set(k, v) })
       params.set('yearFrom', String(yearRange[0]))
@@ -1340,7 +1343,7 @@ function SearchPage() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
           {/* Top row: lake search + date + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
-            <LakeSearchBox lakes={lakes} value={selectedLake} onChange={setSelectedLake} userCoords={userCoords} onMapClick={() => setShowMapPicker(v => !v)} />
+            <LakeSearchBox lakes={lakes} value={selectedLakeId} onChange={(lake) => { setSelectedLake(lake?.name ?? ''); setSelectedLakeId(lake?.id ?? '') }} userCoords={userCoords} onMapClick={() => setShowMapPicker(v => !v)} />
             <div className="flex items-end gap-2 shrink-0">
               {/* Date input — always visible, defaults to today */}
               <div className="flex flex-col gap-1.5">
@@ -1496,6 +1499,7 @@ function SearchPage() {
               lakes={lakes}
               onSelect={lake => {
                 setSelectedLake(lake.name)
+                setSelectedLakeId(lake.id)
                 setShowMapPicker(false)
               }}
               onClose={() => setShowMapPicker(false)}

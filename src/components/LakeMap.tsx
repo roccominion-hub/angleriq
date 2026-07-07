@@ -118,12 +118,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   // Inflow interaction state
   const [selectedInflow, setSelectedInflow] = useState<string | null>(null)
 
+  // Precomputed in-lake channels + inlets (from /api/lake-channels).
+  const [streamNetwork, setStreamNetwork] = useState<{ mainChannel: number[][][]; minorChannels: number[][][]; junctions: any[] }>({ mainChannel: [], minorChannels: [], junctions: [] })
+
   const windLayerRef         = useRef<any>(null)
   const tileLayerRef         = useRef<any>(null)
   const waterbodyLayerRef    = useRef<any>(null)
   const rampsLayerRef        = useRef<any>(null)
   const rampsDataRef         = useRef<any[] | null>(null)
-  const nhdLayerRef          = useRef<any>(null)
+  const streamLayerRef       = useRef<any>(null)  // vector NHD flowlines (label-free)
   const inflowMarkersRef     = useRef<Map<string, any>>(new Map())  // siteNo → L.Marker
   const inflowStreamLayerRef = useRef<any>(null)
   const originalBoundsRef    = useRef<any>(null)  // saved after initial fitBounds
@@ -139,6 +142,16 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       setFeatures(feat)
       setLoading(false)
     }).catch(() => setLoading(false))
+  }, [lakeId])
+
+  // Load precomputed channel geometry + inlets (fast; no live NHD call).
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/lake-channels?lakeId=${lakeId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setStreamNetwork({ mainChannel: d.main_channel ?? [], minorChannels: d.minor_channels ?? [], junctions: d.junctions ?? [] }) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [lakeId])
 
   // Init map + waterbody fill
@@ -180,26 +193,57 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])
 
-  // NHD stream overlay
+  // Streams overlay — label-free NHD flowlines drawn as vector polylines.
+  // Only rivers connected to this lake's network are drawn (no unrelated creeks
+  // draining elsewhere), and never the 558 paths that run through open water.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
+    const map = mapRef.current
     import('leaflet').then(L => {
-      const opacity = baseLayer === 'topo' ? 0.95 : 0.75
-      if (overlays.has('flowlines')) {
-        if (!nhdLayerRef.current) {
-          nhdLayerRef.current = L.tileLayer(
-            'https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}',
-            { attribution: 'USGS NHD', opacity, maxZoom: 19, minZoom: 8 }
-          ).addTo(mapRef.current)
-        } else {
-          nhdLayerRef.current.setOpacity(opacity)
-        }
-      } else {
-        nhdLayerRef.current?.remove()
-        nhdLayerRef.current = null
+      streamLayerRef.current?.remove()
+      streamLayerRef.current = null
+      if (!overlays.has('flowlines')) return
+
+      const group = L.layerGroup()
+
+      // In-lake channels only (the submerged beds through the lake). The main
+      // channel (longest continuous path) is heavy and unbroken; the minor
+      // cove/arm connectors are thin and light. Nothing outside the shoreline.
+      const minors = streamNetwork.minorChannels
+      const mains = streamNetwork.mainChannel
+
+      for (const coords of minors) {
+        const latlngs = coords.map((c: number[]) => [c[1], c[0]] as [number, number])
+        L.polyline(latlngs, { color: '#93c5fd', weight: 1.5, opacity: 0.55, interactive: false }).addTo(group)
       }
+      for (const coords of mains) {
+        const latlngs = coords.map((c: number[]) => [c[1], c[0]] as [number, number])
+        L.polyline(latlngs, { color: '#1d4ed8', weight: 2.2, opacity: 0.75, interactive: false }).addTo(group)
+      }
+
+      // Tiny, widely-spaced flow arrows on the main channel only, downstream.
+      let acc = 0
+      const STEP = 0.012  // ~1.3 km between arrows
+      for (const c of mains) {
+        for (let i = 0; i < c.length - 1; i++) {
+          const seg = Math.hypot(c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1])
+          acc += seg
+          if (acc < STEP || seg === 0) continue
+          acc = 0
+          const midLat = (c[i][1] + c[i + 1][1]) / 2, midLng = (c[i][0] + c[i + 1][0]) / 2
+          const deg = -Math.atan2(c[i + 1][1] - c[i][1], c[i + 1][0] - c[i][0]) * 180 / Math.PI
+          const icon = L.divIcon({
+            className: '',
+            html: `<div style="transform:rotate(${deg}deg);color:#1e40af;font-size:9px;line-height:9px;opacity:0.8">➤</div>`,
+            iconSize: [9, 9], iconAnchor: [4.5, 4.5],
+          })
+          L.marker([midLat, midLng], { icon, interactive: false, keyboard: false }).addTo(group)
+        }
+      }
+
+      streamLayerRef.current = group.addTo(map)
     })
-  }, [overlays, mapReady, baseLayer])
+  }, [overlays, mapReady, streamNetwork])
 
   // Wind arrows
   useEffect(() => {
@@ -264,50 +308,62 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [conditions, features, overlays, baseLayer, zoom, mapReady])
 
-  // Inflow markers — colored dot at the lake-edge entry point for each gauge.
-  // Uses the lake polygon (already loaded) to find where each stream enters —
-  // no Overpass call needed.
+  // Stream entry/exit circles — soft area indicators at the precomputed mouths
+  // where named rivers meet the lake network (major tributaries + the outflow).
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !conditions?.conditions?.inflows?.length || !features) return
-    const inflows: any[] = conditions.conditions.inflows.slice(0, 6)
-    const maxCfs = Math.max(...inflows.map((f: any) => f.flowCfs))
+    if (!mapReady || !mapRef.current) return
     const map = mapRef.current
 
-    // Extract lake polygon rings for edge detection
-    const lakePolygons: number[][][] = []
-    if (features?.waterbodies?.features) {
-      for (const f of features.waterbodies.features) {
-        const geom = f.geometry
-        if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
-        if (geom?.type === 'MultiPolygon') {
-          for (const poly of geom.coordinates) lakePolygons.push(poly[0])
-        }
-      }
+    type Cross = { lng: number; lat: number; kind: 'inflow' | 'outflow'; size: number }
+    const crossings: Cross[] = streamNetwork.junctions
+    if (!crossings.length) {
+      inflowMarkersRef.current.forEach(m => m.remove()); inflowMarkersRef.current.clear(); return
     }
+
+    // Merge near-duplicate crossings (several flowlines meeting at one mouth).
+    const merged: Cross[] = []
+    for (const c of [...crossings].sort((a, b) => b.size - a.size)) {
+      if (!merged.find(m => m.kind === c.kind && Math.hypot(m.lng - c.lng, m.lat - c.lat) < 0.0025)) merged.push(c)
+    }
+
+    // Major tributaries + the outflow.
+    const selected = [
+      ...merged.filter(c => c.kind === 'inflow').slice(0, 5),
+      ...merged.filter(c => c.kind === 'outflow').slice(0, 1),
+    ]
+
+    const gauges: any[] = conditions?.conditions?.inflows ?? []
+    const maxCfs = gauges.length ? Math.max(...gauges.map((g: any) => g.flowCfs)) : 0
 
     import('leaflet').then(L => {
       inflowMarkersRef.current.forEach(m => m.remove())
       inflowMarkersRef.current.clear()
 
-      for (const inflow of inflows) {
-        const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
-        const rating = rateInflow(inflow.flowCfs, maxCfs)
-        const c = RATING_COLORS[rating]
+      selected.forEach((c, i) => {
+        let color = c.kind === 'outflow' ? '#475569' : '#0891b2'   // slate outflow / cyan inflow
+        let popup = c.kind === 'outflow'
+          ? '<b>Outflow</b><br>Water exits the lake here'
+          : '<b>Inflow</b><br>Tributary enters here'
 
-        // Large transparent circle — communicates approximate area, not false precision
-        const circle = L.circle([eLat, eLng], {
-          radius: 350,
-          color: c.border,
-          fillColor: c.border,
-          fillOpacity: 0.12,
-          weight: 1.5,
-          opacity: 0.5,
-        }).bindPopup(`<b>${shortName(inflow.siteName)}</b><br>${inflow.flowCfs.toLocaleString()} cfs`)
-          .addTo(map)
-        inflowMarkersRef.current.set(inflow.siteNo, circle)
-      }
+        // Attach the nearest USGS gauge's live flow to an inflow, if one is close.
+        if (c.kind === 'inflow' && gauges.length) {
+          const best = gauges.reduce((acc: any, g: any) => {
+            const d = Math.hypot(g.lng - c.lng, g.lat - c.lat)
+            return d < acc.d ? { g, d } : acc
+          }, { g: null, d: Infinity })
+          if (best.g && best.d < 0.06) {
+            color = RATING_COLORS[rateInflow(best.g.flowCfs, maxCfs)].border
+            popup = `<b>${shortName(best.g.siteName)}</b><br>${best.g.flowCfs.toLocaleString()} cfs`
+          }
+        }
+
+        const circle = L.circle([c.lat, c.lng], {
+          radius: 350, color, fillColor: color, fillOpacity: 0.12, weight: 1.5, opacity: 0.55,
+        }).bindPopup(popup).addTo(map)
+        inflowMarkersRef.current.set(`x${i}`, circle)
+      })
     })
-  }, [conditions, mapReady, features])
+  }, [conditions, mapReady, features, streamNetwork])
 
   // Handle inflow selection — place a pulsing marker at the lake-edge entry
   // point and zoom to it. No external API call — uses the lake polygon only.
@@ -330,19 +386,31 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     inflowStreamLayerRef.current?.remove()
     inflowStreamLayerRef.current = null
 
-    // Extract lake polygon rings
-    const lakePolygons: number[][][] = []
-    if (features?.waterbodies?.features) {
-      for (const f of features.waterbodies.features) {
-        const geom = f.geometry
-        if (geom?.type === 'Polygon') lakePolygons.push(geom.coordinates[0])
-        if (geom?.type === 'MultiPolygon') {
-          for (const poly of geom.coordinates) lakePolygons.push(poly[0])
+    // Snap the highlight to the nearest stream inlet (topology junction) so it
+    // lands on the same on-map inlet circle, instead of projecting the gauge to
+    // an unrelated shoreline point. Fall back to shoreline projection only if
+    // no stream inlets were derived.
+    let eLat = lat, eLng = lng
+    const nearJ = streamNetwork.junctions.reduce(
+      (best: { j: any; d: number }, j) => {
+        const d = Math.hypot(j.lng - inflow.lng, j.lat - inflow.lat)
+        return d < best.d ? { j, d } : best
+      },
+      { j: null, d: Infinity }
+    )
+    if (nearJ.j) {
+      eLat = nearJ.j.lat; eLng = nearJ.j.lng
+    } else {
+      const rings: number[][][] = []
+      if (features?.waterbodies?.features) {
+        for (const f of features.waterbodies.features) {
+          const geom = f.geometry
+          if (geom?.type === 'Polygon') rings.push(geom.coordinates[0])
+          if (geom?.type === 'MultiPolygon') for (const poly of geom.coordinates) rings.push(poly[0])
         }
       }
+      ;[eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, rings, lat, lng)
     }
-
-    const [eLat, eLng] = closestShorelinePoint(inflow.lat, inflow.lng, lakePolygons, lat, lng)
     const rating = rateInflow(inflow.flowCfs, maxCfs)
     const c = RATING_COLORS[rating]
 
@@ -449,8 +517,15 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   const waterTempF: number | null = cond?.waterTempF ?? null
   const waterTempSource: string | null = cond?.waterTempSource ?? null
 
-  // Compute ratings for the strip
-  const inflows: any[] = cond?.inflows?.slice(0, 6) ?? []
+  // Compute ratings for the strip. Dedupe by stream name (a river can have
+  // several USGS gauges — keep the highest-flow one so it isn't listed 3×).
+  const inflowByName = new Map<string, any>()
+  for (const f of (cond?.inflows ?? [])) {
+    const key = shortName(f.siteName)
+    const prev = inflowByName.get(key)
+    if (!prev || f.flowCfs > prev.flowCfs) inflowByName.set(key, f)
+  }
+  const inflows: any[] = [...inflowByName.values()].sort((a, b) => b.flowCfs - a.flowCfs).slice(0, 6)
   const maxCfs = inflows.length ? Math.max(...inflows.map((f: any) => f.flowCfs)) : 0
 
   return (
