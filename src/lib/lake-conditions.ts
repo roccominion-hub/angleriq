@@ -391,9 +391,21 @@ export async function getLakeFeatures(lat: number, lng: number, lakeName?: strin
           return dist <= MAX_DIST_DEG
         })
         if (!valid.length) continue
+        // Nominatim can return a neighbouring lake that merely shares a word or
+        // county — e.g. a "Lake Nacogdoches" search also returns Sam Rayburn
+        // Reservoir (both in Nacogdoches County). Keep only polygons whose name
+        // (the first display-name segment, not the county) matches this lake; if
+        // none match by name, fall back to the single closest polygon.
+        const coreLc = core.toLowerCase()
+        const named = valid.filter(r => (String(r.display_name).split(',')[0] || '').toLowerCase().includes(coreLc))
+        const closest = valid.reduce((best, r) => {
+          const d = (parseFloat(r.lat) - lat) ** 2 + (parseFloat(r.lon) - lng) ** 2
+          return d < best.d ? { r, d } : best
+        }, { r: valid[0], d: Infinity }).r
+        const chosen = named.length ? named : [closest]
         waterbodies = {
           type: 'FeatureCollection',
-          features: valid.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name, osm_id: r.osm_id } }))
+          features: chosen.map(r => ({ type: 'Feature', geometry: r.geojson, properties: { name: r.display_name, osm_id: r.osm_id } }))
         }
         break
       }
