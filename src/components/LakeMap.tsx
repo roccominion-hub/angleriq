@@ -245,6 +245,28 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
   }, [overlays, mapReady, streamNetwork])
 
+  // Centering fallback: the initial view only fitBounds when the OSM waterbody
+  // polygon loads (see map init). If that polygon is missing, the view falls back
+  // to the stored point — which can sit off the lake (e.g. below the dam). When
+  // that happens, frame the map on the precomputed channel geometry instead so
+  // the lake is centered on load. Runs regardless of the "Streams" toggle.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || originalBoundsRef.current) return
+    const segs = [...streamNetwork.mainChannel, ...streamNetwork.minorChannels]
+    if (!segs.length) return
+    import('leaflet').then(L => {
+      if (!mapRef.current || originalBoundsRef.current) return
+      const pts = segs.flatMap(coords => coords.map((c: number[]) => [c[1], c[0]] as [number, number]))
+      if (!pts.length) return
+      const bounds = L.latLngBounds(pts)
+      if (bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 })
+        originalBoundsRef.current = bounds
+        setZoom(mapRef.current.getZoom())
+      }
+    })
+  }, [mapReady, streamNetwork])
+
   // Wind arrows
   useEffect(() => {
     if (!mapRef.current) return
