@@ -53,8 +53,18 @@ export async function GET(req: NextRequest) {
   if (timeOfDay) query = query.eq('time_of_day', timeOfDay)
   if (fishDepth) query = query.eq('fish_depth', fishDepth)
   if (waterClarity) query = query.eq('conditions.water_clarity', waterClarity)
-  if (yearFrom) query = query.gte('reported_date', `${yearFrom}-01-01`)
-  if (yearTo) query = query.lte('reported_date', `${yearTo}-12-31`)
+  // Most reports carry no date — curated knowledge and technique articles are
+  // undated by nature, and a plain gte/lte drops NULLs, which hid 56% of the
+  // corpus (entire lakes, e.g. Table Rock, returned nothing). Undated reports
+  // are still valid technique data, so keep them and let the range narrow only
+  // the rows that actually have a date.
+  if (yearFrom || yearTo) {
+    const bounds = [
+      yearFrom ? `reported_date.gte.${yearFrom}-01-01` : null,
+      yearTo ? `reported_date.lte.${yearTo}-12-31` : null,
+    ].filter(Boolean).join(',')
+    query = query.or(`reported_date.is.null,and(${bounds})`)
+  }
 
   // Multi-value location/structure filters
   if (locationTypes.length === 1) query = query.eq('location_type', locationTypes[0])
@@ -84,7 +94,14 @@ export async function GET(req: NextRequest) {
 
   // Aggregate bait frequency
   const baitFrequency: Record<string, number> = {}
-  const patternFrequency: Record<string, number> = {}
+  // Patterns are free text, so count them on a normalised key (case, spacing and
+  // trailing punctuation) rather than an exact string — "Dock Flipping" and
+  // "dock flipping" are the same pattern and should count together. The label
+  // shown is the most common original spelling for that key.
+  const patternCounts: Record<string, number> = {}
+  const patternLabels: Record<string, Record<string, number>> = {}
+  const patternKey = (p: string) =>
+    p.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.,;:!?]+$/, '')
 
   reportsForAgg.forEach((r: any) => {
     r.bait_used?.forEach((b: any) => {
@@ -92,9 +109,20 @@ export async function GET(req: NextRequest) {
       if (key) baitFrequency[key] = (baitFrequency[key] || 0) + 1
     })
     if (r.pattern) {
-      patternFrequency[r.pattern] = (patternFrequency[r.pattern] || 0) + 1
+      const k = patternKey(r.pattern)
+      if (!k) return
+      patternCounts[k] = (patternCounts[k] || 0) + 1
+      patternLabels[k] = patternLabels[k] || {}
+      const label = r.pattern.trim().replace(/\s+/g, ' ').replace(/[.,;:!?]+$/, '')
+      patternLabels[k][label] = (patternLabels[k][label] || 0) + 1
     }
   })
+
+  const patternFrequency: Record<string, number> = {}
+  for (const [k, count] of Object.entries(patternCounts)) {
+    const label = Object.entries(patternLabels[k]).sort((a, b) => b[1] - a[1])[0][0]
+    patternFrequency[label] = count
+  }
 
   // Filter live/natural/dead bait — artificial lures only
   const LIVE_BAIT_BLOCKLIST = [
