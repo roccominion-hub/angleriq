@@ -18,7 +18,11 @@ Return a JSON array of technique objects. Each object should have these fields (
   "angler_name": string | null,
   "finish_place": number | null,
   "total_weight_lbs": number | null,
-  "pattern": string | null,           // e.g. "shallow flipping wood", "deep ledge fishing"
+  "pattern": string | null,           // SHORT label — a phrase, never a sentence or paragraph.
+                                      // Max ~60 characters / 8 words, no trailing period.
+                                      // e.g. "shallow flipping wood", "deep ledge fishing"
+                                      // If the source describes the pattern at length, condense it
+                                      // to the phrase and put the detail in "notes".
   "presentation": string | null,      // e.g. "slow roll", "drop shot", "punch rig", "swim jig"
   "structure": string | null,         // e.g. "laydowns", "grass edges", "docks", "points"
   "depth_range_ft": string | null,    // e.g. "2-6", "15-25"
@@ -152,10 +156,45 @@ function isBadRecord(record: any): boolean {
   return false
 }
 
+// "pattern" is rendered as a one-line label ("Winning Patterns"), but the model
+// sometimes returns a full narrative paragraph instead of a phrase. Keep the
+// first sentence as the label and preserve the full text in notes so nothing
+// is lost — the prompt asks for this, this enforces it.
+export const PATTERN_MAX = 80
+
+// Cut at a natural boundary so the label reads as a complete thought:
+// sentence → clause (comma/semicolon) → word-boundary with an ellipsis.
+export function condenseLabel(pattern: string, max = PATTERN_MAX): string {
+  const p = pattern.trim().replace(/\s+/g, ' ')
+  if (p.length <= max) return p.replace(/[.\s]+$/, '')
+
+  const sentence = p.split(/(?<=[.!?])\s+/)[0].replace(/[.\s]+$/, '')
+  if (sentence.length <= max) return sentence
+
+  const clause = sentence.split(/\s*[;,]\s*/)[0].trim()
+  if (clause.length <= max && clause.length >= 12) return clause
+
+  return sentence.slice(0, max - 1).replace(/\s+\S*$/, '').replace(/[;,\s]+$/, '') + '…'
+}
+
+function condensePattern(record: any): any {
+  const p = typeof record.pattern === 'string' ? record.pattern.trim() : record.pattern
+  if (!p || p.length <= PATTERN_MAX) return { ...record, pattern: p || null }
+
+  const notes = record.notes && String(record.notes).includes(p.slice(0, 40))
+    ? record.notes                       // detail already captured
+    : [p, record.notes].filter(Boolean).join(' — ')
+
+  return { ...record, pattern: condenseLabel(p), notes }
+}
+
 export async function extractFishingData(text: string, apiKey: string): Promise<any[]> {
   const raw = await callGemini(text, apiKey)
   const filtered = raw.filter(r => !isBadRecord(r))
   const removed = raw.length - filtered.length
   if (removed > 0) console.log(`     🚫 Hard filter removed ${removed} non-bass/non-artificial record(s)`)
-  return filtered
+  const condensed = filtered.map(condensePattern)
+  const shortened = condensed.filter((r, i) => r.pattern !== filtered[i].pattern).length
+  if (shortened > 0) console.log(`     ✂️  Condensed ${shortened} over-long pattern label(s)`)
+  return condensed
 }
