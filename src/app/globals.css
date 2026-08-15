@@ -4,6 +4,13 @@
   --font-montserrat: 'Montserrat', sans-serif;
 }
 
+/* Always reserve the scrollbar gutter. Without this, opening a tall panel (the
+   map picker) introduces the vertical scrollbar and the centered page jumps
+   left by the scrollbar's width. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--font-montserrat), sans-serif;
 }
