@@ -608,7 +608,7 @@ function addRecentLake(lakeName: string) {
 }
 
 // Hot search combobox for lake selection
-function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lakes: Lake[]; value: string; onChange: (lake: Lake | null) => void; userCoords: { lat: number; lng: number } | null; onMapClick?: () => void }) {
+function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick, onOpen }: { lakes: Lake[]; value: string; onChange: (lake: Lake | null) => void; userCoords: { lat: number; lng: number } | null; onMapClick?: () => void; onOpen?: () => void }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [recentNames, setRecentNames] = useState<string[]>([])
@@ -686,7 +686,7 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between mb-1.5">
         <span className="flex items-center gap-1.5"><MapPin size={12} /> Body of Water</span>
         {onMapClick && (
-          <button type="button" onClick={onMapClick} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold normal-case tracking-normal text-[11px] transition-colors">
+          <button type="button" onClick={() => { setOpen(false); onMapClick() }} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold normal-case tracking-normal text-[11px] transition-colors">
             <Map size={11} /> Search on a Map
           </button>
         )}
@@ -698,8 +698,8 @@ function LakeSearchBox({ lakes, value, onChange, userCoords, onMapClick }: { lak
           type="text"
           placeholder={selectedLake ? `${lakeLabel(selectedLake)} — ${selectedLake.state}` : 'Search lakes, rivers, reservoirs...'}
           value={open ? query : (selectedLake ? `${lakeLabel(selectedLake)} — ${selectedLake.state}` : query)}
-          onChange={e => { setQuery(e.target.value); setOpen(true) }}
-          onFocus={() => { setOpen(true); if (selectedLake) setQuery('') }}
+          onChange={e => { setQuery(e.target.value); setOpen(true); onOpen?.() }}
+          onFocus={() => { setOpen(true); onOpen?.(); if (selectedLake) setQuery('') }}
           className="w-full bg-white border border-slate-200 text-slate-800 h-9 text-base rounded-md pl-8 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400"
         />
         {(value || query) && (
@@ -1343,7 +1343,10 @@ function SearchPage() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6">
           {/* Top row: lake search + date + actions */}
           <div className="flex flex-col sm:flex-row gap-3 p-4 border-b border-slate-100">
-            <LakeSearchBox lakes={lakes} value={selectedLakeId} onChange={(lake) => { setSelectedLake(lake?.name ?? ''); setSelectedLakeId(lake?.id ?? '') }} userCoords={userCoords} onMapClick={() => setShowMapPicker(v => !v)} />
+            {/* Typing a lake and picking one on the map are two separate ways to
+                choose a lake — opening the dropdown closes the map picker so the
+                two never overlap (the Leaflet panes would sit above the list). */}
+            <LakeSearchBox lakes={lakes} value={selectedLakeId} onChange={(lake) => { setSelectedLake(lake?.name ?? ''); setSelectedLakeId(lake?.id ?? '') }} userCoords={userCoords} onMapClick={() => setShowMapPicker(v => !v)} onOpen={() => setShowMapPicker(false)} />
             <div className="flex items-end gap-2 shrink-0">
               {/* Date input — always visible, defaults to today */}
               <div className="flex flex-col gap-1.5">
