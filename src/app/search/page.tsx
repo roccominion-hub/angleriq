@@ -17,7 +17,7 @@ import {
   MapPin, Trophy, Sparkles, Fish, Layers, Anchor,
   Sun, Clock, Thermometer, ExternalLink, ChevronDown, ChevronUp, Wind, Droplets, Waves,
   ShoppingCart, RefreshCw, Route, Zap, Feather, Cloud, Search, X, Calendar, History, Navigation,
-  MessageCircle, Compass, Save, Map
+  MessageCircle, Compass, Save, Map, ChevronRight
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
@@ -47,6 +47,7 @@ interface SearchResult {
   sampleSize: number
   topBaits: { name: string; count: number }[]
   topPatterns: { pattern: string; count: number }[]
+  patternGroups?: { label: string; count: number; phase: string | null; depth: string | null; condition: string | null; descriptions: string[] }[]
   reports: any[]
   coords?: { lat: number; lng: number }
 }
@@ -860,6 +861,7 @@ function SearchPage() {
   const [lakes, setLakes] = useState<Lake[]>([])
   const [selectedLake, setSelectedLake] = useState('')
   const [selectedLakeId, setSelectedLakeId] = useState('')
+  const [expandedPatterns, setExpandedPatterns] = useState<Set<string>>(new Set())
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -1110,6 +1112,7 @@ function SearchPage() {
     setMilkRun(null)
     setWeather(null)
     setSavedReportId(null)
+    setExpandedPatterns(new Set())
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -1797,24 +1800,51 @@ function SearchPage() {
               <p className="text-xs text-slate-400 mb-4">Supporting patterns and baits identified from source articles. The Tournament Intel and Recommended Plan above are the primary actionable findings.</p>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Top Patterns */}
-              {result.topPatterns.length > 0 && (
+              {/* Winning Patterns — grouped by canonical facets, expandable to
+                  the individual report descriptions behind each grouping. */}
+              {(result.patternGroups?.length ?? 0) > 0 && (
                 <Card className="border-slate-200 shadow-none bg-white">
                   <CardHeader className="pb-2 pt-4 px-5">
                     <CardTitle className="text-slate-900 text-sm font-bold flex items-center gap-2">
                       <Trophy size={15} className="text-blue-600" /> Winning Patterns
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="px-5 pb-4 space-y-2">
-                    {result.topPatterns.map(p => (
-                      <div key={p.pattern} className="flex items-center gap-3">
-                        <span className="text-slate-700 text-sm capitalize flex-1 leading-tight">{p.pattern}</span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${Math.max(p.count * 14, 14)}px` }} />
-                          <span className="text-slate-400 text-xs w-5 text-right">{p.count}x</span>
+                  <CardContent className="px-5 pb-4 space-y-1.5">
+                    {result.patternGroups!.map(g => {
+                      const open = expandedPatterns.has(g.label)
+                      const chips = [g.phase, g.depth, g.condition].filter(Boolean) as string[]
+                      return (
+                        <div key={g.label}>
+                          <button
+                            onClick={() => setExpandedPatterns(prev => {
+                              const next = new Set(prev)
+                              next.has(g.label) ? next.delete(g.label) : next.add(g.label)
+                              return next
+                            })}
+                            className="w-full flex items-center gap-3 text-left group py-0.5"
+                          >
+                            <ChevronRight size={13} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                            <span className="text-slate-700 text-sm flex-1 leading-tight group-hover:text-blue-700 transition-colors">
+                              {g.label}
+                              {chips.map(c => (
+                                <span key={c} className="ml-1.5 text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 align-middle">{c}</span>
+                              ))}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${Math.max(g.count * 14, 14)}px` }} />
+                              <span className="text-slate-400 text-xs w-6 text-right">{g.count}x</span>
+                            </div>
+                          </button>
+                          {open && (
+                            <ul className="ml-6 mt-1 mb-2 space-y-1 border-l border-slate-200 pl-3">
+                              {g.descriptions.map((d, i) => (
+                                <li key={i} className="text-slate-500 text-xs leading-snug">{d}</li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </CardContent>
                 </Card>
               )}

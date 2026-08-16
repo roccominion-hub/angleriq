@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { facetsOf } from '../../src/lib/pattern-facets'
 
 export function getSupabaseAdmin() {
   return createClient(
@@ -89,6 +90,12 @@ export async function insertTechniqueReport(params: {
         source_url: params.sourceUrl,
         reported_date: params.reportedDate,
         pattern: item.pattern,
+        // Canonical facets so Winning Patterns can group this report without a
+        // backfill pass. Derived from the same rules used across the catalog.
+        ...(item.pattern ? (() => { const f = facetsOf(item.pattern); return {
+          pattern_phase: f.phase, pattern_technique: f.technique,
+          pattern_place: f.place, pattern_depth: f.depth, pattern_condition: f.condition,
+        } })() : {}),
         presentation: item.presentation,
         structure: item.structure,
         depth_range_ft: item.depth_range_ft,
