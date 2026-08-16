@@ -9,7 +9,10 @@ const BAIT_MAP: { file: string; matches: string[] }[] = [
   { file: 'swimbait',           matches: ['swimbait', 'swim bait', 'paddle tail', 'boot tail', 'keitech', 'round jighead', 'round jig head', 'shad tail', 'swimsenko', 'stunna', 'berkley stunna', 'aruku shad', 'livetarget straight tail', 'glide bait', 'glidebait', 'glide', 'deps', 'slide swimmer', 'megabass', 'triple trout', 'big hammer', 'huddleston', 'mattlures', 'matt lures', '250', 'wake bait', 'wakebait', 'line thru'] },
   { file: 'swimjig',            matches: ['swimjig', 'swim jig', 'swimming jig'] },
   { file: 'bladed-jig',         matches: ['bladed jig', 'bladed', 'chatterbait', 'chatter bait', 'vibrating jig', 'z-man jack hammer', 'jackhammer'] },
-  { file: 'jig',                matches: ['jig', 'football jig', 'flipping jig', 'casting jig', 'finesse jig', 'hair jig', 'arky', 'punch rig', 'punch bait'] },
+  // A bare jighead is terminal tackle rigged with a soft plastic, not a skirted
+  // jig — matching it here drew a flipping-jig picture for "Jigheads".
+  { file: 'minnow-soft',        matches: ['jighead', 'jig head'] },
+  { file: 'jig',                matches: ['football jig', 'flipping jig', 'casting jig', 'finesse jig', 'hair jig', 'arky', 'punch rig', 'punch bait', 'jig'] },
   { file: 'spinnerbait',        matches: ['spinnerbait', 'spinner bait', 'spinner', 'double willow', 'tandem'] },
   { file: 'buzzbait',           matches: ['buzzbait', 'buzz bait', 'buzz', 'popping frog', 'buzzfrog'] },
   { file: 'topwater-popper',    matches: ['popper', 'chug', 'pop-r', 'pop r', 'dahlberg', 'whopper plopper', 'plopper'] },

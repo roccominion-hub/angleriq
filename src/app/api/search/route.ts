@@ -184,8 +184,30 @@ export async function GET(req: NextRequest) {
     'ribbon tail', 'trick worm', 'senko', 'rage', 'brush hog', 'ned', 'chigger',
     'roboworm', 'fluke', 'swimbait', 'jig', 'crank', 'spinner', 'bladed',
     'hollow body', 'whopper', 'popper', 'buzzbait', 'topwater', 'spoon', 'blade bait',
-    'keitech', 'zman', 'z-man', 'swimsenko', 'elaztech', 'paddle tail', 'boot tail'
+    'keitech', 'zman', 'z-man', 'swimsenko', 'elaztech', 'paddle tail', 'boot tail',
+    // Minnow-style soft plastics are the core forward-facing-sonar baits, but
+    // "minnow" is on the live-bait list, so they need naming explicitly or the
+    // most relevant bait on a scoping lake gets dropped as live bait.
+    'soft-plastic', 'soft plastic', 'flatnose', 'damiki', 'hover', 'minnow-style',
+    'jighead minnow', 'drop minnow', 'hinge minnow', 'mooch',
   ]
+
+  // Terminal tackle is not a lure recommendation. Hooks, weights, line and bare
+  // jigheads live in bait_used alongside real baits, and were outranking them —
+  // Toledo Bend recommended "Jigheads" in place of the minnow it was rigging.
+  // Skirted jigs (football/swim/flipping) are lures and must not be caught here.
+  const TERMINAL_TACKLE = [
+    /\bjig\s?heads?\b/, /\bhooks?\b/, /\bewg\b/, /\btreble\b/, /\bweights?\b/,
+    /\bsinkers?\b/, /\bswivel\b/, /\bbraid\b/, /\bfluoro(carbon)?\b/,
+    /\bmono(filament)?\b/, /\bline\b/, /\bleader\b/, /\bbobber\b/, /\bsplit shot\b/,
+    /\bbearing\b/, /\bo-?ring\b/, /\btungsten\b/,
+  ]
+  const isTerminalTackle = (name: string) => {
+    const lower = name.toLowerCase()
+    // "jighead minnow" describes the bait, not the hook — keep it.
+    if (/\bjig\s?head\b/.test(lower) && /(minnow|shad|worm|swimbait|trailer|fluke)/.test(lower)) return false
+    return TERMINAL_TACKLE.some(rx => rx.test(lower))
+  }
 
   function isLiveBait(name: string): boolean {
     const lower = name.toLowerCase()
@@ -196,7 +218,7 @@ export async function GET(req: NextRequest) {
   }
 
   const topBaits = Object.entries(baitFrequency)
-    .filter(([name]) => !isLiveBait(name))
+    .filter(([name]) => !isLiveBait(name) && !isTerminalTackle(name))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }))
