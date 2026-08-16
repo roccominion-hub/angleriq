@@ -78,15 +78,16 @@ async function main() {
   for (let i = 0; i < updates.length; i += CHUNK) {
     const chunk = updates.slice(i, i + CHUNK)
     const values = chunk.map(u =>
-      `('${u.id}'::uuid, ${sqlStr(u.f.phase)}, ${sqlStr(u.f.technique)}, ${sqlStr(u.f.place)}, ${sqlStr(u.f.depth)}, ${sqlStr(u.f.condition)})`
+      `('${u.id}'::uuid, ${sqlStr(u.f.phase)}, ${sqlStr(u.f.technique)}, ${sqlStr(u.f.place)}, ${sqlStr(u.f.depth)}, ${sqlStr(u.f.condition)}, ${u.f.scoping})`
     ).join(',\n      ')
     const sql = `
       UPDATE technique_report t SET
         pattern_phase = v.phase, pattern_technique = v.technique,
-        pattern_place = v.place, pattern_depth = v.depth, pattern_condition = v.condition
+        pattern_place = v.place, pattern_depth = v.depth, pattern_condition = v.condition,
+        pattern_scoping = v.scoping
       FROM (VALUES
       ${values}
-      ) AS v(id, phase, technique, place, depth, condition)
+      ) AS v(id, phase, technique, place, depth, condition, scoping)
       WHERE t.id = v.id;`
     await runSql(sql)
     done += chunk.length

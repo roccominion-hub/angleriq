@@ -47,7 +47,7 @@ interface SearchResult {
   sampleSize: number
   topBaits: { name: string; count: number }[]
   topPatterns: { pattern: string; count: number }[]
-  patternGroups?: { label: string; count: number; phase: string | null; depth: string | null; condition: string | null; descriptions: string[] }[]
+  patternGroups?: { label: string; count: number; phase: string | null; depth: string | null; condition: string | null; scoping?: boolean; descriptions: string[] }[]
   reports: any[]
   coords?: { lat: number; lng: number }
 }
@@ -1829,6 +1829,9 @@ function SearchPage() {
                                 units rather than breaking across lines. */}
                             <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                               <span className="text-slate-700 text-sm leading-tight group-hover:text-blue-700 transition-colors">{g.label}</span>
+                              {g.scoping && (
+                                <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>
+                              )}
                               {chips.map(c => (
                                 <span key={c} className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{c}</span>
                               ))}

@@ -32,11 +32,22 @@ export const PHASE: Facet[] = [
   { name: 'spring',     label: 'Spring',     terms: ['spring'] },
 ]
 
+// Forward-facing sonar is how fish are found, not what is tied on — you scope a
+// jighead minnow on offshore timber. So it rides alongside a pattern as a flag
+// rather than consuming the technique slot, and shows as a pill wherever it
+// applies instead of competing for a place in the ranking.
+export const SCOPING_TERMS = [
+  'scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing',
+  'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix',
+  'mega live', 'megalive', 'damiki', 'hover strolling', 'moping', 'video game',
+]
+
 export const TECHNIQUE: Facet[] = [
-  // Forward-facing sonar. Listed first because it describes how fish are found
-  // and targeted, which supersedes the bait in hand — a scoped jerkbait is a
-  // scoping pattern, not a jerkbait pattern.
-  { name: 'scoping',   label: 'Scoping (forward-facing sonar)', terms: ['scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing', 'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix', 'mega live', 'megalive', 'damiki', 'hover strolling', 'moping'] },
+  { name: 'jighead_minnow', label: 'Jighead minnow',       terms: ['jighead minnow', 'minnow head', 'damiki rig', 'hover rig', 'jig head minnow'] },
+  { name: 'hair_jig',  label: 'Hair jig',                  terms: ['hair jig', 'marabou', 'feather jig'] },
+  { name: 'football_jig', label: 'Football jig',           terms: ['football jig', 'football head', 'football'] },
+  { name: 'swim_jig',  label: 'Swim jig',                  terms: ['swim jig', 'swimming jig', 'swimjig'] },
+  { name: 'flipping_jig', label: 'Flipping jig',           terms: ['flipping jig', 'pitching jig', 'casting jig', 'arky', 'flippin jig'] },
   { name: 'punching',  label: 'Punching',                  terms: ['punch*'] },
   { name: 'flip_skip', label: 'Flipping & skipping',       terms: ['flip*', 'pitch*', 'skip*'] },
   { name: 'frog',      label: 'Frog',                      terms: ['frog', 'frogs', 'frogging'] },
@@ -46,7 +57,8 @@ export const TECHNIQUE: Facet[] = [
   { name: 'swimbait',  label: 'Swimbait',                  terms: ['swimbait', 'swimbaits', 'glide bait', 'glidebait'] },
   { name: 'bladed',    label: 'Spinnerbait & bladed jig',  terms: ['spinnerbait', 'spinnerbaits', 'chatterbait', 'bladed jig', 'vibrating jig'] },
   { name: 'finesse',   label: 'Finesse',                   terms: ['finesse', 'drop shot', 'dropshot', 'drop-shot', 'ned rig', 'shaky head', 'wacky', 'deadstick*'] },
-  { name: 'jig',       label: 'Jig & bottom contact',      terms: ['jig', 'jigs', 'jigging', 'carolina rig', 'texas rig', 'football', 'worm', 'tube', 'senko', 'spoon'] },
+  { name: 'soft_plastic', label: 'Soft plastics',          terms: ['texas rig', 'carolina rig', 'worm', 'senko', 'stick bait', 'creature', 'craw', 'lizard', 'fluke', 'tube'] },
+  { name: 'jig',       label: 'Jig (unspecified)',          terms: ['jig', 'jigs', 'jigging', 'spoon'] },
   { name: 'reaction',  label: 'Reaction & power fishing',  terms: ['reaction', 'power fishing', 'moving bait', 'moving baits', 'junk fishing'] },
 ]
 
@@ -116,6 +128,7 @@ export type PatternFacets = {
   place: string | null
   depth: string | null
   condition: string | null
+  scoping: boolean
 }
 
 // "Caught at Purtis Creek without LiveScope" must not read as a scoping
@@ -154,12 +167,12 @@ export function facetsOf(pattern: string, extra?: string | null, baitNames?: str
   const s = [(pattern || ''), (extra || '')].join(' ').toLowerCase()
   const place = pick(s, PLACE)
   const depth = pick(s, DEPTH)
-  const technique = pick(s, TECHNIQUE)
+  const scoping =
+    SCOPING_TERMS.some(t => hasTerm(s, t) && !negated(s, t)) || baitsSuggestScoping(baitNames)
   return {
+    scoping,
     phase: pick(s, PHASE)?.name ?? null,
-    // A minnow-style or Damiki-family bait means scoping unless the text
-    // named a more specific technique of its own.
-    technique: technique?.name ?? (baitsSuggestScoping(baitNames) ? 'scoping' : null),
+    technique: pick(s, TECHNIQUE)?.name ?? null,
     // Deep water with no structure named is an offshore/open-water pattern.
     place: (place ?? (depth?.name === 'deep' ? OFFSHORE : null))?.name ?? null,
     depth: depth?.name ?? null,

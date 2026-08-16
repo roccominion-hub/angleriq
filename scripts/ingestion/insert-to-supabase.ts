@@ -95,6 +95,7 @@ export async function insertTechniqueReport(params: {
         ...(item.pattern ? (() => { const f = facetsOf(item.pattern, item.presentation); return {
           pattern_phase: f.phase, pattern_technique: f.technique,
           pattern_place: f.place, pattern_depth: f.depth, pattern_condition: f.condition,
+          pattern_scoping: f.scoping,
         } })() : {}),
         presentation: item.presentation,
         structure: item.structure,

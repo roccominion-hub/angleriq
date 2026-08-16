@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     .from('technique_report')
     .select(`
       id, pattern, presentation, structure, depth_range_ft, season, notes, reported_date, source_url, confidence,
-      pattern_phase, pattern_technique, pattern_place, pattern_depth, pattern_condition,
+      pattern_phase, pattern_technique, pattern_place, pattern_depth, pattern_condition, pattern_scoping,
       bait_used ( bait_type, bait_name, color, weight_oz, line_type, line_lb_test ),
       conditions ( water_temp_f, water_clarity, water_level ),
       tournament_result ( angler_name, place, total_weight, tournament ( name, organization, start_date ) )
@@ -135,6 +135,7 @@ export async function GET(req: NextRequest) {
   type Group = {
     label: string; count: number
     phases: Tally; depths: Tally; conditions: Tally
+    scoping: number
     descriptions: string[]
   }
   const bump = (t: Tally, v: string | null) => { if (v) t[v] = (t[v] || 0) + 1 }
@@ -145,16 +146,17 @@ export async function GET(req: NextRequest) {
     const facets = {
       phase: r.pattern_phase ?? null, technique: r.pattern_technique ?? null,
       place: r.pattern_place ?? null, depth: r.pattern_depth ?? null,
-      condition: r.pattern_condition ?? null,
+      condition: r.pattern_condition ?? null, scoping: !!r.pattern_scoping,
     }
     const label = groupLabel(facets)
     if (!label) continue
     const g = groupMap.get(label) ?? {
-      label, count: 0, phases: {}, depths: {}, conditions: {}, descriptions: [],
+      label, count: 0, phases: {}, depths: {}, conditions: {}, scoping: 0, descriptions: [],
     }
     g.count++
     // Reports in a group can disagree (some prespawn, some postspawn), so the
     // chip shows the dominant value rather than whichever happened to be first.
+    if (facets.scoping) g.scoping++
     bump(g.phases, phaseLabel(facets.phase))
     bump(g.depths, depthLabel(facets.depth))
     bump(g.conditions, conditionLabel(facets.condition))
@@ -167,6 +169,9 @@ export async function GET(req: NextRequest) {
     .map(g => ({
       label: g.label, count: g.count,
       phase: dominant(g.phases), depth: dominant(g.depths), condition: dominant(g.conditions),
+      // Flag the group when any of its reports were fished on forward-facing
+      // sonar — it is a modifier on the pattern, so it shows as a pill.
+      scoping: g.scoping > 0,
       descriptions: g.descriptions,
     }))
 
