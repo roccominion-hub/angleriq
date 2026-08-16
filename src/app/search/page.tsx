@@ -1812,7 +1812,9 @@ function SearchPage() {
                   <CardContent className="px-5 pb-4 space-y-1.5">
                     {result.patternGroups!.map(g => {
                       const open = expandedPatterns.has(g.label)
-                      const chips = [g.phase, g.depth, g.condition].filter(Boolean) as string[]
+                      // Scoping is just another chip — same styling as the rest.
+                      const chips = [g.scoping ? 'Scoping/FFS' : null, g.phase, g.depth, g.condition]
+                        .filter(Boolean) as string[]
                       return (
                         <div key={g.label}>
                           <button
@@ -1829,9 +1831,6 @@ function SearchPage() {
                                 units rather than breaking across lines. */}
                             <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                               <span className="text-slate-700 text-sm leading-tight group-hover:text-blue-700 transition-colors">{g.label}</span>
-                              {g.scoping && (
-                                <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>
-                              )}
                               {chips.map(c => (
                                 <span key={c} className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{c}</span>
                               ))}
