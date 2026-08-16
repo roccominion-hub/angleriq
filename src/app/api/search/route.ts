@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { groupLabel, phaseLabel, depthLabel, conditionLabel } from '@/lib/pattern-facets'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabase = createClient(
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
     .from('technique_report')
     .select(`
       id, pattern, presentation, structure, depth_range_ft, season, notes, reported_date, source_url, confidence,
+      pattern_phase, pattern_technique, pattern_place, pattern_depth, pattern_condition, pattern_scoping,
       bait_used ( bait_type, bait_name, color, weight_oz, line_type, line_lb_test ),
       conditions ( water_temp_f, water_clarity, water_level ),
       tournament_result ( angler_name, place, total_weight, tournament ( name, organization, start_date ) )
@@ -124,6 +126,83 @@ export async function GET(req: NextRequest) {
     patternFrequency[label] = count
   }
 
+  // Winning Patterns, grouped by canonical facets rather than exact prose. The
+  // free-text pattern rarely repeats verbatim (83% of entries were singletons),
+  // so counting the label measured wording coincidence instead of how often a
+  // pattern actually produced. Each group keeps its source descriptions so the
+  // UI can expand a heading and show what the individual reports actually said.
+  type Tally = Record<string, number>
+  type Group = {
+    label: string; count: number
+    phases: Tally; depths: Tally; conditions: Tally
+    scoping: number
+    descriptions: string[]
+  }
+  const bump = (t: Tally, v: string | null) => { if (v) t[v] = (t[v] || 0) + 1 }
+  const dominant = (t: Tally) => Object.entries(t).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+  // Two passes. A technique+place label is the most useful heading, but it can
+  // strand a real pattern as several 1x rows — Toledo Bend's scoped jighead
+  // minnow split into "· Grass" and "· Creeks" and neither ranked. So any label
+  // that ends up alone collapses into its technique (or place) parent, which
+  // consolidates the long tail without flattening the groups that do have
+  // weight behind them.
+  const rowsWithFacets = (reportsForAgg as any[]).map(r => {
+    const facets = {
+      phase: r.pattern_phase ?? null, technique: r.pattern_technique ?? null,
+      place: r.pattern_place ?? null, depth: r.pattern_depth ?? null,
+      condition: r.pattern_condition ?? null, scoping: !!r.pattern_scoping,
+    }
+    return { r, facets, full: groupLabel(facets) }
+  })
+
+  const fullCounts: Record<string, number> = {}
+  for (const { full } of rowsWithFacets) if (full) fullCounts[full] = (fullCounts[full] || 0) + 1
+
+  const parentLabel = (f: typeof rowsWithFacets[number]['facets']) =>
+    groupLabel({ ...f, place: null }) ?? groupLabel({ ...f, technique: null })
+
+  const groupMap = new Map<string, Group>()
+  for (const { r, facets, full } of rowsWithFacets) {
+    if (!full) continue
+    const label = fullCounts[full] === 1 ? (parentLabel(facets) ?? full) : full
+    const g = groupMap.get(label) ?? {
+      label, count: 0, phases: {}, depths: {}, conditions: {}, scoping: 0, descriptions: [],
+    }
+    g.count++
+    // Reports in a group can disagree (some prespawn, some postspawn), so the
+    // chip shows the dominant value rather than whichever happened to be first.
+    if (facets.scoping) g.scoping++
+    bump(g.phases, phaseLabel(facets.phase))
+    bump(g.depths, depthLabel(facets.depth))
+    bump(g.conditions, conditionLabel(facets.condition))
+    if (r.pattern && !g.descriptions.includes(r.pattern)) g.descriptions.push(r.pattern)
+    groupMap.set(label, g)
+  }
+  const ranked = [...groupMap.values()]
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+
+  // Forward-facing sonar is distinctive enough that an angler wants to know it
+  // is in play at all. On a lake where only a couple of reports mention it, it
+  // ranks below the cut on frequency alone, so guarantee the best scoped group
+  // a slot rather than letting the pill vanish on exactly the lakes where the
+  // information is least obvious.
+  const top = ranked.slice(0, 8)
+  if (!top.some(g => g.scoping > 0)) {
+    const bestScoped = ranked.find(g => g.scoping > 0)
+    if (bestScoped) top[top.length - 1] = bestScoped
+  }
+
+  const patternGroups = top
+    .map(g => ({
+      label: g.label, count: g.count,
+      phase: dominant(g.phases), depth: dominant(g.depths), condition: dominant(g.conditions),
+      // Flag the group when any of its reports were fished on forward-facing
+      // sonar — it is a modifier on the pattern, so it shows as a pill.
+      scoping: g.scoping > 0,
+      descriptions: g.descriptions,
+    }))
+
   // Filter live/natural/dead bait — artificial lures only
   const LIVE_BAIT_BLOCKLIST = [
     'live', 'dead', 'cut', 'shad', 'minnow', 'worm', 'leech', 'crawfish', 'crayfish',
@@ -138,8 +217,30 @@ export async function GET(req: NextRequest) {
     'ribbon tail', 'trick worm', 'senko', 'rage', 'brush hog', 'ned', 'chigger',
     'roboworm', 'fluke', 'swimbait', 'jig', 'crank', 'spinner', 'bladed',
     'hollow body', 'whopper', 'popper', 'buzzbait', 'topwater', 'spoon', 'blade bait',
-    'keitech', 'zman', 'z-man', 'swimsenko', 'elaztech', 'paddle tail', 'boot tail'
+    'keitech', 'zman', 'z-man', 'swimsenko', 'elaztech', 'paddle tail', 'boot tail',
+    // Minnow-style soft plastics are the core forward-facing-sonar baits, but
+    // "minnow" is on the live-bait list, so they need naming explicitly or the
+    // most relevant bait on a scoping lake gets dropped as live bait.
+    'soft-plastic', 'soft plastic', 'flatnose', 'damiki', 'hover', 'minnow-style',
+    'jighead minnow', 'drop minnow', 'hinge minnow', 'mooch',
   ]
+
+  // Terminal tackle is not a lure recommendation. Hooks, weights, line and bare
+  // jigheads live in bait_used alongside real baits, and were outranking them —
+  // Toledo Bend recommended "Jigheads" in place of the minnow it was rigging.
+  // Skirted jigs (football/swim/flipping) are lures and must not be caught here.
+  const TERMINAL_TACKLE = [
+    /\bjig\s?heads?\b/, /\bhooks?\b/, /\bewg\b/, /\btreble\b/, /\bweights?\b/,
+    /\bsinkers?\b/, /\bswivel\b/, /\bbraid\b/, /\bfluoro(carbon)?\b/,
+    /\bmono(filament)?\b/, /\bline\b/, /\bleader\b/, /\bbobber\b/, /\bsplit shot\b/,
+    /\bbearing\b/, /\bo-?ring\b/, /\btungsten\b/,
+  ]
+  const isTerminalTackle = (name: string) => {
+    const lower = name.toLowerCase()
+    // "jighead minnow" describes the bait, not the hook — keep it.
+    if (/\bjig\s?head\b/.test(lower) && /(minnow|shad|worm|swimbait|trailer|fluke)/.test(lower)) return false
+    return TERMINAL_TACKLE.some(rx => rx.test(lower))
+  }
 
   function isLiveBait(name: string): boolean {
     const lower = name.toLowerCase()
@@ -150,7 +251,7 @@ export async function GET(req: NextRequest) {
   }
 
   const topBaits = Object.entries(baitFrequency)
-    .filter(([name]) => !isLiveBait(name))
+    .filter(([name]) => !isLiveBait(name) && !isTerminalTackle(name))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }))
@@ -172,6 +273,7 @@ export async function GET(req: NextRequest) {
     unfilteredCount: reports?.length || 0,
     topBaits,
     topPatterns,
+    patternGroups,
     reports: reportsForAgg,
     coords: { lat: water.lat, lng: water.lng },
   })

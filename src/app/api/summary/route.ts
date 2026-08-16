@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     waterTempF: waterTempF ?? null,
     season: season ?? null,
     clarity: filters?.waterClarity && filters.waterClarity !== 'all' ? filters.waterClarity : null,
-  }) : null
+  }, lakeId) : null
 
   // Secondary / alternative recommendation — separate prompt, no cache
   if (_secondary) {
@@ -211,7 +211,7 @@ Be direct, specific, and confident. No filler.`
     waterTempF: waterTempF ?? null,
     season: season ?? null,
     clarity: filters?.waterClarity && filters.waterClarity !== 'all' ? filters.waterClarity : null,
-  })
+  }, lakeId)
 
   // Extract all colors from real data
   const colorsFromData: string[] = []

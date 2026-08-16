@@ -20,7 +20,9 @@ export async function getUserIdFromRequest(): Promise<string | null> {
 }
 
 interface PersonalLog {
+  lake_id?: string | null
   lake_name?: string
+  lake_state?: string | null
   trip_date: string
   fish_count: number | null
   big_fish_lbs: number | null
@@ -41,7 +43,7 @@ export interface CurrentConditions {
   clarity?: string | null
 }
 
-const LOG_FIELDS = 'lake_name, trip_date, fish_count, big_fish_lbs, rating, techniques, baits, structure, depth, water_temp_f, water_clarity, pattern_notes, notes'
+const LOG_FIELDS = 'lake_id, lake_name, lake_state, trip_date, fish_count, big_fish_lbs, rating, techniques, baits, structure, depth, water_temp_f, water_clarity, pattern_notes, notes'
 
 // A log is "similar conditions" to today if water temp is close (±8°F) or
 // water clarity matches — the two angler-loggable signals most predictive
@@ -82,6 +84,7 @@ export async function getPersonalIntelSection(
   userId: string | null | undefined,
   lakeName: string | null | undefined,
   current?: CurrentConditions,
+  lakeId?: string | null,
 ): Promise<string> {
   if (!userId || !lakeName) return ''
 
@@ -96,8 +99,11 @@ export async function getPersonalIntelSection(
     if (error || !allLogs || allLogs.length === 0) return ''
 
     const logs = allLogs as PersonalLog[]
-    const thisLake = logs.filter(l => l.lake_name === lakeName).slice(0, 8)
-    const otherLakes = logs.filter(l => l.lake_name !== lakeName)
+    // Prefer lake_id — names repeat across states (Lake Murray OK vs SC).
+    const isThisLake = (l: PersonalLog) =>
+      lakeId ? l.lake_id === lakeId : l.lake_name === lakeName
+    const thisLake = logs.filter(isThisLake).slice(0, 8)
+    const otherLakes = logs.filter(l => !isThisLake(l))
 
     if (thisLake.length === 0 && otherLakes.length === 0) return ''
 
@@ -114,16 +120,21 @@ export async function getPersonalIntelSection(
 
     if (otherLakes.length > 0) {
       // Group by lake for a compact "other waters" summary
-      const byLake = new Map<string, PersonalLog[]>()
+      // Key by lake_id so two same-named lakes stay distinct, but display the
+      // lake's name (with state, when two share a name).
+      const byLake = new Map<string, { label: string; logs: PersonalLog[] }>()
       for (const l of otherLakes) {
-        const key = l.lake_name || 'Unknown water'
-        if (!byLake.has(key)) byLake.set(key, [])
-        byLake.get(key)!.push(l)
+        const key = l.lake_id || l.lake_name || 'Unknown water'
+        const label = l.lake_name
+          ? `${l.lake_name}${l.lake_state ? ` (${l.lake_state})` : ''}`
+          : 'Unknown water'
+        if (!byLake.has(key)) byLake.set(key, { label, logs: [] })
+        byLake.get(key)!.logs.push(l)
       }
-      const summaryLines = Array.from(byLake.entries())
-        .sort((a, b) => b[1].length - a[1].length)
+      const summaryLines = Array.from(byLake.values())
+        .sort((a, b) => b.logs.length - a.logs.length)
         .slice(0, 5)
-        .map(([name, ls]) => {
+        .map(({ label: name, logs: ls }) => {
           const fish = ls.reduce((s, l) => s + (l.fish_count || 0), 0)
           const techs = Array.from(new Set(ls.flatMap(l => l.techniques || []))).slice(0, 3)
           return `- ${name}: ${ls.length} trip${ls.length === 1 ? '' : 's'}, ${fish} fish caught${techs.length ? `, techniques used: ${techs.join(', ')}` : ''}`
@@ -153,10 +164,11 @@ export async function getPersonalIntelOverview(userId: string | null | undefined
     if (error || !allLogs || allLogs.length === 0) return ''
 
     const logs = allLogs as PersonalLog[]
-    const byLake = new Map<string, { trips: number; fish: number; bigFish: number; ratings: number[] }>()
+    const byLake = new Map<string, { label: string; trips: number; fish: number; bigFish: number; ratings: number[] }>()
     for (const l of logs) {
-      const key = l.lake_name || 'Unknown water'
-      const cur = byLake.get(key) || { trips: 0, fish: 0, bigFish: 0, ratings: [] }
+      const key = l.lake_id || l.lake_name || 'Unknown water'
+      const label = l.lake_name ? `${l.lake_name}${l.lake_state ? ` (${l.lake_state})` : ''}` : 'Unknown water'
+      const cur = byLake.get(key) || { label, trips: 0, fish: 0, bigFish: 0, ratings: [] }
       cur.trips += 1
       cur.fish += l.fish_count || 0
       if (l.big_fish_lbs != null) cur.bigFish = Math.max(cur.bigFish, l.big_fish_lbs)
@@ -165,8 +177,9 @@ export async function getPersonalIntelOverview(userId: string | null | undefined
     }
 
     // Rank by total fish caught (the clearest "success" signal), tie-break on trips
-    const ranked = Array.from(byLake.entries()).sort((a, b) => (b[1].fish - a[1].fish) || (b[1].trips - a[1].trips))
-    const lakeLines = ranked.slice(0, 6).map(([name, s]) => {
+    const ranked = Array.from(byLake.values()).sort((a, b) => (b.fish - a.fish) || (b.trips - a.trips))
+    const lakeLines = ranked.slice(0, 6).map((s) => {
+      const name = s.label
       const avgRating = s.ratings.length ? (s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length).toFixed(1) : null
       return `- ${name}: ${s.trips} trip${s.trips === 1 ? '' : 's'}, ${s.fish} fish caught${s.bigFish ? `, biggest ${s.bigFish} lbs` : ''}${avgRating ? `, avg rating ${avgRating}/5` : ''}`
     })
@@ -229,15 +242,21 @@ export async function getMyIntelData(
   userId: string | null | undefined,
   lakeName: string | null | undefined,
   current?: CurrentConditions,
+  lakeId?: string | null,
 ): Promise<MyIntelData | null> {
-  if (!userId || !lakeName) return null
+  if (!userId || (!lakeName && !lakeId)) return null
 
   try {
-    const { data: logs, error } = await supabase
+    // Match on lake_id when we have it — lake names are not unique across
+    // states, so filtering by name alone surfaced a Lake Murray (OK) trip on
+    // the Lake Murray (SC) report.
+    let q = supabase
       .from('fishing_logs')
       .select(LOG_FIELDS)
       .eq('user_id', userId)
-      .eq('lake_name', lakeName)
+    q = lakeId ? q.eq('lake_id', lakeId) : q.eq('lake_name', lakeName!)
+
+    const { data: logs, error } = await q
       .order('trip_date', { ascending: false })
       .limit(20)
 
