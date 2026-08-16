@@ -36,7 +36,7 @@ export const TECHNIQUE: Facet[] = [
   // Forward-facing sonar. Listed first because it describes how fish are found
   // and targeted, which supersedes the bait in hand — a scoped jerkbait is a
   // scoping pattern, not a jerkbait pattern.
-  { name: 'scoping',   label: 'Scoping (forward-facing sonar)', terms: ['scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing', 'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix', 'mega live', 'megalive'] },
+  { name: 'scoping',   label: 'Scoping (forward-facing sonar)', terms: ['scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing', 'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix', 'mega live', 'megalive', 'damiki', 'hover strolling', 'moping'] },
   { name: 'punching',  label: 'Punching',                  terms: ['punch*'] },
   { name: 'flip_skip', label: 'Flipping & skipping',       terms: ['flip*', 'pitch*', 'skip*'] },
   { name: 'frog',      label: 'Frog',                      terms: ['frog', 'frogs', 'frogging'] },
@@ -45,7 +45,7 @@ export const TECHNIQUE: Facet[] = [
   { name: 'crankbait', label: 'Cranking',                  terms: ['crank*', 'squarebill', 'lipless', 'rattle trap'] },
   { name: 'swimbait',  label: 'Swimbait',                  terms: ['swimbait', 'swimbaits', 'glide bait', 'glidebait'] },
   { name: 'bladed',    label: 'Spinnerbait & bladed jig',  terms: ['spinnerbait', 'spinnerbaits', 'chatterbait', 'bladed jig', 'vibrating jig'] },
-  { name: 'finesse',   label: 'Finesse',                   terms: ['finesse', 'drop shot', 'dropshot', 'drop-shot', 'ned rig', 'shaky head', 'wacky', 'damiki', 'deadstick*'] },
+  { name: 'finesse',   label: 'Finesse',                   terms: ['finesse', 'drop shot', 'dropshot', 'drop-shot', 'ned rig', 'shaky head', 'wacky', 'deadstick*'] },
   { name: 'jig',       label: 'Jig & bottom contact',      terms: ['jig', 'jigs', 'jigging', 'carolina rig', 'texas rig', 'football', 'worm', 'tube', 'senko', 'spoon'] },
   { name: 'reaction',  label: 'Reaction & power fishing',  terms: ['reaction', 'power fishing', 'moving bait', 'moving baits', 'junk fishing'] },
 ]
@@ -133,13 +133,33 @@ function negated(s: string, term: string): boolean {
  * in the pattern text itself. Long free-text notes are deliberately excluded —
  * they mention too much in passing to classify reliably.
  */
-export function facetsOf(pattern: string, extra?: string | null): PatternFacets {
+/**
+ * Bait names that in practice mean forward-facing sonar. Minnow-style baits and
+ * the Damiki/hover family exist to be watched down to a fish on the screen, so
+ * their presence is a reliable scoping signal even when the write-up never says
+ * "LiveScope". Checked only for this technique — bait names must not feed the
+ * general matcher, or a "Rock Crawler" crankbait would register as place=rock.
+ */
+const FFS_BAIT_TERMS = [
+  'damiki', 'flatnose', 'hover', 'minnow', 'armor shad', 'mooch', 'moping',
+]
+
+function baitsSuggestScoping(baitNames?: string[] | null): boolean {
+  if (!baitNames?.length) return false
+  const joined = baitNames.join(' ').toLowerCase()
+  return FFS_BAIT_TERMS.some(t => hasTerm(joined, t) && !negated(joined, t))
+}
+
+export function facetsOf(pattern: string, extra?: string | null, baitNames?: string[] | null): PatternFacets {
   const s = [(pattern || ''), (extra || '')].join(' ').toLowerCase()
   const place = pick(s, PLACE)
   const depth = pick(s, DEPTH)
+  const technique = pick(s, TECHNIQUE)
   return {
     phase: pick(s, PHASE)?.name ?? null,
-    technique: pick(s, TECHNIQUE)?.name ?? null,
+    // A minnow-style or Damiki-family bait means scoping unless the text
+    // named a more specific technique of its own.
+    technique: technique?.name ?? (baitsSuggestScoping(baitNames) ? 'scoping' : null),
     // Deep water with no structure named is an offshore/open-water pattern.
     place: (place ?? (depth?.name === 'deep' ? OFFSHORE : null))?.name ?? null,
     depth: depth?.name ?? null,

@@ -1821,18 +1821,25 @@ function SearchPage() {
                               next.has(g.label) ? next.delete(g.label) : next.add(g.label)
                               return next
                             })}
-                            className="w-full flex items-center gap-3 text-left group py-0.5"
+                            className="w-full flex items-start gap-2 text-left group py-1 min-w-0"
                           >
-                            <ChevronRight size={13} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                            <span className="text-slate-700 text-sm flex-1 leading-tight group-hover:text-blue-700 transition-colors">
-                              {g.label}
+                            <ChevronRight size={13} className={`text-slate-400 shrink-0 mt-0.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+                            {/* min-w-0 lets this column shrink so the count never
+                                gets pushed outside the card; chips wrap as whole
+                                units rather than breaking across lines. */}
+                            <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                              <span className="text-slate-700 text-sm leading-tight group-hover:text-blue-700 transition-colors">{g.label}</span>
                               {chips.map(c => (
-                                <span key={c} className="ml-1.5 text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 align-middle">{c}</span>
+                                <span key={c} className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{c}</span>
                               ))}
                             </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${Math.max(g.count * 14, 14)}px` }} />
-                              <span className="text-slate-400 text-xs w-6 text-right">{g.count}x</span>
+                            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                              {/* Bar is capped so a high count can't overflow the card */}
+                              <div
+                                className="h-1.5 bg-blue-500 rounded-full"
+                                style={{ width: `${Math.min(Math.max(g.count * 6, 8), 56)}px` }}
+                              />
+                              <span className="text-slate-400 text-xs tabular-nums text-right">{g.count}x</span>
                             </div>
                           </button>
                           {open && (
