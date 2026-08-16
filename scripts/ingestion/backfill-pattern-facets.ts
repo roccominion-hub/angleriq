@@ -58,7 +58,7 @@ async function main() {
   console.log(`  ${rows.length} reports with a pattern`)
 
   const updates = rows.map(r => {
-    const baits = (r.bait_used ?? []).map((b: any) => b.bait_name || b.bait_type).filter(Boolean)
+    const baits = (r.bait_used ?? []).map((b: any) => ({ name: b.bait_name, type: b.bait_type }))
     const f = facetsOf(r.pattern, r.presentation, baits)
     return { id: r.id, f, label: groupLabel(f) }
   })

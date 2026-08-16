@@ -39,7 +39,7 @@ export const PHASE: Facet[] = [
 export const SCOPING_TERMS = [
   'scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing',
   'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix',
-  'mega live', 'megalive', 'damiki', 'hover strolling', 'moping', 'video game',
+  'mega live', 'megalive', 'damiki rig', 'hover strolling', 'moping', 'video game',
 ]
 
 export const TECHNIQUE: Facet[] = [
@@ -153,22 +153,44 @@ function negated(s: string, term: string): boolean {
  * "LiveScope". Checked only for this technique — bait names must not feed the
  * general matcher, or a "Rock Crawler" crankbait would register as place=rock.
  */
+// Specific bait families, not brands. "Damiki" alone is a tackle company that
+// also makes crankbaits — matching the brand flagged a Damiki DC Series 300
+// crankbait as a scoping pattern. A bare "minnow" is likewise ambiguous: a
+// Rapala Original Floating Minnow is a hard jerkbait, while a minnow on a
+// jighead is the archetypal forward-facing-sonar bait. So a plain "minnow"
+// counts only when the bait is a soft plastic.
 const FFS_BAIT_TERMS = [
-  'damiki', 'flatnose', 'hover', 'minnow', 'armor shad', 'mooch', 'moping',
+  'flatnose', 'hinge minnow', 'drop minnow', 'mooch minnow', 'jighead minnow',
+  'jig head minnow', 'damiki rig', 'hover rig', 'hover strolling', 'armor shad',
+  'minnow soft', 'soft minnow',
 ]
 
-function baitsSuggestScoping(baitNames?: string[] | null): boolean {
-  if (!baitNames?.length) return false
-  const joined = baitNames.join(' ').toLowerCase()
-  return FFS_BAIT_TERMS.some(t => hasTerm(joined, t) && !negated(joined, t))
+function baitsSuggestScoping(baits?: (string | { name?: string | null; type?: string | null })[] | null): boolean {
+  if (!baits?.length) return false
+  for (const b of baits) {
+    const name = (typeof b === 'string' ? b : b?.name ?? '').toLowerCase()
+    const type = (typeof b === 'string' ? '' : b?.type ?? '').toLowerCase()
+    if (!name && !type) continue
+    if (FFS_BAIT_TERMS.some(t => hasTerm(name, t) && !negated(name, t))) return true
+    // Deliberately no generic "soft plastic + minnow" rule: a Strike King Rage
+    // Minnow is a fluke-style soft jerkbait fished in a crankbait rotation, and
+    // treating every soft minnow as forward-facing sonar mislabelled it. Only
+    // the named families above are unambiguous enough to flag.
+    void type
+  }
+  return false
 }
 
-export function facetsOf(pattern: string, extra?: string | null, baitNames?: string[] | null): PatternFacets {
+export function facetsOf(
+  pattern: string,
+  extra?: string | null,
+  baits?: (string | { name?: string | null; type?: string | null })[] | null,
+): PatternFacets {
   const s = [(pattern || ''), (extra || '')].join(' ').toLowerCase()
   const place = pick(s, PLACE)
   const depth = pick(s, DEPTH)
   const scoping =
-    SCOPING_TERMS.some(t => hasTerm(s, t) && !negated(s, t)) || baitsSuggestScoping(baitNames)
+    SCOPING_TERMS.some(t => hasTerm(s, t) && !negated(s, t)) || baitsSuggestScoping(baits)
   return {
     scoping,
     phase: pick(s, PHASE)?.name ?? null,

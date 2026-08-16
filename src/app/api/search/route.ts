@@ -141,15 +141,31 @@ export async function GET(req: NextRequest) {
   const bump = (t: Tally, v: string | null) => { if (v) t[v] = (t[v] || 0) + 1 }
   const dominant = (t: Tally) => Object.entries(t).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
-  const groupMap = new Map<string, Group>()
-  for (const r of reportsForAgg as any[]) {
+  // Two passes. A technique+place label is the most useful heading, but it can
+  // strand a real pattern as several 1x rows — Toledo Bend's scoped jighead
+  // minnow split into "· Grass" and "· Creeks" and neither ranked. So any label
+  // that ends up alone collapses into its technique (or place) parent, which
+  // consolidates the long tail without flattening the groups that do have
+  // weight behind them.
+  const rowsWithFacets = (reportsForAgg as any[]).map(r => {
     const facets = {
       phase: r.pattern_phase ?? null, technique: r.pattern_technique ?? null,
       place: r.pattern_place ?? null, depth: r.pattern_depth ?? null,
       condition: r.pattern_condition ?? null, scoping: !!r.pattern_scoping,
     }
-    const label = groupLabel(facets)
-    if (!label) continue
+    return { r, facets, full: groupLabel(facets) }
+  })
+
+  const fullCounts: Record<string, number> = {}
+  for (const { full } of rowsWithFacets) if (full) fullCounts[full] = (fullCounts[full] || 0) + 1
+
+  const parentLabel = (f: typeof rowsWithFacets[number]['facets']) =>
+    groupLabel({ ...f, place: null }) ?? groupLabel({ ...f, technique: null })
+
+  const groupMap = new Map<string, Group>()
+  for (const { r, facets, full } of rowsWithFacets) {
+    if (!full) continue
+    const label = fullCounts[full] === 1 ? (parentLabel(facets) ?? full) : full
     const g = groupMap.get(label) ?? {
       label, count: 0, phases: {}, depths: {}, conditions: {}, scoping: 0, descriptions: [],
     }
@@ -163,9 +179,21 @@ export async function GET(req: NextRequest) {
     if (r.pattern && !g.descriptions.includes(r.pattern)) g.descriptions.push(r.pattern)
     groupMap.set(label, g)
   }
-  const patternGroups = [...groupMap.values()]
+  const ranked = [...groupMap.values()]
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 8)
+
+  // Forward-facing sonar is distinctive enough that an angler wants to know it
+  // is in play at all. On a lake where only a couple of reports mention it, it
+  // ranks below the cut on frequency alone, so guarantee the best scoped group
+  // a slot rather than letting the pill vanish on exactly the lakes where the
+  // information is least obvious.
+  const top = ranked.slice(0, 8)
+  if (!top.some(g => g.scoping > 0)) {
+    const bestScoped = ranked.find(g => g.scoping > 0)
+    if (bestScoped) top[top.length - 1] = bestScoped
+  }
+
+  const patternGroups = top
     .map(g => ({
       label: g.label, count: g.count,
       phase: dominant(g.phases), depth: dominant(g.depths), condition: dominant(g.conditions),
