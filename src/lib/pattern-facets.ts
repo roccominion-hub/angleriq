@@ -33,6 +33,10 @@ export const PHASE: Facet[] = [
 ]
 
 export const TECHNIQUE: Facet[] = [
+  // Forward-facing sonar. Listed first because it describes how fish are found
+  // and targeted, which supersedes the bait in hand — a scoped jerkbait is a
+  // scoping pattern, not a jerkbait pattern.
+  { name: 'scoping',   label: 'Scoping (forward-facing sonar)', terms: ['scoping', 'scoped', 'scope', 'livescope', 'live scope', 'forward-facing', 'forward facing', 'ffs', 'activetarget', 'active target', 'panoptix', 'mega live', 'megalive'] },
   { name: 'punching',  label: 'Punching',                  terms: ['punch*'] },
   { name: 'flip_skip', label: 'Flipping & skipping',       terms: ['flip*', 'pitch*', 'skip*'] },
   { name: 'frog',      label: 'Frog',                      terms: ['frog', 'frogs', 'frogging'] },
@@ -80,7 +84,10 @@ export const CONDITION: Facet[] = [
   { name: 'muddy',    label: 'Stained water', terms: ['muddy', 'stained', 'turbid', 'dirty water'] },
   { name: 'forage',   label: 'Bait-driven',   terms: ['shad', 'baitfish', 'bait ball', 'bluegill', 'forage', 'herring', 'alewife'] },
   { name: 'lowlight', label: 'Low light',     terms: ['morning', 'evening', 'dawn', 'dusk', 'low light', 'low-light'] },
-  { name: 'front',    label: 'Frontal',       terms: ['front', 'cold front', 'post-front', 'postfront', 'pressured', 'pressure'] },
+  // Weather fronts and angling pressure are unrelated; lumping them produced a
+  // "Frontal" label on reports that were actually about pressured fish.
+  { name: 'cold_front', label: 'Cold front',      terms: ['cold front', 'post-front', 'postfront', 'frontal', 'bluebird'] },
+  { name: 'pressured',  label: 'Pressured fish',  terms: ['pressured', 'pressure', 'high-pressure', 'heavily fished'] },
 ]
 
 const OFFSHORE: Facet = { name: 'humps', label: 'Humps & offshore', terms: [] }
@@ -100,7 +107,8 @@ function hasTerm(s: string, term: string): boolean {
   return rx.test(s)
 }
 
-const pick = (s: string, facets: Facet[]) => facets.find(f => f.terms.some(t => hasTerm(s, t))) ?? null
+const pick = (s: string, facets: Facet[]) =>
+  facets.find(f => f.terms.some(t => hasTerm(s, t) && !negated(s, t))) ?? null
 
 export type PatternFacets = {
   phase: string | null
@@ -110,8 +118,23 @@ export type PatternFacets = {
   condition: string | null
 }
 
-export function facetsOf(pattern: string): PatternFacets {
-  const s = (pattern || '').toLowerCase()
+// "Caught at Purtis Creek without LiveScope" must not read as a scoping
+// pattern, so a term preceded by a negator does not count.
+const NEGATORS = ['without', 'no', 'not', 'lacking', 'absent', 'never']
+function negated(s: string, term: string): boolean {
+  const base = term.endsWith('*') ? term.slice(0, -1) : term
+  const esc = base.replace(/[.+?^${}()|[\]\\]/g, m => '\\' + m)
+  return new RegExp(`\\b(${NEGATORS.join('|')})\\s+(\\w+\\s+){0,2}${esc}`, 'i').test(s)
+}
+
+/**
+ * `extra` widens the search to a short companion field (presentation), which is
+ * where techniques such as forward-facing sonar are often recorded rather than
+ * in the pattern text itself. Long free-text notes are deliberately excluded —
+ * they mention too much in passing to classify reliably.
+ */
+export function facetsOf(pattern: string, extra?: string | null): PatternFacets {
+  const s = [(pattern || ''), (extra || '')].join(' ').toLowerCase()
   const place = pick(s, PLACE)
   const depth = pick(s, DEPTH)
   return {

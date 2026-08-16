@@ -50,14 +50,14 @@ async function main() {
   const rows: any[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
-      .from('technique_report').select('id, pattern')
+      .from('technique_report').select('id, pattern, presentation')
       .not('pattern', 'is', null).order('id').range(from, from + 999)
     if (error) { console.error(error.message); return }
     rows.push(...(data ?? [])); if (!data || data.length < 1000) break
   }
   console.log(`  ${rows.length} reports with a pattern`)
 
-  const updates = rows.map(r => ({ id: r.id, f: facetsOf(r.pattern), label: groupLabel(facetsOf(r.pattern)) }))
+  const updates = rows.map(r => { const f = facetsOf(r.pattern, r.presentation); return { id: r.id, f, label: groupLabel(f) } })
   const matched = updates.filter(u => u.label).length
   const groups: Record<string, number> = {}
   for (const u of updates) if (u.label) groups[u.label] = (groups[u.label] || 0) + 1

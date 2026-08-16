@@ -18,6 +18,10 @@ Return a JSON array of technique objects. Each object should have these fields (
   "angler_name": string | null,
   "finish_place": number | null,
   "total_weight_lbs": number | null,
+  // If the angler located or targeted fish with forward-facing sonar
+  // (LiveScope, ActiveTarget, MEGA Live, Panoptix — often called "scoping"),
+  // say so in the pattern: it defines how the fish were found and is a distinct
+  // modern pattern, especially offshore and on deep structure.
   "pattern": string | null,           // SHORT label — a phrase, never a sentence or paragraph.
                                       // Max ~60 characters / 8 words, no trailing period.
                                       // e.g. "shallow flipping wood", "deep ledge fishing"
