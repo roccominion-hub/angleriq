@@ -28,6 +28,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lakeId = searchParams.get('lakeId')
   const season = (searchParams.get('season') || seasonFromDate()).toLowerCase()
+  // Callers can select any combination of phases; the current season's phases
+  // are the default so the report opens on "what should work now" without
+  // hiding what else has produced.
+  const requested = (searchParams.get('phases') || '')
+    .split(',').map(p => p.trim()).filter(Boolean)
   if (!lakeId) return NextResponse.json({ error: 'lakeId required' }, { status: 400 })
 
   const { data: lakes } = await supabase
@@ -75,7 +80,7 @@ export async function GET(req: NextRequest) {
     list.push(r); byLake.set(r.body_of_water_id, list)
   }
 
-  const live = PHASES_IN_SEASON[season] ?? []
+  const live = requested.length ? requested : (PHASES_IN_SEASON[season] ?? [])
 
   const inScope = (p: typeof peers[number], scope: ScopeName) => {
     if (scope === 'local')  return p.miles <= 50
@@ -158,6 +163,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     lake: me.name,
     season,
+    phases: live,
+    // Every phase present in the matched reports, so the UI can offer only
+    // selections that would actually return something.
+    availablePhases: [...new Set(reports.map(r => r.pattern_phase).filter(Boolean))],
     signature: {
       channelKm: me.channel_km == null ? null : Math.round(me.channel_km),
       dendriticRatio: me.dendritic_ratio,

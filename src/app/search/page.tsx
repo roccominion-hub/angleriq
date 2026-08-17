@@ -28,13 +28,27 @@ import dynamic from 'next/dynamic'
 const LakePickerMap = dynamic(() => import('@/components/LakePickerMap').then(m => ({ default: m.LakePickerMap })), { ssr: false })
 import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
 
+// The underlying facet is the phase, so these are exposed directly rather than
+// rolled into seasons — prespawn and spawn both sit in spring but fish
+// differently, and an angler chasing one is not chasing the other.
+const PHASE_CHOICES: { value: string; label: string }[] = [
+  { value: 'prespawn',   label: 'Prespawn' },
+  { value: 'spawn',      label: 'Spawn' },
+  { value: 'postspawn',  label: 'Postspawn' },
+  { value: 'shad_spawn', label: 'Shad spawn' },
+  { value: 'spring',     label: 'Spring' },
+  { value: 'summer',     label: 'Summer' },
+  { value: 'fall',       label: 'Fall' },
+  { value: 'winter',     label: 'Winter' },
+]
+
 type CrossLakePattern = {
   label: string; count: number; inSeason: number; phaseKnown: number
   inSeasonPct: number | null; scoping: boolean; phase: string | null; depth: string | null
   lakes: string[]; lakeCount: number
 }
 type CrossLake = {
-  lake: string; season: string
+  lake: string; season: string; phases: string[]; availablePhases: string[]
   scopes: {
     scope: string; label: string; lakeCount: number; reportCount: number
     topMatches: { name: string; state: string; similarity: number; miles: number | null }[]
@@ -878,6 +892,7 @@ function SearchPage() {
   const [expandedPatterns, setExpandedPatterns] = useState<Set<string>>(new Set())
   const [crossLake, setCrossLake] = useState<CrossLake | null>(null)
   const [crossScope, setCrossScope] = useState<string>('nearby')
+  const [crossPhases, setCrossPhases] = useState<string[]>([])
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -950,6 +965,20 @@ function SearchPage() {
   useEffect(() => {
     setSavedReportId(null)
   }, [selectedLake])
+
+  // Re-query comparable waters when the angler changes which phases to count.
+  // Skipped until a report exists, and the response is not allowed to reset the
+  // selection or this would loop.
+  const crossLakeId = (result as any)?.water?.id
+  useEffect(() => {
+    if (!crossLakeId || !crossPhases.length) return
+    let cancelled = false
+    fetch(`/api/cross-lake?lakeId=${crossLakeId}&phases=${crossPhases.join(',')}`)
+      .then(r => r.json())
+      .then((d: CrossLake) => { if (!cancelled && d?.scopes?.length) setCrossLake(d) })
+      .catch(() => { /* supplementary */ })
+    return () => { cancelled = true }
+  }, [crossLakeId, crossPhases])
 
   function setNowFilter(key: string, value: string) {
     setNowFilters(f => ({ ...f, [key]: value }))
@@ -1130,6 +1159,7 @@ function SearchPage() {
     setSavedReportId(null)
     setExpandedPatterns(new Set())
     setCrossLake(null)
+    setCrossPhases([])
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -1152,6 +1182,7 @@ function SearchPage() {
           .then((d: CrossLake) => {
             if (d?.scopes?.length) {
               setCrossLake(d)
+              setCrossPhases(d.phases ?? [])
               // Open on the tightest scope that actually has comparable water.
               const preferred = ['local', 'nearby', 'state', 'region', 'national']
               setCrossScope(preferred.find(p => d.scopes.some(s => s.scope === p)) ?? d.scopes[0].scope)
@@ -1926,13 +1957,13 @@ function SearchPage() {
             {crossLake && crossLake.scopes.length > 0 && (() => {
               const scope = crossLake.scopes.find(s => s.scope === crossScope) ?? crossLake.scopes[0]
               return (
-                <Card className="border-slate-200 shadow-none bg-white mt-4">
+                <Card className="border-slate-200 shadow-none bg-white mt-4 mb-6">
                   <CardHeader className="pb-2 pt-4 px-5">
                     <CardTitle className="text-slate-900 text-sm font-bold flex items-center gap-2">
                       <Compass size={15} className="text-blue-600" /> What Works on Comparable Waters
                     </CardTitle>
                     <p className="text-slate-500 text-xs mt-1 leading-snug">
-                      Lakes with similar size, cove complexity and inflows — useful when this water has thin report history of its own.
+                      Lakes with similar size, cove complexity and inflows.
                     </p>
                   </CardHeader>
                   <CardContent className="px-5 pb-4">
@@ -1950,6 +1981,29 @@ function SearchPage() {
                           {s.label} <span className="opacity-70">({s.lakeCount})</span>
                         </button>
                       ))}
+                    </div>
+
+                    {/* Phase selection — defaults to the phases live in the current
+                        season, but any combination can be counted. */}
+                    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-0.5">Counting</span>
+                      {PHASE_CHOICES.filter(c => crossLake.availablePhases?.includes(c.value)).map(c => {
+                        const on = crossPhases.includes(c.value)
+                        return (
+                          <button
+                            key={c.value}
+                            onClick={() => setCrossPhases(prev =>
+                              prev.includes(c.value) ? (prev.length > 1 ? prev.filter(v => v !== c.value) : prev)
+                                                    : [...prev, c.value])}
+                            className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 border transition-colors ${
+                              on ? 'bg-slate-700 border-slate-700 text-white'
+                                 : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                            }`}
+                          >
+                            {c.label}
+                          </button>
+                        )
+                      })}
                     </div>
 
                     <p className="text-slate-500 text-[11px] mb-3 leading-snug">
@@ -1972,7 +2026,7 @@ function SearchPage() {
                               <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 whitespace-nowrap ${
                                 p.inSeasonPct >= 25 ? 'text-blue-700 bg-blue-50' : 'text-slate-500 bg-slate-100'
                               }`}>
-                                {p.inSeasonPct}% in {crossLake.season}
+                                {p.inSeasonPct}% match
                               </span>
                             )}
                           </span>
@@ -1980,10 +2034,6 @@ function SearchPage() {
                       ))}
                     </div>
 
-                    <p className="text-slate-400 text-[10px] mt-3 leading-snug">
-                      Drawn from {scope.patterns[0]?.lakes.slice(0, 3).join(', ')}
-                      {scope.lakeCount > 3 ? ` and ${scope.lakeCount - 3} other comparable waters` : ''}.
-                    </p>
                   </CardContent>
                 </Card>
               )
