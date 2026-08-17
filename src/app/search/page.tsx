@@ -28,6 +28,20 @@ import dynamic from 'next/dynamic'
 const LakePickerMap = dynamic(() => import('@/components/LakePickerMap').then(m => ({ default: m.LakePickerMap })), { ssr: false })
 import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
 
+type CrossLakePattern = {
+  label: string; count: number; inSeason: number; phaseKnown: number
+  inSeasonPct: number | null; scoping: boolean; phase: string | null; depth: string | null
+  lakes: string[]; lakeCount: number
+}
+type CrossLake = {
+  lake: string; season: string
+  scopes: {
+    scope: string; label: string; lakeCount: number; reportCount: number
+    topMatches: { name: string; state: string; similarity: number; miles: number | null }[]
+    patterns: CrossLakePattern[]
+  }[]
+}
+
 interface Lake { id: string; name: string; state: string; type: string; species: string[]; lat?: number; lng?: number }
 
 // Lakes that should appear as a single search entry — secondary is hidden, primary is used for data
@@ -862,6 +876,8 @@ function SearchPage() {
   const [selectedLake, setSelectedLake] = useState('')
   const [selectedLakeId, setSelectedLakeId] = useState('')
   const [expandedPatterns, setExpandedPatterns] = useState<Set<string>>(new Set())
+  const [crossLake, setCrossLake] = useState<CrossLake | null>(null)
+  const [crossScope, setCrossScope] = useState<string>('nearby')
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -1113,6 +1129,7 @@ function SearchPage() {
     setWeather(null)
     setSavedReportId(null)
     setExpandedPatterns(new Set())
+    setCrossLake(null)
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -1127,6 +1144,21 @@ function SearchPage() {
       if (data.error) { setError(data.error); setLoading(false); setSummaryLoading(false); return }
       setResult(data)
       setLoading(false)
+
+      // Comparable-water patterns load alongside the report rather than blocking it.
+      if (data.water?.id) {
+        fetch(`/api/cross-lake?lakeId=${data.water.id}`)
+          .then(r => r.json())
+          .then((d: CrossLake) => {
+            if (d?.scopes?.length) {
+              setCrossLake(d)
+              // Open on the tightest scope that actually has comparable water.
+              const preferred = ['local', 'nearby', 'state', 'region', 'national']
+              setCrossScope(preferred.find(p => d.scopes.some(s => s.scope === p)) ?? d.scopes[0].scope)
+            }
+          })
+          .catch(() => { /* section is supplementary */ })
+      }
 
       let currentWeather: Weather | null = null
       let currentWaterTempF: number | null = null
@@ -1887,6 +1919,75 @@ function SearchPage() {
                 </Card>
               )}
             </div>
+
+            {/* Patterns from comparable waters — lakes matched on physical
+                character (channel length, cove complexity, inlets), so this
+                works even on a lake with no reports of its own. */}
+            {crossLake && crossLake.scopes.length > 0 && (() => {
+              const scope = crossLake.scopes.find(s => s.scope === crossScope) ?? crossLake.scopes[0]
+              return (
+                <Card className="border-slate-200 shadow-none bg-white mt-4">
+                  <CardHeader className="pb-2 pt-4 px-5">
+                    <CardTitle className="text-slate-900 text-sm font-bold flex items-center gap-2">
+                      <Compass size={15} className="text-blue-600" /> What Works on Comparable Waters
+                    </CardTitle>
+                    <p className="text-slate-500 text-xs mt-1 leading-snug">
+                      Lakes with similar size, cove complexity and inflows — useful when this water has thin report history of its own.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {crossLake.scopes.map(s => (
+                        <button
+                          key={s.scope}
+                          onClick={() => setCrossScope(s.scope)}
+                          className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border transition-colors ${
+                            s.scope === scope.scope
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                          }`}
+                        >
+                          {s.label} <span className="opacity-70">({s.lakeCount})</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-slate-500 text-[11px] mb-3 leading-snug">
+                      {scope.lakeCount} comparable {scope.lakeCount === 1 ? 'lake' : 'lakes'} · {scope.reportCount} reports ·
+                      {' '}closest: {scope.topMatches.map(m => `${m.name} (${m.similarity}%)`).join(', ')}
+                    </p>
+
+                    <div className="space-y-1.5">
+                      {scope.patterns.map(p => (
+                        <div key={p.label} className="flex items-start gap-2">
+                          <span className="text-slate-400 text-xs tabular-nums w-8 shrink-0 text-right pt-0.5">{p.count}x</span>
+                          <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <span className="text-slate-700 text-sm leading-tight">{p.label}</span>
+                            {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
+                            {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
+                            {/* Conditions qualify rather than filter: everything
+                                that has produced here is listed, with how much of
+                                it landed in the current season. */}
+                            {p.inSeasonPct != null && (
+                              <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 whitespace-nowrap ${
+                                p.inSeasonPct >= 25 ? 'text-blue-700 bg-blue-50' : 'text-slate-500 bg-slate-100'
+                              }`}>
+                                {p.inSeasonPct}% in {crossLake.season}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-slate-400 text-[10px] mt-3 leading-snug">
+                      Drawn from {scope.patterns[0]?.lakes.slice(0, 3).join(', ')}
+                      {scope.lakeCount > 3 ? ` and ${scope.lakeCount - 3} other comparable waters` : ''}.
+                    </p>
+                  </CardContent>
+                </Card>
+              )
+            })()}
 
             {/* Top Bait Breakdown */}
             {result.topBaits.length > 0 && (
