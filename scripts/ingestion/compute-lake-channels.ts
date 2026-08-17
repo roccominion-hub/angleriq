@@ -46,12 +46,21 @@ async function fetchFlowlines(bbox: string): Promise<Flow[]> {
     + `&spatialRel=esriSpatialRelIntersects&where=${where}&outFields=ftype,flowdir,lengthkm,gnis_name,wbarea_permanent_identifier`
     + `&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
   const feats: any[] = []
-  for (let offset = 0; offset < 30000; offset += 2000) {
+  const CAP = 60000
+  for (let offset = 0; offset < CAP; offset += 2000) {
     const r = await fetch(`${base}&resultOffset=${offset}`, { signal: AbortSignal.timeout(60000) })
+    // A failed page must abort the whole lake. NHD answers errors with a JSON
+    // body rather than a FeatureCollection, so `features` comes back undefined,
+    // the loop used to break, and the partial network was stored as a success —
+    // Lake Eufaula ended up with a 7 km sliver of channels on a 55 km lake.
+    if (!r.ok) throw new Error(`NHD HTTP ${r.status} at offset ${offset}`)
     const fc = await r.json() as any
-    const page = (fc?.features ?? []).filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
+    if (fc?.error) throw new Error(`NHD error at offset ${offset}: ${fc.error?.message ?? 'unknown'}`)
+    if (!Array.isArray(fc?.features)) throw new Error(`NHD malformed response at offset ${offset}`)
+    const page = fc.features.filter((f: any) => f.geometry?.type === 'LineString' && Array.isArray(f.geometry.coordinates))
     feats.push(...page)
-    if (!fc?.exceededTransferLimit || page.length === 0) break
+    if (!fc.exceededTransferLimit || fc.features.length === 0) break
+    if (offset + 2000 >= CAP) throw new Error(`NHD paging cap hit (${CAP}) — network would be incomplete`)
   }
   const lenByName: Record<string, number> = {}
   for (const f of feats) { const n = f.properties?.gnis_name; if (n) lenByName[n] = (lenByName[n] ?? 0) + (f.properties?.lengthkm ?? 0) }
