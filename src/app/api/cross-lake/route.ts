@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.sim - a.sim)
 
     const agg = new Map<string, {
-      label: string; count: number; weight: number; inSeason: number; phaseKnown: number
+      label: string; count: number; weight: number; relevance: number; inSeason: number; phaseKnown: number
       scoping: number; phases: Record<string, number>; depths: Record<string, number>
       lakes: Map<string, number>
     }>()
@@ -109,13 +109,22 @@ export async function GET(req: NextRequest) {
         })
         if (!label) continue
         const g = agg.get(label) ?? {
-          label, count: 0, weight: 0, inSeason: 0, phaseKnown: 0, scoping: 0,
+          label, count: 0, weight: 0, relevance: 0, inSeason: 0, phaseKnown: 0, scoping: 0,
           phases: {}, depths: {}, lakes: new Map<string, number>(),
         }
         g.count++
+        // Relevance score. One number instead of three competing ones: a report
+        // counts for more when it comes from a more comparable lake, and when
+        // its timing matches the selection. Unstated timing counts partially —
+        // it may well apply — and an explicitly different phase counts little
+        // but never zero, since a pattern that produces out of season is still
+        // evidence the water fishes that way.
+        const inSel = !!r.pattern_phase && live.includes(r.pattern_phase)
+        const timingFactor = inSel ? 1 : (!r.pattern_phase ? 0.35 : 0.12)
+        g.relevance += p.sim * timingFactor
         g.weight += p.sim
         if (r.pattern_phase) g.phaseKnown++
-        if (r.pattern_phase && live.includes(r.pattern_phase)) g.inSeason++
+        if (inSel) g.inSeason++
         if (r.pattern_scoping) g.scoping++
         if (r.pattern_phase) g.phases[r.pattern_phase] = (g.phases[r.pattern_phase] || 0) + 1
         if (r.pattern_depth) g.depths[r.pattern_depth] = (g.depths[r.pattern_depth] || 0) + 1
@@ -127,23 +136,28 @@ export async function GET(req: NextRequest) {
     const dominant = (t: Record<string, number>) =>
       Object.entries(t).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
-    const patterns = [...agg.values()]
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, 6)
+    // Relevance as a share, volume on a log scale. Straight weighted sums let a
+    // high-volume pattern with unstated timing outrank one with far more
+    // confirmed in-season reports — Topwater held first place on a winter
+    // selection with none of its 55 reports in winter. Taking relevance as a
+    // proportion makes the timing selection actually move the ranking, while
+    // log volume keeps a well-evidenced pattern ahead of a lucky single report.
+    const scoreOf = (g: { relevance: number; weight: number }) =>
+      g.weight > 0 ? (g.relevance / g.weight) * Math.log1p(g.weight) : 0
+
+    const ranked = [...agg.values()].sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, 6)
+    const topScore = ranked.length ? scoreOf(ranked[0]) : 0
+
+    const patterns = ranked
       .map(g => ({
         label: g.label,
         count: g.count,
         inSeason: g.inSeason,
-        // Share of the reports that actually state a phase — dividing by every
-        // report would let unknown-timing entries drag a genuinely seasonal
-        // pattern down to a couple of percent and read as "not for now".
         phaseKnown: g.phaseKnown,
-        inSeasonPct: g.phaseKnown ? Math.round(100 * g.inSeason / g.phaseKnown) : null,
+        // The bar is this pattern's strength relative to the strongest in view,
+        // so bar length and ordering express the same thing.
+        strength: topScore > 0 ? Math.round(100 * scoreOf(g) / topScore) : 0,
         scoping: g.scoping > 0,
-        // Per-phase counts drive the stacked bar. "unknown" is carried as a
-        // real segment rather than dropped, so the chart shows how much of a
-        // pattern's timing we actually know.
-        phaseCounts: { ...g.phases, unknown: g.count - g.phaseKnown },
         phase: phaseLabel(dominant(g.phases)),
         depth: depthLabel(dominant(g.depths)),
         lakes: [...g.lakes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n]) => n),

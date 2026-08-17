@@ -41,25 +41,10 @@ const PHASE_CHOICES: { value: string; label: string }[] = [
   { value: 'winter',     label: 'Winter' },
 ]
 
-// Warm through cold, following the year, so a bar reads left-to-right as a
-// season rather than an arbitrary colour sequence. Unknown is deliberately grey
-// and last — it is absence of information, not a phase.
-const PHASE_ORDER = ['prespawn', 'spawn', 'postspawn', 'spring', 'summer', 'fall', 'winter', 'unknown']
-const PHASE_STYLE: Record<string, { bar: string; dot: string; label: string }> = {
-  prespawn:  { bar: 'bg-sky-400',     dot: 'bg-sky-400',     label: 'Prespawn' },
-  spawn:     { bar: 'bg-emerald-400', dot: 'bg-emerald-400', label: 'Spawn' },
-  postspawn: { bar: 'bg-teal-500',    dot: 'bg-teal-500',    label: 'Postspawn' },
-  spring:    { bar: 'bg-lime-400',    dot: 'bg-lime-400',    label: 'Spring' },
-  summer:    { bar: 'bg-amber-400',   dot: 'bg-amber-400',   label: 'Summer' },
-  fall:      { bar: 'bg-orange-500',  dot: 'bg-orange-500',  label: 'Fall' },
-  winter:    { bar: 'bg-indigo-400',  dot: 'bg-indigo-400',  label: 'Winter' },
-  unknown:   { bar: 'bg-slate-200',   dot: 'bg-slate-200',   label: 'Timing not stated' },
-}
-
 type CrossLakePattern = {
   label: string; count: number; inSeason: number; phaseKnown: number
-  inSeasonPct: number | null; scoping: boolean; phase: string | null; depth: string | null
-  phaseCounts: Record<string, number>
+  scoping: boolean; phase: string | null; depth: string | null
+  strength: number
   lakes: string[]; lakeCount: number
 }
 type CrossLake = {
@@ -2026,55 +2011,32 @@ function SearchPage() {
                       {' '}closest: {scope.topMatches.map(m => `${m.name} (${m.similarity}%)`).join(', ')}
                     </p>
 
-                    {/* Legend covers only the phases actually present in view. */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
-                      {PHASE_ORDER.filter(ph => scope.patterns.some(p => (p.phaseCounts?.[ph] ?? 0) > 0)).map(ph => (
-                        <span key={ph} className="flex items-center gap-1 text-[10px] text-slate-500">
-                          <span className={`w-2 h-2 rounded-sm ${PHASE_STYLE[ph].dot}`} />
-                          {PHASE_STYLE[ph].label}
-                        </span>
+                    <div className="space-y-2.5">
+                      {scope.patterns.map(p => (
+                        <div key={p.label}>
+                          <div className="flex items-start gap-2">
+                            <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                              <span className="text-slate-700 text-sm leading-tight">{p.label}</span>
+                              {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
+                              {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
+                            </span>
+                            <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5">
+                              {p.inSeason > 0 ? `${p.inSeason} of ${p.count}` : `${p.count}`} report{p.count === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          {/* Bar length is the pattern's strength relative to the
+                              strongest in view — the same quantity the list is
+                              ordered by, so length and position never disagree. */}
+                          <div className="h-1.5 rounded-full bg-slate-100 mt-1 overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.max(p.strength, 3)}%` }} />
+                          </div>
+                        </div>
                       ))}
                     </div>
 
-                    <div className="space-y-2.5">
-                      {scope.patterns.map(p => {
-                        const segs = PHASE_ORDER
-                          .map(ph => ({ ph, n: p.phaseCounts?.[ph] ?? 0 }))
-                          .filter(s => s.n > 0)
-                        return (
-                          <div key={p.label}>
-                            <div className="flex items-start gap-2">
-                              <span className="text-slate-400 text-xs tabular-nums w-8 shrink-0 text-right pt-0.5">{p.count}x</span>
-                              <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                                <span className="text-slate-700 text-sm leading-tight">{p.label}</span>
-                                {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
-                                {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
-                                {p.inSeasonPct != null && (
-                                  <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 whitespace-nowrap ${
-                                    p.inSeasonPct >= 25 ? 'text-blue-700 bg-blue-50' : 'text-slate-500 bg-slate-100'
-                                  }`}>
-                                    {p.inSeasonPct}% match
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                            {/* When each pattern has produced. Segments are shares
-                                of this pattern's own reports, so bars compare
-                                timing rather than volume. */}
-                            <div className="flex h-1.5 rounded-full overflow-hidden ml-10 mt-1 bg-slate-100">
-                              {segs.map(s => (
-                                <div
-                                  key={s.ph}
-                                  className={PHASE_STYLE[s.ph].bar}
-                                  style={{ width: `${(100 * s.n) / p.count}%` }}
-                                  title={`${PHASE_STYLE[s.ph].label}: ${s.n} of ${p.count}`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <p className="text-slate-400 text-[10px] mt-3 leading-snug">
+                      Ranked by relevance: reports from the most comparable lakes count most, and reports matching the selected timing count more than those outside it.
+                    </p>
 
                   </CardContent>
                 </Card>
