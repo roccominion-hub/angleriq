@@ -92,12 +92,15 @@ export async function insertTechniqueReport(params: {
         pattern: item.pattern,
         // Canonical facets so Winning Patterns can group this report without a
         // backfill pass. Derived from the same rules used across the catalog.
-        ...(item.pattern ? (() => { const f = facetsOf(item.pattern, item.presentation, (item.baits ?? []).map((b: any) => ({ name: b.bait_name, type: b.bait_type }))); return {
+        ...(item.pattern ? (() => { const f = facetsOf(item.pattern, item.presentation, (item.baits ?? []).map((b: any) => ({ name: b.bait_name, type: b.bait_type })), { notes: item.notes, season: item.season, spawnPhase: item.spawn_phase, waterTempF: item.water_temp_f }); return {
           pattern_phase: f.phase, pattern_technique: f.technique,
           pattern_place: f.place, pattern_depth: f.depth, pattern_condition: f.condition,
           pattern_scoping: f.scoping,
         } })() : {}),
         presentation: item.presentation,
+        // Extracted on every article but previously dropped on insert, which is why
+        // the season column sat at 0.4% populated.
+        season: item.season ?? null,
         structure: item.structure,
         depth_range_ft: item.depth_range_ft,
         notes: item.notes,

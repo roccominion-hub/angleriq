@@ -181,10 +181,42 @@ function baitsSuggestScoping(baits?: (string | { name?: string | null; type?: st
   return false
 }
 
+/**
+ * Extra evidence for the seasonal phase only. Notes are long and mention many
+ * things in passing, so they must not feed place/technique/depth matching — but
+ * they are the richest remaining source of timing. Water temperature is used
+ * only at the unambiguous ends: 60F could be spring or fall, but sub-48F is
+ * winter and 78F+ is summer wherever you are.
+ */
+export type PhaseHints = {
+  notes?: string | null
+  season?: string | null
+  spawnPhase?: string | null
+  waterTempF?: number | null
+}
+
+function phaseFromHints(h?: PhaseHints | null): string | null {
+  if (!h) return null
+  const spawn = (h.spawnPhase ?? '').toLowerCase().replace(/[^a-z]/g, '')
+  if (spawn === 'prespawn' || spawn === 'spawn' || spawn === 'postspawn') return spawn
+  const season = (h.season ?? '').toLowerCase().trim()
+  if (['spring', 'summer', 'fall', 'winter'].includes(season)) return season
+  if (h.notes) {
+    const p = pick(String(h.notes).toLowerCase(), PHASE)
+    if (p) return p.name
+  }
+  if (typeof h.waterTempF === 'number') {
+    if (h.waterTempF < 48) return 'winter'
+    if (h.waterTempF >= 78) return 'summer'
+  }
+  return null
+}
+
 export function facetsOf(
   pattern: string,
   extra?: string | null,
   baits?: (string | { name?: string | null; type?: string | null })[] | null,
+  hints?: PhaseHints | null,
 ): PatternFacets {
   const s = [(pattern || ''), (extra || '')].join(' ').toLowerCase()
   const place = pick(s, PLACE)
@@ -193,7 +225,7 @@ export function facetsOf(
     SCOPING_TERMS.some(t => hasTerm(s, t) && !negated(s, t)) || baitsSuggestScoping(baits)
   return {
     scoping,
-    phase: pick(s, PHASE)?.name ?? null,
+    phase: pick(s, PHASE)?.name ?? phaseFromHints(hints),
     technique: pick(s, TECHNIQUE)?.name ?? null,
     // Deep water with no structure named is an offshore/open-water pattern.
     place: (place ?? (depth?.name === 'deep' ? OFFSHORE : null))?.name ?? null,

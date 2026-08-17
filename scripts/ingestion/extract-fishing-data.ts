@@ -30,7 +30,13 @@ Return a JSON array of technique objects. Each object should have these fields (
   "presentation": string | null,      // e.g. "slow roll", "drop shot", "punch rig", "swim jig"
   "structure": string | null,         // e.g. "laydowns", "grass edges", "docks", "points"
   "depth_range_ft": string | null,    // e.g. "2-6", "15-25"
-  "season": string | null,            // spring/summer/fall/winter
+  // Timing matters as much as the technique, and nearly every article signals
+  // it — a month, a water temperature, a tournament date, or spawn language.
+  // Infer it rather than leaving it null; only use null when the text truly
+  // gives nothing. Prefer the spawn stage when the text implies one, since it
+  // is more precise than a bare season.
+  "season": string | null,            // spring | summer | fall | winter
+  "spawn_phase": string | null,       // prespawn | spawn | postspawn | null
   "baits": [
     {
       "bait_type": string | null,     // e.g. "soft plastic", "crankbait", "jig"

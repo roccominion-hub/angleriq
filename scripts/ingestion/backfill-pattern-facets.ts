@@ -50,7 +50,7 @@ async function main() {
   const rows: any[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
-      .from('technique_report').select('id, pattern, presentation, bait_used(bait_name, bait_type)')
+      .from('technique_report').select('id, pattern, presentation, notes, season, bait_used(bait_name, bait_type), conditions(water_temp_f)')
       .not('pattern', 'is', null).order('id').range(from, from + 999)
     if (error) { console.error(error.message); return }
     rows.push(...(data ?? [])); if (!data || data.length < 1000) break
@@ -59,7 +59,10 @@ async function main() {
 
   const updates = rows.map(r => {
     const baits = (r.bait_used ?? []).map((b: any) => ({ name: b.bait_name, type: b.bait_type }))
-    const f = facetsOf(r.pattern, r.presentation, baits)
+    const f = facetsOf(r.pattern, r.presentation, baits, {
+      notes: r.notes, season: r.season,
+      waterTempF: (r.conditions ?? []).map((c: any) => c.water_temp_f).find((x: any) => x != null) ?? null,
+    })
     return { id: r.id, f, label: groupLabel(f) }
   })
   const matched = updates.filter(u => u.label).length
