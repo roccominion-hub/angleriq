@@ -67,14 +67,11 @@ export function similarity(a: LakeSignature, b: LakeSignature): number {
   return 0.4 * sizeSim + 0.3 * dendSim + 0.2 * inletSim + 0.1 * typeSim
 }
 
-/**
- * Which pattern phases are live in a season. Spawn stages are treated as spring
- * because that is when they happen, and shad spawn straddles late spring into
- * early summer.
- */
+/** Which pattern phases are live in a season. Spawn stages sit in spring
+ *  because that is when they happen; postspawn carries into early summer. */
 export const PHASES_IN_SEASON: Record<string, string[]> = {
-  spring: ['prespawn', 'spawn', 'spring', 'shad_spawn'],
-  summer: ['summer', 'postspawn', 'shad_spawn'],
+  spring: ['prespawn', 'spawn', 'spring'],
+  summer: ['summer', 'postspawn'],
   fall:   ['fall'],
   winter: ['winter'],
 }

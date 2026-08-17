@@ -140,6 +140,10 @@ export async function GET(req: NextRequest) {
         phaseKnown: g.phaseKnown,
         inSeasonPct: g.phaseKnown ? Math.round(100 * g.inSeason / g.phaseKnown) : null,
         scoping: g.scoping > 0,
+        // Per-phase counts drive the stacked bar. "unknown" is carried as a
+        // real segment rather than dropped, so the chart shows how much of a
+        // pattern's timing we actually know.
+        phaseCounts: { ...g.phases, unknown: g.count - g.phaseKnown },
         phase: phaseLabel(dominant(g.phases)),
         depth: depthLabel(dominant(g.depths)),
         lakes: [...g.lakes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n]) => n),

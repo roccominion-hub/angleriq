@@ -21,8 +21,10 @@
 export type Facet = { name: string; label: string; terms: string[] }
 
 // Ordered within each facet — first match wins, so specific beats general.
+// No shad_spawn phase: shad are not present in every fishery, so it is not a
+// timing stage that generalises. Where the text mentions shad it still lands in
+// CONDITION as "Bait-driven", and the timing falls to the surrounding language.
 export const PHASE: Facet[] = [
-  { name: 'shad_spawn', label: 'Shad spawn', terms: ['shad spawn', 'spawning shad'] },
   { name: 'postspawn',  label: 'Postspawn',  terms: ['postspawn', 'post-spawn', 'post spawn'] },
   { name: 'prespawn',   label: 'Prespawn',   terms: ['prespawn', 'pre-spawn', 'pre spawn', 'staging'] },
   { name: 'spawn',      label: 'Spawn',      terms: ['spawning', 'spawn', 'bedding', 'beds', 'sight fishing'] },
