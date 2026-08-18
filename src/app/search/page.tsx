@@ -2021,9 +2021,16 @@ function SearchPage() {
                               {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
                               {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
                             </span>
+                            {/* Distinguish "nobody stated when" from "stated, and
+                                none match" — silence on both reads as zero and
+                                makes a well-evidenced pattern look irrelevant. */}
                             <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5 whitespace-nowrap">
                               {p.count} report{p.count === 1 ? '' : 's'}
-                              {p.inSeason > 0 && <span className="text-blue-600"> · {p.inSeason} match timing</span>}
+                              {p.phaseKnown === 0
+                                ? <span className="text-slate-400"> · timing not stated</span>
+                                : p.inSeason > 0
+                                  ? <span className="text-blue-600"> · {p.inSeason} match timing</span>
+                                  : <span className="text-slate-400"> · 0 of {p.phaseKnown} match timing</span>}
                             </span>
                           </div>
                           {/* Bar length is the pattern's strength relative to the
