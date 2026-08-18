@@ -1986,7 +1986,7 @@ function SearchPage() {
                     {/* Phase selection — defaults to the phases live in the current
                         season, but any combination can be counted. */}
                     <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-0.5">Counting</span>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-0.5">Timing</span>
                       {PHASE_CHOICES.filter(c => crossLake.availablePhases?.includes(c.value)).map(c => {
                         const on = crossPhases.includes(c.value)
                         return (
@@ -2023,7 +2023,7 @@ function SearchPage() {
                             </span>
                             <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5 whitespace-nowrap">
                               {p.count} report{p.count === 1 ? '' : 's'}
-                              {p.inSeason > 0 && <span className="text-blue-600"> · {p.inSeason} in timing</span>}
+                              {p.inSeason > 0 && <span className="text-blue-600"> · {p.inSeason} match timing</span>}
                             </span>
                           </div>
                           {/* Bar length is the pattern's strength relative to the

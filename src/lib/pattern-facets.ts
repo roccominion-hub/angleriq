@@ -246,13 +246,18 @@ export const depthLabel     = (n: string | null) => labelOf(DEPTH, n)
 export const conditionLabel = (n: string | null) => labelOf(CONDITION, n)
 
 /**
- * The heading a pattern is grouped under. Technique and place carry the action,
- * so they form the label; depth, phase and condition ride along as chips. Depth
- * is deliberately kept out of the heading — folding it in split "Ledges" from
- * "Deep ledges", which are the same pattern described two ways.
+ * The heading a pattern is grouped under. Only technique and place can name a
+ * pattern: they are what an angler does and where. Timing, depth and conditions
+ * qualify a pattern rather than being one, so they ride along as chips.
+ *
+ * Falling back to those qualifiers produced headings like "Summer" and
+ * "Prespawn", which are seasons rather than anything to fish, and worse, the
+ * singleton-collapse then pulled genuine patterns into them — "wind blown
+ * points" was correctly labelled Points, then absorbed into a "Summer" group
+ * because that was all its parent had left. A report with neither a technique
+ * nor a place simply does not describe a pattern, so it forms no group.
  */
 export function groupLabel(f: PatternFacets): string | null {
   const parts = [techniqueLabel(f.technique), placeLabel(f.place)].filter(Boolean)
-  if (parts.length) return parts.join(' · ')
-  return phaseLabel(f.phase) ?? depthLabel(f.depth) ?? conditionLabel(f.condition) ?? null
+  return parts.length ? parts.join(' · ') : null
 }
