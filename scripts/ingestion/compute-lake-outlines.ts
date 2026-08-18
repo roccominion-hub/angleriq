@@ -22,7 +22,7 @@ import * as dotenv from 'dotenv'; import { resolve } from 'path'
 dotenv.config({ path: resolve(process.cwd(), '.env.local') })
 import { createClient } from '@supabase/supabase-js'
 import { getLakeFeatures } from '../../src/lib/lake-conditions'
-import { nhdOutline, ringsOf, simplifyOutline, totalArea, type Ring } from '../../src/lib/nhd-outline'
+import { nhdNamedArea, nhdOutline, ringsOf, simplifyOutline, totalArea, type Ring } from '../../src/lib/nhd-outline'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -59,6 +59,16 @@ async function main() {
     try {
       const osm = await osmOutline(lake.lat, lake.lng, lake.name, lake.state)
       const osmArea = totalArea(osm)
+
+      // Probe by area first. When NHD names the lake and its area is no larger
+      // than OSM's, there is nothing to gain and the geometry is never fetched.
+      if (osmArea > 0) {
+        const probe = await nhdNamedArea(lake.name, lake.lat, lake.lng)
+        if (probe != null && probe < osmArea * SHORT_RATIO) {
+          kept++
+          await new Promise(r => setTimeout(r, 700)); continue
+        }
+      }
 
       const nhd = await nhdOutline(lake.name, lake.lat, lake.lng, osmArea || null)
       if (!nhd) {

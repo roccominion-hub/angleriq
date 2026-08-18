@@ -120,16 +120,40 @@ const norm = (s: string) =>
 
 const NHD_WATERBODY = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/12/query'
 
-async function query(where: string, bbox: string): Promise<any[]> {
+/**
+ * `withGeometry: false` is the cheap probe. NHD polygons carry tens of thousands
+ * of vertices each, and measuring a lake to decide whether it even needs NHD
+ * does not require them — pulling geometry for all 415 lakes to keep 55 of them
+ * turned a twenty minute job into a seven hour one.
+ */
+async function query(where: string, bbox: string, withGeometry = true): Promise<any[]> {
   const url = `${NHD_WATERBODY}?geometry=${bbox}&geometryType=esriGeometryEnvelope&inSR=4326`
     + `&spatialRel=esriSpatialRelIntersects&where=${encodeURIComponent(where)}`
-    + `&outFields=GNIS_NAME,AREASQKM,FTYPE&returnGeometry=true&outSR=4326&f=geojson&resultRecordCount=2000`
+    + `&outFields=GNIS_NAME,AREASQKM,FTYPE&returnGeometry=${withGeometry}&outSR=4326&f=geojson&resultRecordCount=2000`
   const res = await fetch(url, { signal: AbortSignal.timeout(60000) })
   if (!res.ok) throw new Error(`NHD HTTP ${res.status}`)
   const fc = await res.json() as any
   if (fc?.error) throw new Error(fc.error?.message ?? 'NHD error')
   if (!Array.isArray(fc?.features)) throw new Error('NHD malformed response')
   return fc.features
+}
+
+/**
+ * Area of the NHD waterbodies whose name matches, without downloading shape.
+ * Returns null when NHD does not name the lake, in which case only the full
+ * lookup can resolve it.
+ */
+export async function nhdNamedArea(name: string, lat: number, lng: number, padDeg = 0.45): Promise<number | null> {
+  const core = norm(name).replace(/'/g, "''")
+  if (!core) return null
+  const bbox = `${lng - padDeg},${lat - padDeg},${lng + padDeg},${lat + padDeg}`
+  const feats = await query(`UPPER(GNIS_NAME) LIKE '%${core.toUpperCase()}%'`, bbox, false)
+  const named = feats.filter(f => {
+    const n = f.properties?.GNIS_NAME
+    return n && norm(String(n)) === norm(name)
+  })
+  if (!named.length) return null
+  return named.reduce((s, f) => s + Number(f.properties?.AREASQKM ?? 0), 0)
 }
 
 export type OutlineResult = {
