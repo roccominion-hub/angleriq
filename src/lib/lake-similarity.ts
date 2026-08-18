@@ -67,14 +67,35 @@ export function similarity(a: LakeSignature, b: LakeSignature): number {
   return 0.4 * sizeSim + 0.3 * dendSim + 0.2 * inletSim + 0.1 * typeSim
 }
 
-/** Which pattern phases are live in a season. Spawn stages sit in spring
- *  because that is when they happen; postspawn carries into early summer. */
-export const PHASES_IN_SEASON: Record<string, string[]> = {
-  spring: ['prespawn', 'spawn', 'spring'],
-  summer: ['summer', 'postspawn'],
-  fall:   ['fall'],
-  winter: ['winter'],
+/**
+ * Seasons, with the spawn stages that occur inside them.
+ *
+ * Nesting the stages under their season makes a contradictory selection
+ * impossible to express: there is no path to "winter + spawn", because no spawn
+ * stage is offered under winter. Postspawn appears under both spring and summer
+ * — it runs into early summer, further north especially — which is the only
+ * place the calendar genuinely overlaps.
+ *
+ * The stages are worth keeping selectable rather than collapsing into "spring":
+ * they are the majority of the timing data we hold, and prespawn and spawn fish
+ * differently enough to lead to different water (rock and timber against grass
+ * and flats).
+ */
+export const SEASONS: { value: string; label: string; stages: string[] }[] = [
+  { value: 'spring', label: 'Spring', stages: ['prespawn', 'spawn', 'postspawn'] },
+  { value: 'summer', label: 'Summer', stages: ['postspawn'] },
+  { value: 'fall',   label: 'Fall',   stages: [] },
+  { value: 'winter', label: 'Winter', stages: [] },
+]
+
+export const STAGE_LABEL: Record<string, string> = {
+  prespawn: 'Prespawn', spawn: 'Spawn', postspawn: 'Postspawn',
 }
+
+/** Phases counted for a season when every stage is in play. */
+export const PHASES_IN_SEASON: Record<string, string[]> = Object.fromEntries(
+  SEASONS.map(s => [s.value, [s.value, ...s.stages]])
+)
 
 export function seasonFromDate(d = new Date()): 'spring' | 'summer' | 'fall' | 'winter' {
   const m = d.getMonth() + 1

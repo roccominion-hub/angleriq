@@ -20,6 +20,7 @@ import {
   MessageCircle, Compass, Save, Map, ChevronRight
 } from 'lucide-react'
 import { BaitIcon } from '@/components/BaitIcon'
+import { SEASONS, STAGE_LABEL } from '@/lib/lake-similarity'
 import { solunarRatingColor, type MoonData } from '@/lib/moonphase'
 import { NavUserMenu } from '@/components/NavUserMenu'
 import { createClient } from '@/lib/supabase/client'
@@ -27,19 +28,6 @@ import { ChatDrawer } from '@/components/ChatDrawer'
 import dynamic from 'next/dynamic'
 const LakePickerMap = dynamic(() => import('@/components/LakePickerMap').then(m => ({ default: m.LakePickerMap })), { ssr: false })
 import { LogEntryForm, type LogDraft } from '@/components/LogEntryForm'
-
-// The underlying facet is the phase, so these are exposed directly rather than
-// rolled into seasons — prespawn and spawn both sit in spring but fish
-// differently, and an angler chasing one is not chasing the other.
-const PHASE_CHOICES: { value: string; label: string }[] = [
-  { value: 'prespawn',   label: 'Prespawn' },
-  { value: 'spawn',      label: 'Spawn' },
-  { value: 'postspawn',  label: 'Postspawn' },
-  { value: 'spring',     label: 'Spring' },
-  { value: 'summer',     label: 'Summer' },
-  { value: 'fall',       label: 'Fall' },
-  { value: 'winter',     label: 'Winter' },
-]
 
 type CrossLakePattern = {
   label: string; count: number; inSeason: number; phaseKnown: number
@@ -892,7 +880,14 @@ function SearchPage() {
   const [expandedPatterns, setExpandedPatterns] = useState<Set<string>>(new Set())
   const [crossLake, setCrossLake] = useState<CrossLake | null>(null)
   const [crossScope, setCrossScope] = useState<string>('nearby')
-  const [crossPhases, setCrossPhases] = useState<string[]>([])
+  // Season is the selection; spawn stages narrow it from within. Keeping them
+  // nested is what makes "winter + spawn" unrepresentable rather than merely
+  // discouraged.
+  const [crossSeason, setCrossSeason] = useState<string>(() => {
+    const m = new Date().getMonth() + 1
+    return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'fall' : 'winter'
+  })
+  const [crossStages, setCrossStages] = useState<string[]>([])
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -970,15 +965,21 @@ function SearchPage() {
   // Skipped until a report exists, and the response is not allowed to reset the
   // selection or this would loop.
   const crossLakeId = (result as any)?.water?.id
+  const crossSeasonDef = SEASONS.find(s => s.value === crossSeason) ?? SEASONS[0]
+  // No stage selection means the whole season, which is also the only sensible
+  // reading of "Spring" with nothing narrowed.
+  const activeStages = crossStages.length ? crossStages : crossSeasonDef.stages
+  const crossPhases = [crossSeason, ...activeStages]
+
   useEffect(() => {
-    if (!crossLakeId || !crossPhases.length) return
+    if (!crossLakeId) return
     let cancelled = false
     fetch(`/api/cross-lake?lakeId=${crossLakeId}&phases=${crossPhases.join(',')}`)
       .then(r => r.json())
       .then((d: CrossLake) => { if (!cancelled && d?.scopes?.length) setCrossLake(d) })
       .catch(() => { /* supplementary */ })
     return () => { cancelled = true }
-  }, [crossLakeId, crossPhases])
+  }, [crossLakeId, crossPhases.join(',')])
 
   function setNowFilter(key: string, value: string) {
     setNowFilters(f => ({ ...f, [key]: value }))
@@ -1159,7 +1160,6 @@ function SearchPage() {
     setSavedReportId(null)
     setExpandedPatterns(new Set())
     setCrossLake(null)
-    setCrossPhases([])
 
     try {
       const params = new URLSearchParams({ lake: selectedLake })
@@ -1182,7 +1182,6 @@ function SearchPage() {
           .then((d: CrossLake) => {
             if (d?.scopes?.length) {
               setCrossLake(d)
-              setCrossPhases(d.phases ?? [])
               // Open on the tightest scope that actually has comparable water.
               const preferred = ['local', 'nearby', 'state', 'region', 'national']
               setCrossScope(preferred.find(p => d.scopes.some(s => s.scope === p)) ?? d.scopes[0].scope)
@@ -1983,28 +1982,50 @@ function SearchPage() {
                       ))}
                     </div>
 
-                    {/* Phase selection — defaults to the phases live in the current
-                        season, but any combination can be counted. */}
-                    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                    {/* Season chooses the timing; spawn stages narrow it from
+                        inside. Stages only exist under the seasons they occur
+                        in, so a contradictory pairing cannot be expressed. */}
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-0.5">Timing</span>
-                      {PHASE_CHOICES.filter(c => crossLake.availablePhases?.includes(c.value)).map(c => {
-                        const on = crossPhases.includes(c.value)
-                        return (
-                          <button
-                            key={c.value}
-                            onClick={() => setCrossPhases(prev =>
-                              prev.includes(c.value) ? (prev.length > 1 ? prev.filter(v => v !== c.value) : prev)
-                                                    : [...prev, c.value])}
-                            className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 border transition-colors ${
-                              on ? 'bg-slate-700 border-slate-700 text-white'
-                                 : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                            }`}
-                          >
-                            {c.label}
-                          </button>
-                        )
-                      })}
+                      {SEASONS.map(se => (
+                        <button
+                          key={se.value}
+                          onClick={() => { setCrossSeason(se.value); setCrossStages([]) }}
+                          className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 border transition-colors ${
+                            se.value === crossSeason
+                              ? 'bg-slate-700 border-slate-700 text-white'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                          }`}
+                        >
+                          {se.label}
+                        </button>
+                      ))}
                     </div>
+
+                    {crossSeasonDef.stages.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3 pl-1">
+                        <span className="text-[10px] text-slate-400 mr-0.5">Spawn stage</span>
+                        {crossSeasonDef.stages.map(st => {
+                          const on = activeStages.includes(st)
+                          return (
+                            <button
+                              key={st}
+                              onClick={() => setCrossStages(prev => {
+                                const base = prev.length ? prev : crossSeasonDef.stages
+                                const next = base.includes(st) ? base.filter(v => v !== st) : [...base, st]
+                                return next.length ? next : base   // never empty
+                              })}
+                              className={`text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
+                                on ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
+                                   : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                              }`}
+                            >
+                              {STAGE_LABEL[st] ?? st}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
 
                     <p className="text-slate-500 text-[11px] mb-3 leading-snug">
                       {scope.lakeCount} comparable {scope.lakeCount === 1 ? 'lake' : 'lakes'} · {scope.reportCount} classified reports ·
