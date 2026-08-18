@@ -2019,18 +2019,22 @@ function SearchPage() {
                             <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                               <span className="text-slate-700 text-sm leading-tight">{p.label}</span>
                               {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
+                              {p.phase && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.phase}</span>}
                               {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
                             </span>
-                            {/* Distinguish "nobody stated when" from "stated, and
-                                none match" — silence on both reads as zero and
-                                makes a well-evidenced pattern look irrelevant. */}
+                            {/* "Nobody stated when" and "stated, and none match"
+                                lead to opposite conclusions, so they read
+                                differently. No bare denominator: the count of
+                                reports that happened to mention a season is not
+                                something to reason about, and the dominant-phase
+                                chip already shows when this pattern does produce. */}
                             <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5 whitespace-nowrap">
                               {p.count} report{p.count === 1 ? '' : 's'}
                               {p.phaseKnown === 0
                                 ? <span className="text-slate-400"> · timing not stated</span>
                                 : p.inSeason > 0
                                   ? <span className="text-blue-600"> · {p.inSeason} match timing</span>
-                                  : <span className="text-slate-400"> · 0 of {p.phaseKnown} match timing</span>}
+                                  : <span className="text-slate-400"> · none match timing</span>}
                             </span>
                           </div>
                           {/* Bar length is the pattern's strength relative to the
