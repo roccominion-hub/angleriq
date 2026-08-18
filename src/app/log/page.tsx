@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -151,7 +151,7 @@ function LogCard({ log, onEdit, onDelete }: { log: any; onEdit: () => void; onDe
   )
 }
 
-export default function LogPage() {
+function LogPageInner() {
   const supabase = createClient()
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -337,5 +337,16 @@ export default function LogPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// useSearchParams opts the page into client-side rendering, which Next refuses
+// to prerender without a boundary. The tapped-spot handoff reads the params, so
+// the page needs one.
+export default function LogPage() {
+  return (
+    <Suspense fallback={null}>
+      <LogPageInner />
+    </Suspense>
   )
 }
