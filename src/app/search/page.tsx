@@ -50,7 +50,7 @@ type CrossLakePattern = {
 type CrossLake = {
   lake: string; season: string; phases: string[]; availablePhases: string[]
   scopes: {
-    scope: string; label: string; lakeCount: number; reportCount: number
+    scope: string; label: string; lakeCount: number; reportCount: number; patternCount: number
     topMatches: { name: string; state: string; similarity: number; miles: number | null }[]
     patterns: CrossLakePattern[]
   }[]
@@ -2007,8 +2007,9 @@ function SearchPage() {
                     </div>
 
                     <p className="text-slate-500 text-[11px] mb-3 leading-snug">
-                      {scope.lakeCount} comparable {scope.lakeCount === 1 ? 'lake' : 'lakes'} · {scope.reportCount} reports ·
-                      {' '}closest: {scope.topMatches.map(m => `${m.name} (${m.similarity}%)`).join(', ')}
+                      {scope.lakeCount} comparable {scope.lakeCount === 1 ? 'lake' : 'lakes'} · {scope.reportCount} classified reports ·
+                      {' '}top {Math.min(scope.patterns.length, scope.patternCount)} of {scope.patternCount} patterns
+                      <br />closest: {scope.topMatches.map(m => `${m.name} (${m.similarity}%)`).join(', ')}
                     </p>
 
                     <div className="space-y-2.5">
@@ -2020,8 +2021,9 @@ function SearchPage() {
                               {p.scoping && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">Scoping/FFS</span>}
                               {p.depth && <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 whitespace-nowrap">{p.depth}</span>}
                             </span>
-                            <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5">
-                              {p.inSeason > 0 ? `${p.inSeason} of ${p.count}` : `${p.count}`} report{p.count === 1 ? '' : 's'}
+                            <span className="text-slate-400 text-[11px] tabular-nums shrink-0 pt-0.5 whitespace-nowrap">
+                              {p.count} report{p.count === 1 ? '' : 's'}
+                              {p.inSeason > 0 && <span className="text-blue-600"> · {p.inSeason} in timing</span>}
                             </span>
                           </div>
                           {/* Bar length is the pattern's strength relative to the

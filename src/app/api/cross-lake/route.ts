@@ -145,7 +145,9 @@ export async function GET(req: NextRequest) {
     const scoreOf = (g: { relevance: number; weight: number }) =>
       g.weight > 0 ? (g.relevance / g.weight) * Math.log1p(g.weight) : 0
 
-    const ranked = [...agg.values()].sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, 6)
+    const all = [...agg.values()]
+    const groupedReports = all.reduce((sum, g) => sum + g.count, 0)
+    const ranked = all.sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, 10)
     const topScore = ranked.length ? scoreOf(ranked[0]) : 0
 
     const patterns = ranked
@@ -168,7 +170,11 @@ export async function GET(req: NextRequest) {
       scope: scope.name,
       label: scope.name === 'region' ? `${myRegion} region` : scope.label,
       lakeCount: members.length,
-      reportCount: members.reduce((s, p) => s + (byLake.get(p.l.id)?.length ?? 0), 0),
+      // Reports that actually formed a pattern, not every report the comparable
+      // lakes hold: a third of them carry no facets, so the old figure implied
+      // the rows below summed to a number they never could.
+      reportCount: groupedReports,
+      patternCount: all.length,
       topMatches: members.slice(0, 3).map(p => ({
         name: p.l.name, state: p.l.state,
         similarity: Math.round(p.sim * 100),
