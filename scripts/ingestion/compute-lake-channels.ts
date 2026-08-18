@@ -97,7 +97,20 @@ function buildNetwork(flows: Flow[], rings: number[][][], cLng: number, cLat: nu
   // excludes the river above/below the dam, which sits outside the outline.
   const nearCenter = (f: Flow) => f.coords.some(c => Math.hypot(c[0] - cLng, c[1] - cLat) < 0.06)
   const inLake = (f: Flow) => rings.length ? f.coords.some(c => pointInRings(c[0], c[1], rings)) : nearCenter(f)
-  const river = paths.filter(inLake)
+  let river = paths.filter(inLake)
+
+  // New reservoirs. NHD replaces a stream with an artificial path where it runs
+  // through a waterbody, so named streams *inside* an outline mean NHD has not
+  // mapped the impoundment yet — Bois d'Arc was flooded in 2023 and NHD still
+  // models it as a creek. There the pre-impoundment creek beds are the channel,
+  // and they are what an angler fishes on a young lake: Bois d'Arc holds 5.9 km
+  // of artificial path inside its outline against 50.2 km of named creek.
+  const drowned = streams.filter(inLake)
+  const len = (fs: Flow[]) => fs.reduce((t, f) => t + segLen(f), 0)
+  if (drowned.length && len(drowned) > len(river) * 2) {
+    river = [...river, ...drowned]
+  }
+
   if (!river.length) return empty
 
   // Adjacency over the lake's 558 network.
