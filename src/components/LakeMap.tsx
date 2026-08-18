@@ -121,6 +121,10 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   // Precomputed in-lake channels + inlets (from /api/lake-channels).
   const [streamNetwork, setStreamNetwork] = useState<{ mainChannel: number[][][]; minorChannels: number[][][]; junctions: any[] }>({ mainChannel: [], minorChannels: [], junctions: [] })
 
+  // A stored NHD shoreline, present only for lakes whose OSM outline is short
+  // or missing. Most lakes have none and keep drawing OSM.
+  const [outlineRings, setOutlineRings] = useState<number[][][] | null>(null)
+
   const windLayerRef         = useRef<any>(null)
   const tileLayerRef         = useRef<any>(null)
   const waterbodyLayerRef    = useRef<any>(null)
@@ -142,6 +146,17 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       setFeatures(feat)
       setLoading(false)
     }).catch(() => setLoading(false))
+  }, [lakeId])
+
+  // Stored shoreline, if this lake has one.
+  useEffect(() => {
+    if (!lakeId) return
+    let cancelled = false
+    fetch(`/api/lake-outline?lakeId=${lakeId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && Array.isArray(d?.rings) && d.rings.length) setOutlineRings(d.rings) })
+      .catch(() => { /* OSM outline stands */ })
+    return () => { cancelled = true }
   }, [lakeId])
 
   // Load precomputed channel geometry + inlets (fast; no live NHD call).
@@ -192,6 +207,36 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
     })
     return () => { mapRef.current?.remove(); mapRef.current = null }
   }, [lat, lng, features])
+
+  // Replace the OSM shoreline once a stored NHD one loads. Done as its own
+  // effect rather than inside map setup because the outline arrives after the
+  // map is already drawn, and a lake with a short OSM polygon should not have
+  // to wait on a second request before showing anything.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !outlineRings?.length) return
+    const map = mapRef.current
+    import('leaflet').then(L => {
+      if (!mapRef.current) return
+      waterbodyLayerRef.current?.remove()
+      const geo = {
+        type: 'FeatureCollection',
+        features: outlineRings.map(ring => ({
+          type: 'Feature', properties: {},
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        })),
+      }
+      waterbodyLayerRef.current = L.geoJSON(geo as any, {
+        style: { fillColor: '#7dd3fc', fillOpacity: 0.35, color: '#38bdf8', weight: 2, opacity: 0.9 },
+        interactive: false,
+      }).addTo(map)
+      const bounds = waterbodyLayerRef.current.getBounds()
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 })
+        originalBoundsRef.current = bounds
+        setZoom(map.getZoom())
+      }
+    })
+  }, [mapReady, outlineRings])
 
   // Streams overlay — label-free NHD flowlines drawn as vector polylines.
   // Only rivers connected to this lake's network are drawn (no unrelated creeks
