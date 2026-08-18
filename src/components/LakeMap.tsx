@@ -716,6 +716,12 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
               >
                 {copied ? 'Copied' : 'Copy'}
               </button>
+              <a
+                href={`/log?lat=${pickedSpot.lat.toFixed(5)}&lng=${pickedSpot.lng.toFixed(5)}&lakeId=${encodeURIComponent(lakeId)}&lakeName=${encodeURIComponent(lakeName)}`}
+                className="text-[10px] font-semibold text-blue-300 hover:text-blue-200 border border-slate-600 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap"
+              >
+                Log spot
+              </a>
               <button
                 onClick={() => setPickedSpot(null)}
                 className="text-slate-400 hover:text-white text-xs leading-none px-1"

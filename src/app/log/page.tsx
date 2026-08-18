@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
@@ -160,6 +160,26 @@ export default function LogPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<any | null>(null)
+  // A spot tapped on a lake map arrives here as query params, so the trip form
+  // opens already carrying the coordinates rather than asking the angler to
+  // copy them across.
+  const searchParams = useSearchParams()
+  const [spotDraft, setSpotDraft] = useState<Partial<LogDraft> | null>(null)
+
+  useEffect(() => {
+    const lat = parseFloat(searchParams.get('lat') || '')
+    const lng = parseFloat(searchParams.get('lng') || '')
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    setSpotDraft({
+      lat, lng,
+      lake_id: searchParams.get('lakeId') || undefined,
+      lake_name: searchParams.get('lakeName') || undefined,
+      lake_state: searchParams.get('lakeState') || undefined,
+    })
+    setShowForm(true)
+    // Drop the params so a refresh does not reopen the form on a stale spot.
+    router.replace('/log', { scroll: false })
+  }, [searchParams, router])
 
   async function loadAll() {
     const [logsRes, statsRes] = await Promise.all([
@@ -241,10 +261,10 @@ export default function LogPage() {
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-slate-800">{editing ? 'Edit Trip' : 'Log a New Trip'}</h2>
-              <button onClick={() => { setShowForm(false); setEditing(null) }} className="text-slate-300 hover:text-slate-500"><X size={18} /></button>
+              <button onClick={() => { setShowForm(false); setEditing(null); setSpotDraft(null) }} className="text-slate-300 hover:text-slate-500"><X size={18} /></button>
             </div>
             <LogEntryForm
-              initial={editing ? {
+              initial={!editing && spotDraft ? spotDraft : editing ? {
                 id: editing.id, lake_id: editing.lake_id, lake_name: editing.lake_name, lake_state: editing.lake_state,
                 lat: editing.lat, lng: editing.lng,
                 spot: editing.spot, trip_date: editing.trip_date, time_of_day: editing.time_of_day,
