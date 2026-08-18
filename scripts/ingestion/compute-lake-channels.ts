@@ -197,10 +197,21 @@ async function main() {
       const feat = await getLakeFeatures(lake.lat, lake.lng, lake.name, lake.state)
       const wb = feat?.waterwayBbox
       const rings: number[][][] = []
-      for (const f of (feat?.waterbodies?.features ?? [])) {
-        const g = f.geometry
-        if (g?.type === 'Polygon') rings.push(g.coordinates[0])
-        if (g?.type === 'MultiPolygon') for (const poly of g.coordinates) rings.push(poly[0])
+
+      // Prefer a stored NHD shoreline where one exists. Channel selection is
+      // polygon-based — flowlines are kept when they fall inside the outline —
+      // so a short outline starves the network. Chippewa Flowage's OSM polygon
+      // covers 29 km² of a 71 km² lake, and its channels came back nearly empty.
+      const { data: stored } = await supabase
+        .from('lake_outlines').select('rings').eq('lake_id', lake.id).maybeSingle()
+      if (Array.isArray(stored?.rings) && stored.rings.length) {
+        rings.push(...(stored.rings as number[][][]))
+      } else {
+        for (const f of (feat?.waterbodies?.features ?? [])) {
+          const g = f.geometry
+          if (g?.type === 'Polygon') rings.push(g.coordinates[0])
+          if (g?.type === 'MultiPolygon') for (const poly of g.coordinates) rings.push(poly[0])
+        }
       }
 
       // Query bbox must cover the whole waterbody. The stored waterwayBbox can be
