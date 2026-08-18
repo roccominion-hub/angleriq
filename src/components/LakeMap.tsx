@@ -125,6 +125,12 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
   // or missing. Most lakes have none and keep drawing OSM.
   const [outlineRings, setOutlineRings] = useState<number[][][] | null>(null)
 
+  // Coordinates of a spot the angler tapped, for saving into a trip log or
+  // punching into a chartplotter.
+  const [pickedSpot, setPickedSpot] = useState<{ lat: number; lng: number } | null>(null)
+  const [copied, setCopied] = useState(false)
+  const pickedMarkerRef = useRef<any>(null)
+
   const windLayerRef         = useRef<any>(null)
   const tileLayerRef         = useRef<any>(null)
   const waterbodyLayerRef    = useRef<any>(null)
@@ -187,6 +193,10 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       }).addTo(map)
 
       map.on('zoomend', () => setZoom(map.getZoom()))
+      map.on('click', (e: any) => {
+        setPickedSpot({ lat: e.latlng.lat, lng: e.latlng.lng })
+        setCopied(false)
+      })
       mapRef.current = map
       setMapReady(true)
 
@@ -237,6 +247,23 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
       }
     })
   }, [mapReady, outlineRings])
+
+  // Marker for the tapped spot.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    const map = mapRef.current
+    import('leaflet').then(L => {
+      pickedMarkerRef.current?.remove()
+      pickedMarkerRef.current = null
+      if (!pickedSpot) return
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:16px;height:16px;border-radius:50%;background:#ef4444;border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.5)"></div>`,
+        iconSize: [16, 16], iconAnchor: [8, 8],
+      })
+      pickedMarkerRef.current = L.marker([pickedSpot.lat, pickedSpot.lng], { icon, interactive: false }).addTo(map)
+    })
+  }, [mapReady, pickedSpot])
 
   // Streams overlay — label-free NHD flowlines drawn as vector polylines.
   // Only rivers connected to this lake's network are drawn (no unrelated creeks
@@ -668,6 +695,37 @@ export function LakeMap({ lakeId, lakeName, lat, lng }: LakeMapProps) {
           </div>
         )}
         <div ref={mapDivRef} className="w-full h-full z-0" />
+
+        {/* Tapped spot. Decimal degrees to five places — about a metre, which is
+            finer than a boat holds — plus the format most chartplotters and
+            phone map apps accept on paste. */}
+        {pickedSpot && (
+          <div className="absolute bottom-3 left-3 z-[500] bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white shrink-0" />
+              <span className="text-white text-xs font-mono tabular-nums">
+                {pickedSpot.lat.toFixed(5)}, {pickedSpot.lng.toFixed(5)}
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(`${pickedSpot.lat.toFixed(5)}, ${pickedSpot.lng.toFixed(5)}`)
+                    .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600) })
+                    .catch(() => { /* clipboard unavailable */ })
+                }}
+                className="text-[10px] font-semibold text-blue-300 hover:text-blue-200 border border-slate-600 rounded px-1.5 py-0.5 transition-colors"
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button
+                onClick={() => setPickedSpot(null)}
+                className="text-slate-400 hover:text-white text-xs leading-none px-1"
+                aria-label="Clear marked spot"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Inflow strip — clickable buttons with volume ratings */}
